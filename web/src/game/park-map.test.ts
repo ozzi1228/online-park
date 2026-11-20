@@ -24,3 +24,17 @@ test("아무렇게나 걸어 다녀도 장애물과 겹치지 않음", () => {
     x = p.x; z = p.z;
   }
 });
+
+test("정자는 남쪽 입구로만 들어갈 수 있음", async () => {
+  const { PROPS, groundY } = await import("./park-map.ts");
+  const pv = PROPS.find((p) => p.kind === "pavilion")!;
+  const walk = (fromZ: number, toZ: number) => {
+    let x = pv.x, z = fromZ;
+    for (let i = 0; i < 400; i++) { const p = move(x, z, x, z + Math.sign(toZ - fromZ) * 0.05); x = p.x; z = p.z; }
+    return { x, z };
+  };
+  const south = walk(pv.z + 8, pv.z);           // 남쪽에서 북쪽으로
+  assert.ok(groundY(south.x, south.z) > 0, "남쪽 입구로 못 들어감");
+  const north = walk(pv.z - 8, pv.z);           // 북쪽에서 남쪽으로
+  assert.equal(groundY(north.x, north.z), 0, "난간을 뚫고 들어감");
+});

@@ -6,7 +6,7 @@ import { animateChar, makeChar } from "@/game/character";
 import { Input } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, type NetStatus } from "@/game/multiplayer";
-import { COLLIDERS, SPAWN, move } from "@/game/park-map";
+import { COLLIDERS, SPAWN, groundY, move } from "@/game/park-map";
 import { PRESETS } from "@/game/presets";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld } from "@/game/world";
 
@@ -14,8 +14,22 @@ const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
 const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
 
-const WALK = 3.0, BACK = 1.6, TURN = 2.1;      // m/s, rad/s
+const WALK = 3.0, TURN_RATE = 12;             // m/s, 캐릭터가 이동 방향으로 도는 빠르기
 const CAM_DIST = 5.4, CAM_H = 2.3, DRAG_YAW = 0.006, DRAG_PITCH = 0.004;
+
+/** 캐릭터 → 카메라 사이에 굵은 나무줄기·분수 등이 있으면 그 앞까지 카메라를 당김 (가려지지 않게) */
+function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
+  let best = max;
+  for (const c of COLLIDERS) {
+    if (c.t !== "c" || c.r < 0.4) continue;            // 가는 가로등·난간은 무시
+    const ox = x - c.x, oz = z - c.z, r = c.r + 0.35;
+    const bq = ox * dx + oz * dz, cq = ox * ox + oz * oz - r * r, disc = bq * bq - cq;
+    if (disc < 0) continue;
+    const hit = -bq - Math.sqrt(disc);
+    if (hit > 0.3 && hit < best) best = hit;
+  }
+  return Math.max(best, 1.6);
+}
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -44,13 +58,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     scene.add(me.root);
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
-    let yaw = SPAWN.yaw, pitch = 0;
+    let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     const placeCamera = (k: number) => {
-      const fx = Math.sin(yaw), fz = Math.cos(yaw);
-      const want = new THREE.Vector3(pos.x - fx * CAM_DIST, CAM_H + pitch * 1.6, pos.z - fz * CAM_DIST);
-      const look = new THREE.Vector3(pos.x + fx * 2, 1.9 - pitch * 2.2, pos.z + fz * 2); // 살짝 올려다봐서 꽃이 더 보이게
+      const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+      const dist = cameraRoom(pos.x, pos.z, -fx, -fz, CAM_DIST);
+      const want = new THREE.Vector3(pos.x - fx * dist, footY + CAM_H * (0.6 + 0.4 * dist / CAM_DIST) + pitch * 1.6, pos.z - fz * dist);
+      const look = new THREE.Vector3(pos.x + fx * 2, footY + 1.9 - pitch * 2.2, pos.z + fz * 2); // 살짝 올려다봐서 꽃이 더 보이게
       camPos.lerp(want, k); camLook.lerp(look, k);
       camera.position.copy(camPos); camera.lookAt(camLook);
     };
@@ -72,37 +87,44 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 성능 측정용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, face: (y: number) => { yaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false;
     renderer.setAnimationLoop(() => {
       const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-      if (inp.touch) { // 누른 곳이 캐릭터(화면상 허리 높이)보다 위면 전진, 좌우 거리만큼 회전
-        screen.set(pos.x, 0.9, pos.z).project(camera);
+      if (inp.touch) { // 화면에서 캐릭터(허리 높이) → 손가락 방향으로 걸어감
+        screen.set(pos.x, footY + 0.9, pos.z).project(camera);
         const r = renderer.domElement.getBoundingClientRect();
         const dx = inp.touch.x - (r.left + (screen.x + 1) / 2 * r.width), dy = inp.touch.y - (r.top + (1 - screen.y) / 2 * r.height);
         const dead = (v: number, d: number, full: number) => Math.abs(v) < d ? 0 : Math.max(-1, Math.min(1, (v - Math.sign(v) * d) / full));
-        inp.setJoy(dead(dx, 24, 110), dead(dy, 20, 70));
+        inp.setJoy(dead(dx, 20, 70), dead(dy, 20, 70));
       }
-      const { forward, turn } = inp.axes(), drag = inp.takeDrag();
-      yaw += turn * TURN * dt - drag.x * DRAG_YAW;
+      const { forward, right } = inp.axes(), drag = inp.takeDrag();
+      camYaw -= drag.x * DRAG_YAW;
       pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.35, 0.45);
-      const speed = forward > 0 ? WALK * forward : BACK * forward;
-      if (Math.abs(forward) > 0.05) {
+      // 카메라 기준 앞/오른쪽으로 이동 방향을 만들고, 캐릭터는 그쪽으로 돌아서 걸음
+      const amount = Math.min(1, Math.hypot(forward, right)), walking = amount > 0.05;
+      if (walking) {
+        const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, cr = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
+        const dx = cf.x * forward + cr.x * right, dz = cf.z * forward + cr.z * right, len = Math.hypot(dx, dz);
+        const want = Math.atan2(dx, dz);
+        yaw += Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw)) * (1 - Math.exp(-dt * TURN_RATE));
+        const step = WALK * amount * dt;
         // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
-        const np = move(pos.x, pos.z, pos.x + Math.sin(yaw) * speed * dt, pos.z + Math.cos(yaw) * speed * dt, undefined, [...COLLIDERS, ...mp.colliders()]);
+        const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
         pos.x = np.x; pos.z = np.z;
         if (!moved) { moved = true; setHint(false); }
       }
       // 서버 판정과 1m 넘게 어긋나면(처음 입장 위치 포함) 서버 쪽으로 맞춤
       const srv = mp.mine();
-      if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = srv.yaw; synced = true; }
-      mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking: Math.abs(forward) > 0.05 });
-      me.root.position.set(pos.x, 0, pos.z); me.root.rotation.y = yaw;
-      animateChar(me, t, dt, Math.abs(forward) > 0.05 ? "walk" : "idle");
+      if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
+      mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
+      footY += (groundY(pos.x, pos.z) - footY) * (1 - Math.exp(-dt * 14)); // 정자 마루에 올라서면 살짝 올라감
+      me.root.position.set(pos.x, footY, pos.z); me.root.rotation.y = yaw;
+      animateChar(me, t, dt, walking ? "walk" : "idle");
       focus.set(pos.x, 0, pos.z);
-      world.update(t, dt, focus, Math.abs(forward) > 0.05, yaw);
+      world.update(t, dt, focus, walking, yaw);
       placeCamera(1 - Math.exp(-dt * 8));
       drawMini(pos.x, pos.z, yaw);
       renderer.render(scene, camera);
@@ -129,7 +151,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       </div>
       {hint && (
         <p className="pointer-events-none absolute inset-x-0 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-sm">
-          {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요"}
+          {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요 · 두 손가락으로 끌면 둘러봐요" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요"}
         </p>
       )}
       <canvas ref={mini} aria-label="미니맵"

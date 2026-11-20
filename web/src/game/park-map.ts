@@ -5,6 +5,15 @@
 export const BOUNDS = { minX: -59.5, maxX: 59.5, minZ: -7.5, maxZ: 28.5 };
 export const SPAWN = { x: -58.5, z: 10, yaw: Math.PI / 2 }; // 서쪽 입구 밖, 동쪽(+x)을 봄
 export const PLAYER_R = 0.3;
+/** 시설물 배율: 나무에 맞춘 현실 크기 (캐릭터만 작고 뽀짝하게). 모델·충돌 모두 이 값으로 키움 */
+export const PROP_S = 1.5;
+
+// 팔각정: 꼭짓점 각도 θ = π/8 + kπ/4, 위치 (R·sinθ, R·cosθ) → 남쪽(+z) 한 면이 입구
+export const PAVILION = { postR: 2.3, floorR: 2.5, floorH: 0.35 }; // PROP_S 곱하기 전 값
+export const pavilionCorner = (k: number, r: number) => {
+  const a = Math.PI / 8 + (k * Math.PI) / 4;
+  return [r * Math.sin(a), r * Math.cos(a)] as const;
+};
 
 /** yaw: 0이면 +z를 봄. 방향 벡터 = (sin yaw, cos yaw) */
 export type Prop =
@@ -22,7 +31,7 @@ export const PATHS: Path[] = [
   { x1: 40, z1: 24, x2: 46, z2: 24, w: 3 },
   { x1: 46, z1: 19, x2: 46, z2: 24, w: 3 },       // 북쪽 길 → 광장
 ];
-export const PLAZA = { x: 46, z: 10, r: 9.5 };
+export const PLAZA = { x: 46, z: 10, r: 11 };
 
 // 같은 배치가 매번 나오도록 고정 시드 난수
 function rng(seed: number) {
@@ -33,16 +42,16 @@ function buildProps(): Prop[] {
   const r = rng(11), out: Prop[] = [];
   // 고정 시설 먼저 → 나무는 이 근처를 피해서 심음
   const fixed: Prop[] = [
-    { kind: "gate", x: -56.5, z: 10, yaw: 0 },          // 기둥이 길 양옆(z±2.2)에 섬
-    { kind: "booth", x: -50, z: 6.2, yaw: 0 },          // 안내소: 입구 길을 바라봄
-    { kind: "kiosk", x: 12, z: 1.6, yaw: Math.PI },     // 매점: 산책로를 바라봄
-    { kind: "pavilion", x: -22, z: 16, yaw: 0 },        // 정자
+    { kind: "gate", x: -56.5, z: 10, yaw: 0 },          // 기둥이 길 양옆에 섬
+    { kind: "booth", x: -50, z: 5.4, yaw: 0 },          // 안내소: 입구 길을 바라봄
+    { kind: "kiosk", x: 12, z: 2.5, yaw: Math.PI },     // 매점: 산책로를 바라봄
+    { kind: "pavilion", x: -22, z: 15, yaw: 0 },        // 정자 (입구는 남쪽)
     { kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 },
     { kind: "wishTree", x: PLAZA.x, z: PLAZA.z + 7.5, yaw: 0 },
   ];
   out.push(...fixed);
   const free = (x: number, z: number) =>
-    fixed.every((f) => Math.hypot(x - f.x, z - f.z) > (f.kind === "pavilion" ? 8 : 5)) &&
+    fixed.every((f) => Math.hypot(x - f.x, z - f.z) > (f.kind === "pavilion" ? 10 : 7)) &&
     Math.hypot(x - PLAZA.x, z - PLAZA.z) > PLAZA.r + 3 && Math.abs(x - PLAZA.x) > 3;
   const landSide: number[] = [];
   const tree = (x: number, z: number, s = 1) => {
@@ -89,17 +98,26 @@ const box = (x: number, z: number, w: number, d: number, yaw = 0): Box => {
 };
 
 function buildColliders(): Collider[] {
-  const out: Collider[] = [];
+  const out: Collider[] = [], S = PROP_S;
+  const circle = (x: number, z: number, r: number) => out.push({ t: "c", x, z, r });
   for (const p of PROPS) {
-    if (p.kind === "tree") out.push({ t: "c", x: p.x, z: p.z, r: 0.55 * p.s });
-    else if (p.kind === "bench") out.push(box(p.x, p.z, 1.5, 0.5, p.yaw));
-    else if (p.kind === "lamp") out.push({ t: "c", x: p.x, z: p.z, r: 0.15 });
-    else if (p.kind === "booth") out.push(box(p.x, p.z, 3.2, 2.4, p.yaw));
-    else if (p.kind === "kiosk") out.push(box(p.x, p.z, 4, 3, p.yaw));
-    else if (p.kind === "pavilion") for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) out.push({ t: "c", x: p.x + dx, z: p.z + dz, r: 0.18 });
-    else if (p.kind === "fountain") out.push({ t: "c", x: p.x, z: p.z, r: 3.1 });
-    else if (p.kind === "wishTree") { out.push({ t: "c", x: p.x, z: p.z, r: 0.9 }); out.push(box(p.x, p.z - 1.1, 0.7, 0.5)); } // 줄기 + 사다리
-    else if (p.kind === "gate") for (const s of [-1, 1]) out.push(box(p.x, p.z + s * 2.2, 0.7, 0.7));
+    if (p.kind === "tree") circle(p.x, p.z, 0.55 * p.s);
+    else if (p.kind === "bench") out.push(box(p.x, p.z, 1.5 * S, 0.5 * S, p.yaw));
+    else if (p.kind === "lamp") circle(p.x, p.z, 0.15 * S);
+    else if (p.kind === "booth") out.push(box(p.x, p.z, 3.4 * S, 2.6 * S, p.yaw));
+    else if (p.kind === "kiosk") out.push(box(p.x, p.z, 4.2 * S, 3.2 * S, p.yaw));
+    else if (p.kind === "pavilion") {
+      // 기둥 8개 + 입구(남쪽 면) 뺀 7면 난간
+      for (let k = 0; k < 8; k++) {
+        const [x0, z0] = pavilionCorner(k, PAVILION.postR * S), [x1, z1] = pavilionCorner(k + 1, PAVILION.postR * S);
+        circle(p.x + x0, p.z + z0, 0.16 * S);
+        if (k === 7) continue; // 꼭짓점 7→0 사이가 입구
+        for (let i = 1; i < 6; i++) circle(p.x + x0 + ((x1 - x0) * i) / 6, p.z + z0 + ((z1 - z0) * i) / 6, 0.12);
+      }
+    }
+    else if (p.kind === "fountain") circle(p.x, p.z, 3.1 * S);
+    else if (p.kind === "wishTree") { circle(p.x, p.z, 0.6 * S); out.push(box(p.x, p.z - 1.1 * S, 0.7 * S, 0.5 * S)); } // 줄기 + 사다리
+    else if (p.kind === "gate") for (const s of [-1, 1]) out.push(box(p.x, p.z + s * 2.3 * S, 0.6 * S, 0.6 * S));
   }
   return out;
 }
@@ -134,6 +152,16 @@ export function resolve(x: number, z: number, r = PLAYER_R, colliders = COLLIDER
     if (Math.abs(x - ox) < 1e-9 && Math.abs(z - oz) < 1e-9) break;
   }
   return { x, z };
+}
+
+/** 그 자리의 바닥 높이 (정자 마루 위면 살짝 올라감) */
+export function groundY(x: number, z: number) {
+  for (const p of PROPS) {
+    if (p.kind !== "pavilion") continue;
+    // 난간 안쪽(팔각형에 내접하는 원)만 마루 위로 침
+    if (Math.hypot(x - p.x, z - p.z) < PAVILION.postR * PROP_S * Math.cos(Math.PI / 8)) return (PAVILION.floorH + 0.06) * PROP_S;
+  }
+  return 0;
 }
 
 export const overlaps = (x: number, z: number, r = PLAYER_R, colliders = COLLIDERS) =>

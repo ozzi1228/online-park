@@ -2,7 +2,7 @@
 import { Client, type Room } from "@colyseus/sdk";
 import * as THREE from "three";
 import { animateChar, disposeChar, makeChar, type Character } from "./character";
-import { PLAYER_R, type Collider } from "./park-map";
+import { PLAYER_R, groundY, type Collider } from "./park-map";
 import { PRESETS } from "./presets";
 
 type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; preset: string; nickname: string };
@@ -89,8 +89,9 @@ export class Multiplayer {
       const moving = Math.hypot(p.x - o.x, p.z - o.z) > 0.03;
       o.x += (p.x - o.x) * k; o.z += (p.z - o.z) * k;
       o.yaw += Math.atan2(Math.sin(p.yaw - o.yaw), Math.cos(p.yaw - o.yaw)) * k; // 가까운 쪽으로 회전
-      o.char.root.position.set(o.x, 0, o.z); o.char.root.rotation.y = o.yaw;
-      o.label.position.set(o.x, o.char.top + 0.3, o.z);
+      const y = groundY(o.x, o.z);
+      o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw;
+      o.label.position.set(o.x, y + o.char.top + 0.3, o.z);
       animateChar(o.char, t, dt, p.walking || moving ? "walk" : "idle");
     });
     for (const [id, o] of this.others) if (!seen.has(id)) this.remove(id, o);
