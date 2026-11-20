@@ -13,6 +13,13 @@ const date = (s: string) => new Date(s).toLocaleString("ko-KR", { timeZone: "Asi
 /** 안내소 창: 안내원이 소개·사용법을 알려주고, 문의를 받아요 */
 export function InfoPanel({ nickname, touch, onClose }: { nickname: string; touch: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>("intro");
+  // 관리자 페이지에서 고친 문구 (불러오기 전·실패 시엔 기본 문구)
+  const [guide, setGuide] = useState({ intro: INTRO, tips: TIPS, howTo: HOW_TO });
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/guide", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((g) => { if (alive && g) setGuide(g); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   return (
     <section role="dialog" aria-label="안내소"
       className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-[min(100%,30rem)] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
@@ -30,15 +37,15 @@ export function InfoPanel({ nickname, touch, onClose }: { nickname: string; touc
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm leading-relaxed">
         {tab === "intro" && (
           <div className="flex flex-col gap-3">
-            {INTRO.map((p) => <p key={p}>{p}</p>)}
+            {guide.intro.map((p) => <p key={p}>{p}</p>)}
             <ul className="mt-2 flex flex-col gap-1.5 rounded-2xl bg-white p-3">
-              {TIPS.map((t) => <li key={t}>🌸 {t}</li>)}
+              {guide.tips.map((t) => <li key={t}>🌸 {t}</li>)}
             </ul>
           </div>
         )}
         {tab === "howto" && (
           <dl className="flex flex-col gap-2">
-            {HOW_TO.map((h) => (
+            {guide.howTo.map((h) => (
               <div key={h.title} className="rounded-2xl bg-white px-4 py-2.5">
                 <dt className="font-bold">{h.title}</dt>
                 <dd className="opacity-80">{touch ? h.mobile : h.pc}</dd>

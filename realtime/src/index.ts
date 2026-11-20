@@ -14,6 +14,7 @@ const Player = schema({
   x: t.number(), z: t.number(), yaw: t.number(), walking: t.boolean(),
   anim: t.string(), // "idle" | "sit" | "sitmat"(돗자리) | "wish" — 다른 사람에게 보이는 동작
   preset: t.string(), nickname: t.string(),
+  uid: t.string(), // 쪽지 받는 사람 지정용 (웹앱 API가 다시 확인)
 }, "Player");
 type Player = SchemaType<typeof Player>;
 const ParkState = schema({ players: t.map(Player) }, "ParkState");
@@ -61,7 +62,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
       x = SPAWN.x + Math.cos(a) * r * 0.5; z = SPAWN.z + Math.sin(a) * r;
     }
     const p = new Player();
-    Object.assign(p, { x, z, yaw: SPAWN.yaw, walking: false, anim: "idle", preset: auth.preset, nickname: auth.nickname });
+    Object.assign(p, { x, z, yaw: SPAWN.yaw, walking: false, anim: "idle", preset: auth.preset, nickname: auth.nickname, uid: auth.uid });
     this.state.players.set(client.sessionId, p);
     this.last.set(client.sessionId, Date.now());
     console.log(`[join] ${auth.nickname} (${this.state.players.size}명)`);
@@ -80,6 +81,12 @@ class ParkRoom extends Room<{ state: ParkState }> {
       const r = move(p.x, p.z, tx, tz, PLAYER_R, this.others(client.sessionId));
       p.x = r.x; p.z = r.z; p.yaw = m.yaw; p.walking = m.walking === true;
       if (p.walking) p.anim = "idle"; // 걸으면 앉기·소원은 풀림
+    },
+    // 쪽지를 건넸다는 알림만 전달 (쪽지 내용·검증은 웹앱 API가 담당, 받은 쪽은 API로 다시 불러옴)
+    noteSent: (client: Client, m: { to?: unknown }) => {
+      const from = this.state.players.get(client.sessionId);
+      const to = this.clients.find((c) => c.sessionId === m?.to);
+      if (from && to && to !== client) to.send("noteReceived", { from: from.nickname });
     },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);

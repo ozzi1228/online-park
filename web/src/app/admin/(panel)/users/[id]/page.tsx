@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { account, eventLog, greenLedger, petalCatches, user } from "@/db/schema";
+import { account, eventLog, greenLedger, notes, petalCatches, user } from "@/db/schema";
+import { NoteView } from "@/app/park/note";
+import type { Strokes } from "@/lib/notes-shared";
 import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
@@ -21,11 +23,12 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
   const ids = [id, ...linked.map((l) => String((l.data as { guestId?: string }).guestId)).filter(Boolean)];
   const idMatch = or(...ids.map((x) => eq(eventLog.userId, x)));
 
-  const [accounts, ledger, catches, timeline] = await Promise.all([
+  const [accounts, ledger, catches, timeline, noteRows] = await Promise.all([
     db.select({ providerId: account.providerId, createdAt: account.createdAt }).from(account).where(eq(account.userId, id)),
     db.select().from(greenLedger).where(eq(greenLedger.userId, id)).orderBy(desc(greenLedger.id)).limit(100),
     db.select().from(petalCatches).where(eq(petalCatches.userId, id)).orderBy(desc(petalCatches.id)).limit(30),
     db.select().from(eventLog).where(idMatch).orderBy(desc(eventLog.id)).limit(300),
+    db.select().from(notes).where(or(eq(notes.authorId, id), eq(notes.recipientId, id))).orderBy(desc(notes.id)).limit(12),
   ]);
   const balance = ledger.reduce((s, r) => s + r.amount, 0);
   const box = "rounded-2xl bg-white p-4 ring-1 ring-black/5";
@@ -70,6 +73,21 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
           </ul>
         </div>
       </section>
+
+      {noteRows.length > 0 && (
+        <section className={box}>
+          <h2 className="mb-2 font-bold">주고받은 쪽지 <span className="text-sm font-normal opacity-60">최근 {noteRows.length}장</span></h2>
+          <ul className="grid grid-cols-3 gap-3 md:grid-cols-6">
+            {noteRows.map((nt) => (
+              <li key={nt.id} className="flex flex-col items-center gap-1 text-xs">
+                <NoteView strokes={nt.strokes as Strokes} className="w-full" />
+                <span className="opacity-70">{nt.authorId === id ? "보냄 →" : `← ${nt.authorNickname ?? "?"}`} · {kst(nt.createdAt).slice(5, 16)}</span>
+                {nt.authorId === id && nt.recipientId && <Link href={`/admin/users/${nt.recipientId}`} className="font-mono opacity-50 hover:underline">{nt.recipientId.slice(0, 8)}</Link>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className={box}>
         <h2 className="mb-2 font-bold">타임라인 <span className="text-sm font-normal opacity-60">최근 {timeline.length}건</span></h2>

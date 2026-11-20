@@ -3,6 +3,7 @@ import { greenBalance } from "@/lib/green";
 import { chargeOptions, paymentsReady } from "@/lib/payments";
 import { getSettings } from "@/lib/settings";
 import { myItems } from "@/lib/shop";
+import { unreadCount } from "@/lib/notes";
 
 /** 공원 화면 상단: 내 그린·가방·상품 가격 */
 export async function GET(req: Request) {
@@ -17,5 +18,6 @@ export async function GET(req: Request) {
     shop: { notebookPrice: shop.notebookPrice, notebookSheets: shop.notebookSheets, matPrice: shop.matPrice },
     charge: await chargeOptions(),
     paymentsReady: paymentsReady(),
+    unreadNotes: await unreadCount(s.user.id),
   }, { headers: { "cache-control": "no-store" } });
 }

@@ -6,9 +6,9 @@ import { makeMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, groundY, type Collider } from "./park-map";
 import { PRESETS } from "./presets";
 
-type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string };
+type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string; uid: string };
 type NetState = { players: Map<string, NetPlayer> & { forEach(cb: (p: NetPlayer, id: string) => void): void; size: number } };
-type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number; mat?: THREE.Mesh };
+type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number; mat?: THREE.Mesh; uid: string; nickname: string };
 
 export type NetStatus = { online: boolean; count: number };
 
@@ -34,6 +34,8 @@ export class Multiplayer {
   private lastSent = { x: NaN, z: NaN, yaw: NaN, walking: false };
   status: NetStatus = { online: false, count: 1 };
   onStatus?: (s: NetStatus) => void;
+  /** 누가 나에게 쪽지를 건넸을 때 */
+  onNote?: (from: string) => void;
 
   constructor(private scene: THREE.Scene) {}
 
@@ -46,6 +48,7 @@ export class Multiplayer {
       if (this.disposed) { room.leave(); return; } // 접속하는 사이 화면이 닫혔으면 바로 나감
       this.room = room;
       room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });
+      room.onMessage("noteReceived", (m: { from?: string }) => this.onNote?.(String(m?.from ?? "누군가")));
       this.setStatus(true);
     } catch (e) {
       if (this.disposed) return;
@@ -88,7 +91,7 @@ export class Multiplayer {
         char.root.traverse((m) => { if (m instanceof THREE.Mesh) m.castShadow = true; });
         const label = nameSprite(p.nickname);
         this.scene.add(char.root, label);
-        o = { char, label, x: p.x, z: p.z, yaw: p.yaw };
+        o = { char, label, x: p.x, z: p.z, yaw: p.yaw, uid: p.uid, nickname: p.nickname };
         this.others.set(id, o);
       }
       const k = 1 - Math.exp(-dt * 10);
@@ -117,6 +120,22 @@ export class Multiplayer {
     this.others.delete(id);
   }
   private clear() { for (const [id, o] of this.others) this.remove(id, o); }
+
+  /** 화면에서 누른 곳에 있는 다른 사람 (가까운 순) */
+  pick(camera: THREE.Camera, rect: DOMRect, x: number, y: number) {
+    const v = new THREE.Vector3();
+    let best: { sessionId: string; uid: string; nickname: string; x: number; z: number; px: number } | null = null;
+    for (const [id, o] of this.others) {
+      v.set(o.x, 0.9, o.z).project(camera);
+      if (v.z > 1) continue;
+      const px = Math.hypot(rect.left + (v.x + 1) / 2 * rect.width - x, rect.top + (1 - v.y) / 2 * rect.height - y);
+      if (px < 60 && (!best || px < best.px)) best = { sessionId: id, uid: o.uid, nickname: o.nickname, x: o.x, z: o.z, px };
+    }
+    return best;
+  }
+
+  /** 쪽지를 건넸다고 받는 사람에게 알림 */
+  notifyNote(sessionId: string) { this.room?.send("noteSent", { to: sessionId }); }
 
   /** 다른 사람이 깐 돗자리의 빈 옆자리 (같이 앉기용) */
   freeSeats() {

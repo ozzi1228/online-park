@@ -1,5 +1,5 @@
 // 안내소 안내원이 들려주는 소개·사용법.
-// ponytail: 코드에 둔 글. 자주 고치게 되면 관리자 페이지 편집(DB)으로 옮기기
+// 여기 글은 기본값. 관리자 페이지 "안내 문구"에서 고치면 그 값이 우선 (src/lib/content.ts)
 export const NPC_NAME = "안내원";
 
 export const INTRO = [

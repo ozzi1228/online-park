@@ -11,6 +11,8 @@ import { COLLIDERS, PROPS, PROP_S, SPAWN, canSit, groundY, move } from "@/game/p
 import { PRESETS, type Preset } from "@/game/presets";
 import { NPC_NAME } from "@/content/guide";
 import { InfoPanel } from "./info-panel";
+import { NoteEditor, NoteView } from "./note";
+import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { makeMat, placeMat } from "@/game/mat";
 import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
@@ -65,7 +67,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
   const meRef = useRef<MeInfo | null>(null);
-  const [panel, setPanel] = useState<"wallet" | "shop" | "info" | null>(null);
+  const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | null>(null);
+  const [writeTo, setWriteTo] = useState<{ sessionId: string; uid: string; nickname: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const mpRef = useRef<Multiplayer | null>(null);
   const [miniPref, setMiniOpen] = useState<boolean | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 잠깐 뜨는 안내 문구 (setState·ref만 써서 항상 같은 함수)
@@ -131,6 +136,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const drawMini = createMinimap(mini.current!);
     const mp = new Multiplayer(scene);
     mp.onStatus = setNet;
+    mpRef.current = mp;
+    mp.onNote = (from) => { sayRef.current(`✉️ ${from}님이 쪽지를 건넸어요`); refreshMe.current(); };
     mp.connect();
     let synced = false;
 
@@ -225,6 +232,18 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (screen.z < 1 && nearKiosk() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 110) {
         setMenu(null); setPanel("shop"); return;
       }
+      // 다른 사람을 누르면 그 사람에게 할 수 있는 것
+      const other = mp.pick(camera, rect, tap.x, tap.y);
+      if (other) {
+        const near = Math.hypot(other.x - pos.x, other.z - pos.z) < 5;
+        const sheets = meRef.current?.items.noteSheets ?? 0;
+        setMenu({ x: tap.x, y: tap.y, items: [
+          near && sheets > 0 && !meRef.current?.isGuest
+            ? { label: `${other.nickname}님에게 쪽지 건네기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTo(other); logClient("note.open_editor", {}); } }
+            : { label: meRef.current?.isGuest ? "쪽지는 회원만 쓸 수 있어요" : sheets <= 0 ? "노트가 없어요 (매점에서 살 수 있어요)" : "조금 더 가까이 가야 건넬 수 있어요" },
+        ] });
+        return;
+      }
       // 내 캐릭터를 누르면 메뉴
       screen.set(pos.x, footY + 0.8, pos.z).project(camera);
       const sx = rect.left + (screen.x + 1) / 2 * rect.width, sy = rect.top + (1 - screen.y) / 2 * rect.height;
@@ -240,7 +259,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false;
@@ -338,6 +357,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         )}
       </div>
       {me && (
+        <button onClick={() => setPanel(panel === "inbox" ? null : "inbox")} aria-label={`쪽지함${me.unreadNotes ? ` (안 읽은 쪽지 ${me.unreadNotes}개)` : ""}`}
+          className="absolute right-28 top-4 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm max-sm:right-24">
+          ✉️{me.unreadNotes > 0 && <span className="ml-1 rounded-full bg-sakura px-1.5 text-xs text-white">{me.unreadNotes}</span>}
+        </button>
+      )}
+      {me && (
         <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
           className="absolute right-4 top-4 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
           {me.isGuest ? "🌱 그린" : `🌱 ${me.green.toLocaleString("ko-KR")}`}
@@ -379,6 +404,18 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </div>
       )}
 
+      {panel === "inbox" && <Inbox onClose={() => { setPanel(null); refreshMe.current(); }} />}
+      {writeTo && me && (
+        <NoteEditor title={`${writeTo.nickname}님에게 쪽지`} sheets={me.items.noteSheets} busy={sending} onCancel={() => setWriteTo(null)}
+          onSend={async (strokes: Strokes) => {
+            setSending(true);
+            const r = await fetch("/api/notes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: writeTo.uid, strokes }) })
+              .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
+            setSending(false);
+            if (r?.ok) { mpRef.current?.notifyNote(writeTo.sessionId); sayRef.current(`${writeTo.nickname}님에게 쪽지를 건넸어요 🌸`); setWriteTo(null); refreshMe.current(); }
+            else sayRef.current(r?.reason === "no_sheet" ? "노트가 없어요" : "쪽지를 건네지 못했어요");
+          }} />
+      )}
       {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
       {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { sayRef.current(msg); refreshMe.current(); }} />}
@@ -391,5 +428,55 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         {miniOpen ? "지도 접기" : "🗺 지도"}
       </button>
     </div>
+  );
+}
+
+type InboxNote = { id: number; from: string | null; strokes: Strokes; readAt: string | null; createdAt: string };
+
+/** 받은 쪽지함 */
+function Inbox({ onClose }: { onClose: () => void }) {
+  const [rows, setRows] = useState<InboxNote[] | null>(null);
+  const [open, setOpen] = useState<InboxNote | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/notes", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).then((x: InboxNote[]) => { if (alive) setRows(x); }).catch(() => alive && setRows([]));
+    return () => { alive = false; };
+  }, []);
+  const view = (n: InboxNote) => {
+    setOpen(n);
+    if (!n.readAt) {
+      fetch("/api/notes", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: n.id }) }).catch(() => {});
+      setRows((r) => r?.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)) ?? r);
+    }
+  };
+  const when = (s: string) => new Date(s).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <section role="dialog" aria-label="쪽지함" className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-[min(100%,26rem)] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
+      <header className="flex items-center px-5 pt-4">
+        <h2 className="text-lg">{open ? `${open.from ?? "누군가"}님의 쪽지` : "받은 쪽지"}</h2>
+        {open && <button onClick={() => setOpen(null)} className="ml-3 text-sm underline opacity-70">목록</button>}
+        <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {open ? (
+          <div className="flex flex-col items-center gap-2">
+            <NoteView strokes={open.strokes} className="w-full max-w-[20rem]" />
+            <p className="text-xs opacity-60">{when(open.createdAt)}</p>
+          </div>
+        ) : !rows ? <p className="text-sm opacity-60">불러오는 중…</p> : rows.length === 0 ? <p className="text-sm opacity-60">아직 받은 쪽지가 없어요</p> : (
+          <ul className="grid grid-cols-3 gap-3">
+            {rows.map((n) => (
+              <li key={n.id}>
+                <button onClick={() => view(n)} className="relative flex w-full flex-col items-center gap-1 rounded-2xl bg-white p-2">
+                  {!n.readAt && <span className="absolute right-2 top-2 size-2 rounded-full bg-sakura" aria-label="안 읽음" />}
+                  <NoteView strokes={n.strokes} className="w-full" />
+                  <span className="line-clamp-1 text-xs">{n.from ?? "누군가"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

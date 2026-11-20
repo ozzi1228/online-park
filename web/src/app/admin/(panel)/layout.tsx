@@ -11,6 +11,7 @@ const NAV = [
   ["/admin/inquiries", "문의"],
   ["/admin/payments", "결제"],
   ["/admin/settings", "운영 설정"],
+  ["/admin/content", "안내 문구"],
 ] as const;
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {

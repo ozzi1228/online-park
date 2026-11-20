@@ -143,3 +143,22 @@ export const inquiries = pgTable("inquiries", {
   repliedAt: timestamp({ withTimezone: true }),
   createdAt: now(),
 }, (t) => [index().on(t.userId, t.createdAt), index().on(t.status, t.createdAt)]);
+
+// ---------- 손글씨 쪽지 (벚꽃잎 노트 한 장) ----------
+export const notes = pgTable("notes", {
+  id: bigserial({ mode: "number" }).primaryKey(),
+  authorId: text().notNull(),
+  authorNickname: text(),
+  recipientId: text(),                // 건넨 경우 받는 사람 (소원나무에 달면 null)
+  strokes: jsonb().notNull(),         // [[색, x1,y1, x2,y2, ...], ...] 0~1000 정수 좌표
+  kind: text().notNull().default("given"), // given | tree (소원나무, 나중에)
+  readAt: timestamp({ withTimezone: true }),
+  createdAt: now(),
+}, (t) => [index().on(t.recipientId, t.createdAt), index().on(t.authorId, t.createdAt)]);
+
+// ---------- 화면 문구 (관리자 편집, 기본값은 src/content) ----------
+export const siteContent = pgTable("site_content", {
+  key: text().primaryKey(),
+  value: jsonb().notNull(),
+  updatedAt: now().$onUpdate(() => new Date()),
+});
