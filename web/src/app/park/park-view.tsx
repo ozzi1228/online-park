@@ -7,9 +7,11 @@ import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, type NetStatus } from "@/game/multiplayer";
-import { COLLIDERS, SPAWN, canSit, groundY, move } from "@/game/park-map";
+import { COLLIDERS, PROPS, PROP_S, SPAWN, canSit, groundY, move } from "@/game/park-map";
 import { PRESETS } from "@/game/presets";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
+import { makeMat, placeMat } from "@/game/mat";
+import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
@@ -41,6 +43,7 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 type MenuItem = { label: string; run?: () => void };
 type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: () => void; stand: () => void; wish: () => void; release: () => void };
+const KIOSK = PROPS.find((p) => p.kind === "kiosk")!;
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -54,9 +57,24 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [caught, setCaught] = useState(false);
   const [sitting, setSitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [me, setMe] = useState<MeInfo | null>(null);
+  const meRef = useRef<MeInfo | null>(null);
+  const [panel, setPanel] = useState<"wallet" | "shop" | null>(null);
+  const [miniPref, setMiniOpen] = useState<boolean | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 잠깐 뜨는 안내 문구 (setState·ref만 써서 항상 같은 함수)
   const sayRef = useRef((msg: string) => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2200); });
+
+  const refreshMe = useRef(async () => {
+    const r = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
+    if (r?.ok) { const m = await r.json() as MeInfo; meRef.current = m; setMe(m); }
+  });
+  useEffect(() => {
+    refreshMe.current();
+    // 결제하고 돌아온 경우 (?charged=1000)
+    const charged = Number(new URLSearchParams(location.search).get("charged"));
+    if (charged > 0) { sayRef.current(`${charged.toLocaleString("ko-KR")}그린이 충전됐어요 🌱`); history.replaceState(null, "", location.pathname); }
+  }, []);
 
   useEffect(() => {
     const el = box.current!;
@@ -79,11 +97,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     scene.add(me.root);
     const petal = new CatchPetal(makePetalGeometry());
     scene.add(petal.group);
+    const mat = makeMat(); mat.visible = false; scene.add(mat);
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
-    const st = { sitting: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "wish", now: 0, faceCam: false };
+    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "wish", now: 0, faceCam: false };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     const placeCamera = (k: number) => {
@@ -107,7 +126,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // ---------- 행동 ----------
     const stand = () => {
       if (!st.sitting) return;
-      st.sitting = false; setSitting(false); inp.setSteer(true);
+      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false); inp.setSteer(true);
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
     };
     actions.current = {
@@ -116,7 +135,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (!canSit(pos.x, pos.z)) { sayRef.current("여기선 앉을 수 없어요. 잔디밭이나 정자로 가 볼까요?"); return; }
         st.sitting = true; st.wishUntil = 0; setSitting(true); inp.setSteer(false);
         camYaw = yaw;
-        logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0 });
+        // 돗자리가 있으면 잔디밭에선 깔고 앉음 (정자 마루에선 그냥 앉음)
+        st.onMat = !!meRef.current?.items.mat && groundY(pos.x, pos.z) === 0;
+        if (st.onMat) { placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
+        logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
       wish: () => {
@@ -147,10 +169,24 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       refreshWish(); // 두 번 다 잡았거나 다 떨어졌으면 더는 안 보이게
     };
 
+    const nearKiosk = () => Math.hypot(pos.x - KIOSK.x, pos.z - KIOSK.z) < 9;
+    // 다른 사람 돗자리의 빈 옆자리: 1.6m 안이면 같이 앉을 수 있음
+    const nearSeat = () => mp.freeSeats().find((s) => Math.hypot(s.x - pos.x, s.z - pos.z) < 1.6);
+    const joinMat = (seat: { x: number; z: number; yaw: number; owner: string }) => {
+      setMenu(null);
+      pos.x = seat.x; pos.z = seat.z; yaw = camYaw = seat.yaw; // 바로 옆이라 서버 이동 판정 안에서 따라옴
+      st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true); inp.setSteer(false);
+      sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
+      logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
+    };
     const openMenu = (tap: Tap) => {
-      const items: MenuItem[] = st.sitting ? [{ label: "일어나기", run: () => actions.current!.stand() }]
+      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }] : [];
+      const seat = !st.sitting ? nearSeat() : undefined;
+      const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
+      if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => joinMat(seat) });
+      items.push(...(st.sitting ? [{ label: "일어나기", run: () => actions.current!.stand() }]
         : canSit(pos.x, pos.z) ? [{ label: "여기 앉기", run: () => actions.current!.sit() }]
-        : [{ label: "여기선 앉을 수 없어요" }];
+        : [{ label: "여기선 앉을 수 없어요" }]));
       setMenu({ x: tap.x, y: tap.y, items });
     };
     const handleTap = (tap: Tap, rect: DOMRect) => {
@@ -165,6 +201,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           logClient("petal.missed", { height: Math.round(y * 100) / 100 });
         }
         return;
+      }
+      // 매점을 누르면 (가까이 있을 때) 매점 창
+      screen.set(KIOSK.x, 1.6 * PROP_S, KIOSK.z).project(camera);
+      if (screen.z < 1 && nearKiosk() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 110) {
+        setMenu(null); setPanel("shop"); return;
       }
       // 내 캐릭터를 누르면 메뉴
       screen.set(pos.x, footY + 0.8, pos.z).project(camera);
@@ -233,7 +274,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
 
       const mode: Mode = st.sitting ? "sit" : t < st.wishUntil ? "wish" : walking ? "walk" : "idle";
-      const anim = mode === "sit" ? "sit" : mode === "wish" ? "wish" : "idle";
+      const anim = mode === "sit" ? (st.onMat ? "sitmat" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 
@@ -258,18 +299,25 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   }, [presetId]);
 
   const pill = "rounded-full bg-cream/90 px-4 py-2 shadow-md";
+  const miniOpen = miniPref ?? !touch; // 모바일은 화면이 좁아 미니맵을 접어 둔 채 시작
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
       <div ref={box} className="absolute inset-0" />
       <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 text-sm">
         <p className="rounded-full bg-cream/85 px-3 py-1">{nickname}</p>
         {net && (
-          <p className="flex items-center gap-1.5 rounded-full bg-cream/85 px-3 py-1">
+          <p className="hidden items-center gap-1.5 rounded-full bg-cream/85 px-3 py-1 sm:flex">
             <span className={`size-2 rounded-full ${net.online ? "bg-emerald-400" : "bg-stone-400"}`} />
             {net.online ? `${net.count}명 산책 중` : "혼자 산책 중"}
           </p>
         )}
       </div>
+      {me && (
+        <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
+          className="absolute right-4 top-4 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
+          {me.isGuest ? "🌱 그린" : `🌱 ${me.green.toLocaleString("ko-KR")}`}
+        </button>
+      )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
           {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요 · 내 캐릭터를 톡 누르면 메뉴" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요 · 우클릭하면 메뉴"}
@@ -306,8 +354,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </div>
       )}
 
-      <canvas ref={mini} aria-label="미니맵"
-        className="pointer-events-none absolute bottom-4 right-4 h-[72px] w-[220px] rounded-xl shadow-md ring-2 ring-cream max-sm:h-[54px] max-sm:w-[164px]" />
+      {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
+      {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { sayRef.current(msg); refreshMe.current(); }} />}
+
+      {/* 미니맵: 접었다 펼 수 있음 (모바일은 접힌 채 시작) */}
+      <canvas ref={mini} aria-label="미니맵" aria-hidden={!miniOpen}
+        className={`pointer-events-none absolute bottom-4 right-4 h-[72px] w-[220px] rounded-xl shadow-md ring-2 ring-cream transition-opacity max-sm:h-[54px] max-sm:w-[164px] ${miniOpen ? "" : "invisible opacity-0"}`} />
+      <button onClick={() => setMiniOpen(!miniOpen)} aria-label={miniOpen ? "미니맵 접기" : "미니맵 펼치기"} aria-expanded={miniOpen}
+        className={`absolute right-4 rounded-full bg-cream/90 px-2.5 py-1 text-xs shadow-sm ${miniOpen ? "bottom-[92px] max-sm:bottom-[74px]" : "bottom-4"}`}>
+        {miniOpen ? "지도 접기" : "🗺 지도"}
+      </button>
     </div>
   );
 }

@@ -2,12 +2,13 @@
 import { Client, type Room } from "@colyseus/sdk";
 import * as THREE from "three";
 import { animateChar, disposeChar, makeChar, type Character } from "./character";
+import { makeMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, groundY, type Collider } from "./park-map";
 import { PRESETS } from "./presets";
 
 type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string };
 type NetState = { players: Map<string, NetPlayer> & { forEach(cb: (p: NetPlayer, id: string) => void): void; size: number } };
-type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number };
+type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number; mat?: THREE.Mesh };
 
 export type NetStatus = { online: boolean; count: number };
 
@@ -96,7 +97,13 @@ export class Multiplayer {
       const y = groundY(o.x, o.z);
       o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw;
       o.label.position.set(o.x, y + o.char.top + 0.3, o.z);
-      animateChar(o.char, t, dt, p.walking || moving ? "walk" : p.anim === "sit" ? "sit" : p.anim === "wish" ? "wish" : "idle");
+      const sitting = p.anim === "sit" || p.anim === "sitmat";
+      animateChar(o.char, t, dt, p.walking || moving ? "walk" : sitting ? "sit" : p.anim === "wish" ? "wish" : "idle");
+      // 돗자리 깔고 앉은 사람은 돗자리도 보임
+      if (p.anim === "sitmat" && !moving) {
+        if (!o.mat) { o.mat = makeMat(); this.scene.add(o.mat); }
+        o.mat.visible = true; placeMat(o.mat, p.x, p.z, p.yaw, y + 0.02);
+      } else if (o.mat) o.mat.visible = false;
     });
     for (const [id, o] of this.others) if (!seen.has(id)) this.remove(id, o);
     this.setStatus(true);
@@ -104,13 +111,29 @@ export class Multiplayer {
 
   private remove(id: string, o: Other) {
     this.scene.remove(o.char.root, o.label); disposeChar(o.char);
+    if (o.mat) { this.scene.remove(o.mat); o.mat.geometry.dispose(); }
     o.label.material.map?.dispose(); o.label.material.dispose();
     this.others.delete(id);
   }
   private clear() { for (const [id, o] of this.others) this.remove(id, o); }
 
+  /** 다른 사람이 깐 돗자리의 빈 옆자리 (같이 앉기용) */
+  freeSeats() {
+    const out: { x: number; z: number; yaw: number; owner: string }[] = [];
+    const room = this.room;
+    if (!room?.state.players) return out;
+    room.state.players.forEach((p, id) => {
+      if (id === room.sessionId || p.anim !== "sitmat") return;
+      const seat = secondSeat(p.x, p.z, p.yaw);
+      let taken = false;
+      room.state.players.forEach((q, qid) => { if (qid !== id && Math.hypot(q.x - seat.x, q.z - seat.z) < 0.45) taken = true; });
+      if (!taken) out.push({ ...seat, yaw: p.yaw, owner: p.nickname });
+    });
+    return out;
+  }
+
   /** 앉기·소원 동작을 다른 사람에게 알림 */
-  sendAnim(a: "idle" | "sit" | "wish") { this.room?.send("anim", a); }
+  sendAnim(a: "idle" | "sit" | "sitmat" | "wish") { this.room?.send("anim", a); }
 
   dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
 }

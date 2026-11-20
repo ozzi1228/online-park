@@ -105,3 +105,26 @@ export const petalCatches = pgTable("petal_catches", {
   seq: integer().notNull(),           // 그날 몇 번째로 잡았는지 → (user, day, seq) 유니크로 초과 방지
   createdAt: now(),
 }, (t) => [uniqueIndex().on(t.userId, t.day, t.seq), index().on(t.day)]);
+
+// ---------- 그린 충전 주문 (토스페이먼츠). 1그린 = 1원 ----------
+export const orders = pgTable("orders", {
+  id: text().primaryKey(),            // 토스에 넘기는 orderId
+  userId: text().notNull(),
+  amount: integer().notNull(),        // 결제 금액(원) = 지급 그린
+  status: text().notNull().default("pending"), // pending → paid | failed | canceled
+  paymentKey: text(),
+  method: text(),
+  failCode: text(),
+  failMessage: text(),
+  raw: jsonb(),                       // 승인 응답 원본 (문의 대응용)
+  createdAt: now(),
+  approvedAt: timestamp({ withTimezone: true }),
+}, (t) => [index().on(t.userId, t.createdAt), index().on(t.status, t.createdAt)]);
+
+// ---------- 가방: 노트 장수, 돗자리 등 ----------
+export const inventory = pgTable("inventory", {
+  userId: text().notNull(),
+  item: text().notNull(),             // "note_sheet" | "mat"
+  qty: integer().notNull().default(0),
+  updatedAt: now().$onUpdate(() => new Date()),
+}, (t) => [uniqueIndex().on(t.userId, t.item)]);

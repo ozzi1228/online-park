@@ -12,6 +12,14 @@ export const DEFAULTS = {
   },
   green: {
     signupBonus: 100,     // 회원가입 시 지급
+    chargeSmall: 500,     // 충전 상품 (1그린 = 1원)
+    chargeMedium: 1000,
+    chargeLarge: 3000,
+  },
+  shop: {
+    notebookPrice: 10,    // 벚꽃잎 노트 1권 (그린)
+    notebookSheets: 30,   // 노트 1권 장수
+    matPrice: 10,         // 돗자리 (한 번 사면 계속 사용)
   },
 } as const;
 
@@ -30,6 +38,17 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     title: "그린",
     fields: {
       signupBonus: { label: "회원가입 보너스", unit: "그린", min: 0, max: 100000 },
+      chargeSmall: { label: "충전 상품 1 (1그린=1원)", unit: "그린", min: 100, max: 1000000 },
+      chargeMedium: { label: "충전 상품 2", unit: "그린", min: 100, max: 1000000 },
+      chargeLarge: { label: "충전 상품 3", unit: "그린", min: 100, max: 1000000 },
+    },
+  },
+  shop: {
+    title: "매점",
+    fields: {
+      notebookPrice: { label: "벚꽃잎 노트 가격", unit: "그린", min: 0, max: 100000 },
+      notebookSheets: { label: "노트 1권 장수", unit: "장", min: 1, max: 1000 },
+      matPrice: { label: "돗자리 가격", unit: "그린", min: 0, max: 100000 },
     },
   },
 };

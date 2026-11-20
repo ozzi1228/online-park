@@ -12,7 +12,7 @@ const MAX_SPEED = 3.2;            // m/s, 클라이언트 걷기 속도(3.0)보�
 
 const Player = schema({
   x: t.number(), z: t.number(), yaw: t.number(), walking: t.boolean(),
-  anim: t.string(), // "idle" | "sit" | "wish" — 다른 사람에게 보이는 동작
+  anim: t.string(), // "idle" | "sit" | "sitmat"(돗자리) | "wish" — 다른 사람에게 보이는 동작
   preset: t.string(), nickname: t.string(),
 }, "Player");
 type Player = SchemaType<typeof Player>;
@@ -83,7 +83,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
     },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
-      if (p && (a === "idle" || a === "sit" || a === "wish")) p.anim = a;
+      if (p && (a === "idle" || a === "sit" || a === "sitmat" || a === "wish")) p.anim = a;
     },
   };
 

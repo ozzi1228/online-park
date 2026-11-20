@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@colyseus/sdk": "^0.18.10",
+    "@tosspayments/tosspayments-sdk": "^2.10.0",
     "better-auth": "^1.7.26",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.6",
