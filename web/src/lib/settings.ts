@@ -28,6 +28,9 @@ export const DEFAULTS = {
     notesPerUserDaily: 5, // 한 사람이 하루에 달 수 있는 소원 쪽지 수
     maxVisible: 3000,     // 나무에 보이는 쪽지 최대 수 (최근 것부터)
   },
+  sound: {                // 소리 크기 기본값 (0~100). 각자 화면에서 켜기/끄기·전체 음량 조절
+    wind: 60, water: 60, crowd: 45, nature: 40, sfx: 70,
+  },
   inquiry: {
     dailyLimit: 5,        // 한 사람이 하루에 남길 수 있는 문의 수
     maxLength: 2000,      // 문의 내용 최대 글자 수
@@ -71,6 +74,16 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     fields: {
       notesPerUserDaily: { label: "1인당 하루 쪽지 수", unit: "장", min: 0, max: 100 },
       maxVisible: { label: "나무에 보이는 쪽지 최대 수", unit: "장", min: 50, max: 20000 },
+    },
+  },
+  sound: {
+    title: "소리",
+    fields: {
+      wind: { label: "바람 소리", unit: "", min: 0, max: 100 },
+      water: { label: "물소리 (강·분수)", unit: "", min: 0, max: 100 },
+      crowd: { label: "사람들 웅성임", unit: "", min: 0, max: 100 },
+      nature: { label: "새·풀벌레", unit: "", min: 0, max: 100 },
+      sfx: { label: "효과음 (종·퐁당·종이)", unit: "", min: 0, max: 100 },
     },
   },
   inquiry: {

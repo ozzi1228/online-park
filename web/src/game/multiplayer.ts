@@ -137,6 +137,13 @@ export class Multiplayer {
     return best;
   }
 
+  /** 주변 r미터 안의 다른 사람 수 (웅성임 소리용) */
+  nearCount(x: number, z: number, r: number) {
+    let n = 0;
+    for (const o of this.others.values()) if (Math.hypot(o.x - x, o.z - z) < r) n++;
+    return n;
+  }
+
   /** 쪽지를 건넸다고 받는 사람에게 알림 */
   notifyNote(sessionId: string) { this.room?.send("noteSent", { to: sessionId }); }
   notifyTree() { this.room?.send("treeChanged", {}); }

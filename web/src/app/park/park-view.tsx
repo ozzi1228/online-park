@@ -16,6 +16,8 @@ import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { makeMat, placeMat } from "@/game/mat";
 import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
+import { ParkAudio } from "@/game/audio";
+import { kstHour } from "@/game/sky";
 import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
@@ -77,6 +79,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
   const treeApi = useRef<{ start: (strokes: Strokes, covered: boolean) => void; confirm: () => void; cancel: () => void; refresh: () => void } | null>(null);
   const mpRef = useRef<Multiplayer | null>(null);
+  const audioRef = useRef<ParkAudio | null>(null);
+  const [muted, setMuted] = useState(false);
   const [miniPref, setMiniOpen] = useState<boolean | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 잠깐 뜨는 안내 문구 (setState·ref만 써서 항상 같은 함수)
@@ -84,7 +88,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
   const refreshMe = useRef(async () => {
     const r = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
-    if (r?.ok) { const m = await r.json() as MeInfo; meRef.current = m; setMe(m); }
+    if (r?.ok) { const m = await r.json() as MeInfo; meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
   });
   useEffect(() => {
     refreshMe.current();
@@ -107,7 +111,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const scene = new THREE.Scene();
     // ?hour=19 처럼 주면 그 시각 하늘로 고정 (확인용)
     const hourParam = Number(new URLSearchParams(location.search).get("hour"));
-    const world = buildWorld(scene, q, Number.isFinite(hourParam) && location.search.includes("hour=") ? hourParam % 24 : undefined);
+    const skyHour = Number.isFinite(hourParam) && location.search.includes("hour=") ? hourParam % 24 : undefined;
+    const world = buildWorld(scene, q, skyHour);
     const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
     const me = makeChar(preset);
     me.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
@@ -116,6 +121,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     scene.add(petal.group);
     const mat = makeMat(); mat.visible = false; scene.add(mat);
     const treeNotes = new TreeNotes(makePetalGeometry()); scene.add(treeNotes.group);
+    // 소리: 첫 터치·키 입력 때 켜짐 (브라우저 정책)
+    const audio = new ParkAudio(); audioRef.current = audio;
+    Promise.resolve().then(() => setMuted(audio.muted)); // 이 기기에 저장된 켜기/끄기 표시
+    if (meRef.current?.sound) audio.levels = meRef.current.sound;
+    const wake = () => audio.start();
+    window.addEventListener("pointerdown", wake); window.addEventListener("keydown", wake);
     const coin = new CoinToss(); scene.add(coin.group);
     const refreshTree = async () => {
       const r = await fetch("/api/tree", { cache: "no-store" }).catch(() => null);
@@ -178,6 +189,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (!st.holding) return;
         st.holding = false; setCaught(false);
         st.wishUntil = st.now + WISH_SEC; st.faceCam = true; // 카메라가 정면으로 돌아와 손 모은 모습을 보여줌
+        audio.chime();
         logClient("wish.made", {});
         setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), WISH_SEC * 1000);
       },
@@ -197,7 +209,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const claim = async (height: number) => {
       const r = await fetch("/api/petal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ height }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; myCount?: number }>).catch(() => null);
-      if (r?.ok) { st.holding = true; setCaught(true); }
+      if (r?.ok) { st.holding = true; setCaught(true); audio.chime(); }
       else sayRef.current(r?.reason === "soldout" ? "아쉽게도 오늘의 소원꽃잎이 모두 떨어졌어요" : r?.reason === "limit" ? "오늘은 소원을 충분히 빌었어요" : "잠시 후 다시 해볼까요?");
       refreshWish(); // 두 번 다 잡았거나 다 떨어졌으면 더는 안 보이게
     };
@@ -212,15 +224,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const r = await fetch("/api/fountain", { method: "POST" }).then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
       if (!r?.ok) { sayRef.current(r?.reason === "insufficient" ? "그린이 모자라요" : "동전을 던지지 못했어요"); return; }
       yaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z);
-      coin.throw(new THREE.Vector3(pos.x, footY + 1.1, pos.z), FOUNTAIN);
+      coin.throw(new THREE.Vector3(pos.x, footY + 1.1, pos.z), FOUNTAIN); audio.jingle();
       refreshMe.current();
     };
-    coin.onSplash = () => { st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
+    coin.onSplash = () => { audio.plop(); setTimeout(() => audio.chime(), 400); st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
     // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
     treeApi.current = {
       start: (strokes, covered) => {
         tree.pending = { strokes, covered }; tree.ghost = null; treeNotes.showGhost(null);
-        setWriteTree(false); setTreeMode("pick"); camYaw = Math.atan2(WISH_TREE.x - LADDER_TOP.x, WISH_TREE.z - LADDER_TOP.z);
+        setWriteTree(false); setTreeMode("pick"); audio.ladder(); camYaw = Math.atan2(WISH_TREE.x - LADDER_TOP.x, WISH_TREE.z - LADDER_TOP.z);
       },
       confirm: async () => {
         if (!tree.pending || !tree.ghost || tree.busy) return;
@@ -230,7 +242,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
         tree.busy = false;
         if (r?.ok) {
-          tree.pending = null; treeNotes.showGhost(null); setTreeMode(null);
+          tree.pending = null; treeNotes.showGhost(null); setTreeMode(null); audio.paper();
           await refreshTree(); mp.notifyTree(); refreshMe.current();
           st.wishUntil = st.now + WISH_SEC; st.faceCam = true;
           sayRef.current("소원 쪽지를 나무에 달았어요 🌸");
@@ -328,7 +340,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false;
@@ -407,7 +419,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
-      world.update(t, dt, focus, walking, yaw);
+      const wind = world.update(t, dt, focus, walking, yaw);
+      audio.update({
+        wind, riverDist: Math.max(0, pos.z + 8), fountainDist: Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z),
+        nearby: mp.nearCount(pos.x, pos.z, 15), hour: skyHour ?? kstHour(),
+      });
       if (tree.pending) { // 나무 둘레를 도는 카메라
         const k = 1 - Math.exp(-dt * 6), fx = Math.sin(camYaw), fz = Math.cos(camYaw);
         camPos.lerp(new THREE.Vector3(WISH_TREE.x - fx * 8.5, 4.2 - pitch * 3, WISH_TREE.z - fz * 8.5), k);
@@ -420,6 +436,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
     return () => {
       clearInterval(wishTimer);
+      window.removeEventListener("pointerdown", wake); window.removeEventListener("keydown", wake); audio.dispose(); audioRef.current = null;
       ro.disconnect(); renderer.setAnimationLoop(null); inp.dispose(); input.current = null; actions.current = null; mp.dispose();
       scene.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
       renderer.dispose(); el.removeChild(renderer.domElement);
@@ -433,6 +450,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       <div ref={box} className="absolute inset-0" />
       <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 text-sm">
         <p className="rounded-full bg-cream/85 px-3 py-1">{nickname}</p>
+        <button onClick={() => { const a = audioRef.current; if (!a) return; a.start(); a.setMuted(!a.muted); setMuted(a.muted); }}
+          aria-label={muted ? "소리 켜기" : "소리 끄기"} aria-pressed={!muted} className="pointer-events-auto rounded-full bg-cream/85 px-2.5 py-1">
+          {muted ? "🔇" : "🔊"}
+        </button>
         {net && (
           <p className="hidden items-center gap-1.5 rounded-full bg-cream/85 px-3 py-1 sm:flex">
             <span className={`size-2 rounded-full ${net.online ? "bg-emerald-400" : "bg-stone-400"}`} />
@@ -511,13 +532,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             const r = await fetch("/api/notes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: writeTo.uid, strokes }) })
               .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
             setSending(false);
-            if (r?.ok) { mpRef.current?.notifyNote(writeTo.sessionId); sayRef.current(`${writeTo.nickname}님에게 쪽지를 건넸어요 🌸`); setWriteTo(null); refreshMe.current(); }
+            if (r?.ok) { audioRef.current?.paper(); mpRef.current?.notifyNote(writeTo.sessionId); sayRef.current(`${writeTo.nickname}님에게 쪽지를 건넸어요 🌸`); setWriteTo(null); refreshMe.current(); }
             else sayRef.current(r?.reason === "no_sheet" ? "노트가 없어요" : "쪽지를 건네지 못했어요");
           }} />
       )}
       {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
       {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
-      {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { sayRef.current(msg); refreshMe.current(); }} />}
+      {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { audioRef.current?.pop(); sayRef.current(msg); refreshMe.current(); }} />}
 
       {/* 미니맵: 접었다 펼 수 있음 (모바일은 접힌 채 시작) */}
       <canvas ref={mini} aria-label="미니맵" aria-hidden={!miniOpen}
