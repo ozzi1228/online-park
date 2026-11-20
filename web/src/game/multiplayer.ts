@@ -28,6 +28,7 @@ export class Multiplayer {
   private room: Room<unknown, NetState> | null = null;
   private others = new Map<string, Other>();
   private sendAt = 0;
+  private disposed = false;
   private lastSent = { x: NaN, z: NaN, yaw: NaN, walking: false };
   status: NetStatus = { online: false, count: 1 };
   onStatus?: (s: NetStatus) => void;
@@ -39,10 +40,13 @@ export class Multiplayer {
       const res = await fetch("/api/realtime/token", { cache: "no-store" });
       if (!res.ok) throw new Error(`token ${res.status}`);
       const { token, url } = await res.json();
-      this.room = await new Client(url).joinOrCreate<NetState>("park", { token });
-      this.room.onLeave(() => { this.room = null; this.setStatus(false); this.clear(); });
+      const room = await new Client(url).joinOrCreate<NetState>("park", { token });
+      if (this.disposed) { room.leave(); return; } // 접속하는 사이 화면이 닫혔으면 바로 나감
+      this.room = room;
+      room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });
       this.setStatus(true);
     } catch (e) {
+      if (this.disposed) return;
       console.warn("[multiplayer] 혼자 모드로 계속해요:", e);
       this.setStatus(false);
     }
@@ -108,5 +112,5 @@ export class Multiplayer {
   /** 앉기·소원 동작을 다른 사람에게 알림 */
   sendAnim(a: "idle" | "sit" | "wish") { this.room?.send("anim", a); }
 
-  dispose() { this.room?.leave(); this.room = null; this.clear(); }
+  dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
 }

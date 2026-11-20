@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { OUTLINE, at, part, toon, toonGradient } from "./character";
+import { createSky } from "./sky";
 import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
@@ -376,22 +377,19 @@ class PetalField {
 }
 
 // ---------- 전체 ----------
-export function buildWorld(scene: THREE.Scene, q: Quality) {
-  scene.background = canvasTex(2, 256, (x) => {
-    const gr = x.createLinearGradient(0, 0, 0, 256);
-    gr.addColorStop(0, "#9fd2f2"); gr.addColorStop(0.55, "#d9ecf6"); gr.addColorStop(1, "#fbe3ea");
-    x.fillStyle = gr; x.fillRect(0, 0, 2, 256);
-  });
-  scene.fog = new THREE.Fog(0xf7e3ea, 30, 110);
-
-  scene.add(new THREE.HemisphereLight(0xfff4ea, 0xc3b0e0, 1.3));
+/** hour: 하늘 시각을 고정해서 보고 싶을 때 (예: ?hour=19) */
+export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
+  const fog = new THREE.Fog(0xf7e3ea, 30, 110);
+  scene.fog = fog;
+  const hemi = new THREE.HemisphereLight(0xfff4ea, 0xc3b0e0, 1.3);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff0dc, 2.2);
-  const SUN_OFFSET = new THREE.Vector3(16, 34, 20);
   sun.castShadow = true; sun.shadow.mapSize.set(q.shadow, q.shadow);
   Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 90 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const sunDir = SUN_OFFSET.clone().normalize();
+  const sky = createSky(scene, sun, hemi, fog, hour);
+  const sunDir = new THREE.Vector3(16, 34, 20).normalize(); // 꽃 덩어리 밝은 쪽 (낮 기준 고정)
 
   // 땅·길·광장
   const flat = (geo: THREE.BufferGeometry, color: string, x: number, y: number, z: number, rotY = 0) => {
@@ -482,7 +480,8 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
   return {
     /** focus = 내 캐릭터 위치(그림자·꽃잎이 따라옴), walking = 걷는 중이면 발밑 꽃잎을 흩뜨림 */
     update(t: number, dt: number, focus: THREE.Vector3, walking = false, yaw = 0) {
-      sun.position.copy(focus).add(SUN_OFFSET); sun.target.position.copy(focus);
+      sky.update(t, focus);
+      sun.position.copy(focus).addScaledVector(sky.lightDir, 45); sun.target.position.copy(focus);
       const wind = 0.4 + Math.max(0, Math.sin(t * 0.25)) ** 4 * 1.6; // 가끔 바람이 셈
       for (let i = 0; i < fp.length; i++) {
         const p = fp[i];

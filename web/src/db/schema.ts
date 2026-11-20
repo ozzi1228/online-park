@@ -85,3 +85,23 @@ export const eventLog = pgTable("event_log", {
   index().on(t.type, t.at),
   index().on(t.at),
 ]);
+
+// ---------- 운영 설정 (관리자 페이지에서 편집, 기본값은 src/lib/settings.ts) ----------
+export const gameSettings = pgTable("game_settings", {
+  key: text().primaryKey(),           // 설정 묶음 이름 (wishPetal, green ...)
+  value: jsonb().notNull(),
+  updatedAt: now().$onUpdate(() => new Date()),
+});
+
+// ---------- 소원꽃잎: 하루 전체 선착순 + 1인당 횟수 ----------
+export const wishPetalDays = pgTable("wish_petal_days", {
+  day: text().primaryKey(),           // 한국 날짜 YYYY-MM-DD
+  caught: integer().notNull().default(0),
+});
+export const petalCatches = pgTable("petal_catches", {
+  id: bigserial({ mode: "number" }).primaryKey(),
+  userId: text().notNull(),
+  day: text().notNull(),
+  seq: integer().notNull(),           // 그날 몇 번째로 잡았는지 → (user, day, seq) 유니크로 초과 방지
+  createdAt: now(),
+}, (t) => [uniqueIndex().on(t.userId, t.day, t.seq), index().on(t.day)]);

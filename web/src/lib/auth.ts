@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { logEvent } from "@/lib/log";
+import { getSettings } from "@/lib/settings";
 
 // 환경변수가 있는 로그인만 켬
 const provider = (id: string) => {
@@ -18,8 +19,6 @@ const socialProviders = Object.fromEntries(
     .filter(([, v]) => v),
 );
 export const enabledProviders = Object.keys(socialProviders);
-
-export const SIGNUP_BONUS = 100;
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
@@ -38,11 +37,12 @@ export const auth = betterAuth({
           const isGuest = (user as { isAnonymous?: boolean }).isAnonymous ?? false;
           await logEvent("user.created", { isGuest }, { userId: user.id, isGuest });
           if (isGuest) return;
-          // 가입 보너스. (reason, refId) 유니크라 중복 지급 불가
+          // 가입 보너스 (금액은 관리자 설정). (reason, refId) 유니크라 중복 지급 불가
+          const amount = (await getSettings()).green.signupBonus;
           await db.insert(schema.greenLedger)
-            .values({ userId: user.id, amount: SIGNUP_BONUS, reason: "signup_bonus", refId: user.id })
+            .values({ userId: user.id, amount, reason: "signup_bonus", refId: user.id })
             .onConflictDoNothing();
-          await logEvent("green.granted", { amount: SIGNUP_BONUS, reason: "signup_bonus" }, { userId: user.id });
+          await logEvent("green.granted", { amount, reason: "signup_bonus" }, { userId: user.id });
         },
       },
     },

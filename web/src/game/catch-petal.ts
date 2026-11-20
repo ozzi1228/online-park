@@ -1,4 +1,5 @@
-// 잡을 수 있는 꽃잎: 가끔 내 바로 앞으로 반짝이며 떨어짐. 손 높이(빛나는 동안)에 누르면 잡힘.
+// 소원꽃잎: 아주 가끔 내 바로 앞으로 반짝이며 떨어짐. 손 높이(빛나는 동안)에 누르면 잡힘.
+// 나타날지·간격은 서버 설정(하루 선착순·1인당 횟수)에 따름 → setSchedule / enabled
 import * as THREE from "three";
 
 export const CATCH_LOW = 0.45, CATCH_HIGH = 1.9; // 이 높이 사이에서만 잡힘 (= 반짝이는 동안)
@@ -17,7 +18,10 @@ export class CatchPetal {
   private petal: THREE.Mesh;
   private glow: THREE.Sprite;
   private v = { x: 0, y: 0, z: 0, ph: 0 };
-  private nextAt = 6 + Math.random() * 6;
+  private nextAt = Infinity;
+  private minSec = 90; private maxSec = 240;
+  /** 오늘 더 잡을 수 있는 사람만 true (서버가 알려줌). false면 일반 꽃잎만 보임 */
+  enabled = false;
   private scr = new THREE.Vector3();
 
   constructor(petalGeo: THREE.BufferGeometry) {
@@ -33,7 +37,7 @@ export class CatchPetal {
 
   update(t: number, dt: number, me: { x: number; z: number; yaw: number }, paused: boolean) {
     if (!this.active) {
-      if (paused || t < this.nextAt) return;
+      if (!this.enabled || paused || t < this.nextAt) return;
       // 캐릭터 앞 1.6m, 좌우로 조금 흔들린 자리 위에서 시작
       const side = (Math.random() - 0.5) * 0.8, fx = Math.sin(me.yaw), fz = Math.cos(me.yaw);
       this.group.position.set(me.x + fx * 1.6 + fz * side, 3.6, me.z + fz * 1.6 - fx * side);
@@ -61,5 +65,13 @@ export class CatchPetal {
     return Math.hypot(sx - x, sy - y) < radius;
   }
 
-  end(t: number) { this.active = false; this.group.visible = false; this.nextAt = t + 8 + Math.random() * 10; }
+  end(t: number) { this.active = false; this.group.visible = false; this.nextAt = t + this.minSec + Math.random() * (this.maxSec - this.minSec); }
+
+  /** 서버 설정 반영. 첫 등장도 간격만큼 기다렸다가 (희귀하게) */
+  setSchedule(t: number, enabled: boolean, minSec: number, maxSec: number) {
+    const first = this.nextAt === Infinity;
+    this.enabled = enabled; this.minSec = minSec; this.maxSec = Math.max(minSec, maxSec);
+    if (first) this.nextAt = t + this.minSec + Math.random() * (this.maxSec - this.minSec);
+    if (!enabled && this.active) { this.active = false; this.group.visible = false; }
+  }
 }
