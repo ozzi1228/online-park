@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* 로고 핑크 + 크림 + 하늘색. 게임 공간이 낮 배경이라 다크모드는 따로 두지 않음 */
+@theme inline {
+  --color-sakura: #f7a8be;
+  --color-sakura-deep: #d9869e;
+  --color-cream: #fff8f5;
+  --color-ink: #6b4450;
+  --color-sky: #cfe8f7;
+  --font-sans: var(--font-gowun), system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}

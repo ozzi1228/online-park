@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.env*
+!.env.example
+*.log
+
+# 남의 이미지라 공개 레포에 올리지 않음 (로컬 참고용)
+references/

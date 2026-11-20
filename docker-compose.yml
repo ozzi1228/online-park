@@ -1,0 +1,14 @@
+# 로컬 개발용 DB. 실행: docker compose up -d
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: sakura
+      POSTGRES_PASSWORD: sakura
+      POSTGRES_DB: sakura
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
