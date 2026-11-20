@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { animateChar, makeChar } from "@/game/character";
 import { Input } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
-import { SPAWN, move } from "@/game/park-map";
+import { Multiplayer, type NetStatus } from "@/game/multiplayer";
+import { COLLIDERS, SPAWN, move } from "@/game/park-map";
 import { PRESETS } from "@/game/presets";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld } from "@/game/world";
 
@@ -22,6 +23,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const input = useRef<Input | null>(null);
   const touch = useSyncExternalStore(subscribeCoarse, isCoarse, () => false);
   const [hint, setHint] = useState(true);
+  const [net, setNet] = useState<NetStatus | null>(null);
 
   useEffect(() => {
     const el = box.current!;
@@ -57,6 +59,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const inp = new Input(renderer.domElement, coarse); input.current = inp;
     const screen = new THREE.Vector3();
     const drawMini = createMinimap(mini.current!);
+    const mp = new Multiplayer(scene);
+    mp.onStatus = setNet;
+    mp.connect();
+    let synced = false;
 
     const fit = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -84,10 +90,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.35, 0.45);
       const speed = forward > 0 ? WALK * forward : BACK * forward;
       if (Math.abs(forward) > 0.05) {
-        const np = move(pos.x, pos.z, pos.x + Math.sin(yaw) * speed * dt, pos.z + Math.cos(yaw) * speed * dt);
+        // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
+        const np = move(pos.x, pos.z, pos.x + Math.sin(yaw) * speed * dt, pos.z + Math.cos(yaw) * speed * dt, undefined, [...COLLIDERS, ...mp.colliders()]);
         pos.x = np.x; pos.z = np.z;
         if (!moved) { moved = true; setHint(false); }
       }
+      // 서버 판정과 1m 넘게 어긋나면(처음 입장 위치 포함) 서버 쪽으로 맞춤
+      const srv = mp.mine();
+      if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = srv.yaw; synced = true; }
+      mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking: Math.abs(forward) > 0.05 });
       me.root.position.set(pos.x, 0, pos.z); me.root.rotation.y = yaw;
       animateChar(me, t, dt, Math.abs(forward) > 0.05 ? "walk" : "idle");
       focus.set(pos.x, 0, pos.z);
@@ -98,7 +109,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     });
 
     return () => {
-      ro.disconnect(); renderer.setAnimationLoop(null); inp.dispose(); input.current = null;
+      ro.disconnect(); renderer.setAnimationLoop(null); inp.dispose(); input.current = null; mp.dispose();
       scene.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
       renderer.dispose(); el.removeChild(renderer.domElement);
     };
@@ -107,7 +118,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
       <div ref={box} className="absolute inset-0" />
-      <p className="pointer-events-none absolute left-4 top-4 rounded-full bg-cream/85 px-3 py-1 text-sm">{nickname}</p>
+      <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 text-sm">
+        <p className="rounded-full bg-cream/85 px-3 py-1">{nickname}</p>
+        {net && (
+          <p className="flex items-center gap-1.5 rounded-full bg-cream/85 px-3 py-1">
+            <span className={`size-2 rounded-full ${net.online ? "bg-emerald-400" : "bg-stone-400"}`} />
+            {net.online ? `${net.count}명 산책 중` : "혼자 산책 중"}
+          </p>
+        )}
+      </div>
       {hint && (
         <p className="pointer-events-none absolute inset-x-0 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-sm">
           {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요"}
