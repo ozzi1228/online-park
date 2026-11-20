@@ -31,10 +31,14 @@ export function NoteView({ strokes, className = "" }: { strokes: Strokes; classN
 }
 
 /** 손글씨로만 쓰는 쪽지 (텍스트 입력 없음) */
-export function NoteEditor({ title, sheets, busy, onSend, onCancel }: {
-  title: string; sheets: number; busy: boolean; onSend: (s: Strokes) => void; onCancel: () => void;
+export function NoteEditor({ title, sheets, busy, onSend, onCancel, coverOption = false, sendLabel = "찢어서 건네기" }: {
+  title: string; sheets: number; busy: boolean; onSend: (s: Strokes, covered: boolean) => void; onCancel: () => void;
+  /** 소원나무용: "한 장 더 풀칠해서 내용 가리기" 선택지 */
+  coverOption?: boolean; sendLabel?: string;
 }) {
   const [strokes, setStrokes] = useState<Strokes>([]);
+  const [covered, setCovered] = useState(false);
+  const need = covered ? 2 : 1;
   const [color, setColor] = useState(0);
   const drawing = useRef<number[] | null>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -85,10 +89,16 @@ export function NoteEditor({ title, sheets, busy, onSend, onCancel }: {
         <button onClick={() => setStrokes((s) => s.slice(0, -1))} disabled={!strokes.length} className="ml-auto rounded-full bg-white px-3 py-1 text-sm ring-1 ring-black/10 disabled:opacity-40">되돌리기</button>
         <button onClick={() => setStrokes([])} disabled={!strokes.length} className="rounded-full bg-white px-3 py-1 text-sm ring-1 ring-black/10 disabled:opacity-40">지우기</button>
       </div>
+      {coverOption && (
+        <label className="flex w-full items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm">
+          <input type="checkbox" checked={covered} onChange={(e) => setCovered(e.target.checked)} disabled={sheets < 2} />
+          <span>한 장 더 풀칠해서 내용 가리기 <span className="opacity-60">(노트 +1장, 나만 볼 수 있어요)</span></span>
+        </label>
+      )}
       <div className="flex w-full gap-2">
         <button onClick={onCancel} className="flex-1 rounded-full bg-white py-2.5 ring-1 ring-sakura/40">그만두기</button>
-        <button onClick={() => onSend(strokes)} disabled={!strokes.length || busy} className="flex-1 rounded-full bg-sakura py-2.5 text-white disabled:opacity-50">
-          {busy ? "건네는 중…" : "찢어서 건네기"}
+        <button onClick={() => onSend(strokes, covered)} disabled={!strokes.length || busy || sheets < need} className="flex-1 rounded-full bg-sakura py-2.5 text-white disabled:opacity-50">
+          {busy ? "잠시만요…" : sendLabel}
         </button>
       </div>
     </section>

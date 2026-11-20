@@ -88,6 +88,8 @@ class ParkRoom extends Room<{ state: ParkState }> {
       const to = this.clients.find((c) => c.sessionId === m?.to);
       if (from && to && to !== client) to.send("noteReceived", { from: from.nickname });
     },
+    // 누가 소원나무에 쪽지를 달거나 떼면 모두 새로 불러오도록 알림 (내용은 웹앱 API에서)
+    treeChanged: (client: Client) => { this.broadcast("treeChanged", {}, { except: client }); },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (p && (a === "idle" || a === "sit" || a === "sitmat" || a === "wish")) p.anim = a;

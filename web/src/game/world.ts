@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { OUTLINE, at, part, toon, toonGradient } from "./character";
 import { createSky } from "./sky";
-import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, pavilionCorner, type Prop } from "./park-map";
+import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
 export const QUALITY_HIGH: Quality = { cards: 38, groundPetals: 16000, fallingPetals: 900, shadow: 2048, pixelRatio: 2 };
@@ -275,14 +275,13 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
     }
     case "wishTree": {
       add(new THREE.CylinderGeometry(0.35, 0.55, 2.4, 10), BARK, 0, 1.2, 0, 0.02);
-      const origin = new THREE.Vector3(p.x, 0, p.z);
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * 6.28 + 0.4, dir = new THREE.Vector3(Math.cos(a) * 0.7, 0.75, Math.sin(a) * 0.7).normalize();
         const b = part(new THREE.CylinderGeometry(0.05, 0.16, 2, 7, 1, true), BARK, T);
         b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); b.position.set(0, 2.2, 0).addScaledVector(dir, 1); g.add(b);
-        leafSpots.push({ c: origin.clone().add(new THREE.Vector3(0, 2.2, 0).addScaledVector(dir, 1.9).multiplyScalar(S)), r: 1.15 * S, top: 3.6 * S, k: 40 });
       }
-      leafSpots.push({ c: new THREE.Vector3(p.x, 4.1 * S, p.z), r: 1.4 * S, top: 3.6 * S, k: 40 });
+      // 잎 덩어리는 park-map의 WISH_CANOPY (쪽지 다는 자리와 같은 영역)
+      for (const c of WISH_CANOPY) leafSpots.push({ c: new THREE.Vector3(c.x, c.y, c.z), r: c.r, top: 3.6 * S, k: 40 });
       // 사다리 (분수 쪽에 기대어 둠)
       const lad = new THREE.Group(); lad.position.set(0, 0, -1.0); lad.rotation.x = 0.25;
       for (const s of [-1, 1]) lad.add(at(part(new THREE.BoxGeometry(0.06, 3.2, 0.06), WOOD, T), s * 0.25, 1.55, 0));

@@ -156,6 +156,23 @@ export function resolve(x: number, z: number, r = PLAYER_R, colliders = COLLIDER
   return { x, z };
 }
 
+// ---------- 소원나무: 쪽지를 달 수 있는 가지(잎 덩어리) 영역 ----------
+export const WISH_TREE = PROPS.find((p) => p.kind === "wishTree") as { x: number; z: number; yaw: number };
+export type Sphere = { x: number; y: number; z: number; r: number };
+/** 잎 덩어리 6개 (월드 좌표). world.ts가 이걸로 잎을 그리고, 쪽지 위치 검사도 이걸로 */
+export const WISH_CANOPY: Sphere[] = (() => {
+  const S = PROP_S, out: Sphere[] = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * 6.28 + 0.4, dx = Math.cos(a) * 0.7, dy = 0.75, dz = Math.sin(a) * 0.7, l = Math.hypot(dx, dy, dz);
+    out.push({ x: WISH_TREE.x + (dx / l) * 1.9 * S, y: (2.2 + (dy / l) * 1.9) * S, z: WISH_TREE.z + (dz / l) * 1.9 * S, r: 1.15 * S });
+  }
+  out.push({ x: WISH_TREE.x, y: 4.1 * S, z: WISH_TREE.z, r: 1.4 * S });
+  return out;
+})();
+/** 쪽지를 달 수 있는 자리인지: 잎 덩어리 겉면 근처 */
+export const onCanopy = (x: number, y: number, z: number) =>
+  WISH_CANOPY.some((c) => { const d = Math.hypot(x - c.x, y - c.y, z - c.z); return d > c.r * 0.5 && d < c.r + 0.6; });
+
 /** 그 자리의 바닥 높이 (정자 마루 위면 살짝 올라감) */
 export function groundY(x: number, z: number) {
   for (const p of PROPS) {

@@ -7,7 +7,7 @@ import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
-import { COLLIDERS, PROPS, PROP_S, SPAWN, canSit, groundY, move } from "@/game/park-map";
+import { COLLIDERS, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move } from "@/game/park-map";
 import { PRESETS, type Preset } from "@/game/presets";
 import { NPC_NAME } from "@/content/guide";
 import { InfoPanel } from "./info-panel";
@@ -15,6 +15,7 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { makeMat, placeMat } from "@/game/mat";
+import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
 import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
@@ -49,6 +50,7 @@ type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: () => void; stand: () => void; wish: () => void; release: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk")!;
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
+const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
 // 안내원: 단정한 초록 조끼 차림의 젊은 남자
 const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side",
   top: "#6fa58f", topType: "jacket", inner: "#ffffff", tie: "#e98aa0", bottom: "#5b6478", shoes: "#4a3a30" };
@@ -70,6 +72,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | null>(null);
   const [writeTo, setWriteTo] = useState<{ sessionId: string; uid: string; nickname: string } | null>(null);
   const [sending, setSending] = useState(false);
+  const [writeTree, setWriteTree] = useState(false);          // 소원 쪽지 쓰는 중
+  const [treeMode, setTreeMode] = useState<"pick" | "ready" | null>(null); // 사다리 위에서 달 자리 고르는 중
+  const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
+  const treeApi = useRef<{ start: (strokes: Strokes, covered: boolean) => void; confirm: () => void; cancel: () => void; refresh: () => void } | null>(null);
   const mpRef = useRef<Multiplayer | null>(null);
   const [miniPref, setMiniOpen] = useState<boolean | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -109,6 +115,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const petal = new CatchPetal(makePetalGeometry());
     scene.add(petal.group);
     const mat = makeMat(); mat.visible = false; scene.add(mat);
+    const treeNotes = new TreeNotes(makePetalGeometry()); scene.add(treeNotes.group);
+    const coin = new CoinToss(); scene.add(coin.group);
+    const refreshTree = async () => {
+      const r = await fetch("/api/tree", { cache: "no-store" }).catch(() => null);
+      if (r?.ok) treeNotes.set(await r.json() as TreeNote[]);
+    };
+    refreshTree();
     const npc = makeChar(NPC_LOOK), npcLabel = nameSprite(NPC_NAME);
     npc.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     npc.root.position.set(NPC.x, 0, NPC.z); npcLabel.position.set(NPC.x, npc.top + 0.3, NPC.z);
@@ -118,6 +131,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
+    const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "wish", now: 0, faceCam: false };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
@@ -138,6 +152,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     mp.onStatus = setNet;
     mpRef.current = mp;
     mp.onNote = (from) => { sayRef.current(`✉️ ${from}님이 쪽지를 건넸어요`); refreshMe.current(); };
+    mp.onTreeChanged = refreshTree;
     mp.connect();
     let synced = false;
 
@@ -188,6 +203,42 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
 
     const nearKiosk = () => Math.hypot(pos.x - KIOSK.x, pos.z - KIOSK.z) < 9;
+    const nearFountain = () => Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z) < 9;
+    const nearTree = () => Math.hypot(pos.x - WISH_TREE.x, pos.z - WISH_TREE.z) < 8;
+    // 분수에 동전: 서버에서 그린 차감 → 동전이 물에 퐁당 → 정면 보고 소원
+    const tossCoin = async () => {
+      setMenu(null);
+      if (meRef.current?.isGuest) { sayRef.current("동전 던지기는 회원 전용이에요"); return; }
+      const r = await fetch("/api/fountain", { method: "POST" }).then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
+      if (!r?.ok) { sayRef.current(r?.reason === "insufficient" ? "그린이 모자라요" : "동전을 던지지 못했어요"); return; }
+      yaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z);
+      coin.throw(new THREE.Vector3(pos.x, footY + 1.1, pos.z), FOUNTAIN);
+      refreshMe.current();
+    };
+    coin.onSplash = () => { st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
+    // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
+    treeApi.current = {
+      start: (strokes, covered) => {
+        tree.pending = { strokes, covered }; tree.ghost = null; treeNotes.showGhost(null);
+        setWriteTree(false); setTreeMode("pick"); camYaw = Math.atan2(WISH_TREE.x - LADDER_TOP.x, WISH_TREE.z - LADDER_TOP.z);
+      },
+      confirm: async () => {
+        if (!tree.pending || !tree.ghost || tree.busy) return;
+        tree.busy = true;
+        const r = await fetch("/api/tree", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...tree.pending, x: tree.ghost.x, y: tree.ghost.y, z: tree.ghost.z }) })
+          .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
+        tree.busy = false;
+        if (r?.ok) {
+          tree.pending = null; treeNotes.showGhost(null); setTreeMode(null);
+          await refreshTree(); mp.notifyTree(); refreshMe.current();
+          st.wishUntil = st.now + WISH_SEC; st.faceCam = true;
+          sayRef.current("소원 쪽지를 나무에 달았어요 🌸");
+        } else sayRef.current(r?.reason === "daily_limit" ? "오늘은 쪽지를 충분히 달았어요" : r?.reason === "no_sheet" ? "노트가 모자라요" : r?.reason === "bad_spot" ? "나뭇가지 사이를 골라 주세요" : "달지 못했어요");
+      },
+      cancel: () => { tree.pending = null; tree.ghost = null; treeNotes.showGhost(null); setTreeMode(null); },
+      refresh: refreshTree,
+    };
     const nearNpc = () => Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 6;
     const openInfo = () => { setMenu(null); setPanel("info"); logClient("info.open", {}); };
     // 다른 사람 돗자리의 빈 옆자리: 1.6m 안이면 같이 앉을 수 있음
@@ -200,7 +251,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
     const openMenu = (tap: Tap) => {
-      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }] : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }] : [];
+      const sheets = meRef.current?.items.noteSheets ?? 0;
+      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
+        : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
+        : nearTree() ? [meRef.current?.isGuest ? { label: "소원 쪽지는 회원만 달 수 있어요" } : sheets < 1 ? { label: "노트가 있어야 소원 쪽지를 달 수 있어요" }
+          : { label: `소원 쪽지 달기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTree(true); logClient("tree.open_editor", {}); } }]
+        : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => joinMat(seat) });
@@ -210,7 +266,20 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       setMenu({ x: tap.x, y: tap.y, items });
     };
     const handleTap = (tap: Tap, rect: DOMRect) => {
+      if (tree.pending) { // 사다리 위: 누른 가지 사이에 쪽지 미리보기
+        const p = treeNotes.canopyPoint(camera, rect, tap.x, tap.y);
+        if (p) { tree.ghost = p; treeNotes.showGhost(p); setTreeMode("ready"); }
+        return;
+      }
       if (tap.menu) { openMenu(tap); return; }
+      if (nearTree() || Math.hypot(pos.x - WISH_TREE.x, pos.z - WISH_TREE.z) < 14) { // 나무에 달린 쪽지 보기
+        const n = treeNotes.pick(camera, rect, tap.x, tap.y);
+        if (n) { setMenu(null); setTreeDetail(n); logClient("tree.view", { noteId: n.id }); return; }
+      }
+      screen.set(FOUNTAIN.x, 1.2 * PROP_S, FOUNTAIN.z).project(camera);
+      if (screen.z < 1 && nearFountain() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 120) {
+        setMenu({ x: tap.x, y: tap.y, items: [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] }); return;
+      }
       if (petal.hit(camera, rect, tap.x, tap.y)) {
         const y = petal.group.position.y;
         if (petal.catchable && !st.holding) {
@@ -277,6 +346,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       camYaw -= drag.x * DRAG_YAW;
+      if (tree.pending) camYaw -= right * LOOK_YAW * dt; // 사다리 위: 좌우로 나무를 돌아보기
       if (st.faceCam) { // 소원 빌 땐 캐릭터 얼굴 쪽으로 카메라를 천천히 돌림 (직접 돌리거나 걸으면 해제)
         const front = yaw + Math.PI;
         camYaw += Math.atan2(Math.sin(front - camYaw), Math.cos(front - camYaw)) * (1 - Math.exp(-dt * 3));
@@ -284,7 +354,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (drag.x !== 0 || t > st.wishUntil + 1.5) st.faceCam = false;
       }
       let walking = false;
-      if (st.sitting) {
+      if (tree.pending) {
+        // 사다리 위에선 걷지 않음
+      } else if (st.sitting) {
         // 앉아 있을 땐 방향키 = 카메라를 돌려 앉은 캐릭터와 풍경을 둘러보기
         camYaw -= right * LOOK_YAW * dt;
         pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH - forward * LOOK_PITCH * dt, -0.7, 0.45);
@@ -316,8 +388,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 
       footY += (groundY(pos.x, pos.z) - footY) * (1 - Math.exp(-dt * 14)); // 정자 마루에 올라서면 살짝 올라감
-      me.root.position.set(pos.x, footY, pos.z); me.root.rotation.y = yaw;
-      animateChar(me, t, dt, mode);
+      if (tree.pending) { // 사다리 꼭대기에 올라가 나무를 바라봄 (서버 위치는 그대로)
+        me.root.position.set(LADDER_TOP.x, LADDER_TOP.y, LADDER_TOP.z);
+        me.root.rotation.y = Math.atan2(WISH_TREE.x - LADDER_TOP.x, WISH_TREE.z - LADDER_TOP.z);
+        animateChar(me, t, dt, "idle");
+      } else {
+        me.root.position.set(pos.x, footY, pos.z); me.root.rotation.y = yaw;
+        animateChar(me, t, dt, mode);
+      }
+      coin.update(dt);
 
       // 안내원: 가까이 오면 나를 바라보고 처음 한 번 인사
       const nd = Math.hypot(pos.x - NPC.x, pos.z - NPC.z);
@@ -329,7 +408,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
       world.update(t, dt, focus, walking, yaw);
-      placeCamera(1 - Math.exp(-dt * 8));
+      if (tree.pending) { // 나무 둘레를 도는 카메라
+        const k = 1 - Math.exp(-dt * 6), fx = Math.sin(camYaw), fz = Math.cos(camYaw);
+        camPos.lerp(new THREE.Vector3(WISH_TREE.x - fx * 8.5, 4.2 - pitch * 3, WISH_TREE.z - fz * 8.5), k);
+        camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
+        camera.position.copy(camPos); camera.lookAt(camLook);
+      } else placeCamera(1 - Math.exp(-dt * 8));
       drawMini(pos.x, pos.z, yaw);
       renderer.render(scene, camera);
     });
@@ -404,6 +488,21 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </div>
       )}
 
+      {writeTree && me && (
+        <NoteEditor title="소원 쪽지" sheets={me.items.noteSheets} busy={false} coverOption sendLabel="사다리 올라가기"
+          onCancel={() => setWriteTree(false)} onSend={(strokes, covered) => treeApi.current?.start(strokes, covered)} />
+      )}
+      {treeMode && (
+        <div className="absolute inset-x-4 bottom-24 z-20 mx-auto flex w-fit flex-col items-center gap-2 rounded-3xl bg-cream/95 px-5 py-3 shadow-lg">
+          <p className="text-sm">{treeMode === "pick" ? "나뭇가지 사이를 눌러 쪽지를 달 곳을 골라요 · 끌어서 둘러보기" : "여기에 달까요? 다른 곳을 눌러 바꿀 수도 있어요"}</p>
+          <div className="flex gap-2">
+            <button onClick={() => treeApi.current?.cancel()} className="rounded-full bg-white px-4 py-1.5 text-sm ring-1 ring-sakura/40">내려오기</button>
+            {treeMode === "ready" && <button onClick={() => treeApi.current?.confirm()} className="rounded-full bg-sakura px-5 py-1.5 text-sm text-white">여기에 달기</button>}
+          </div>
+        </div>
+      )}
+      {treeDetail && <TreeNotePanel note={treeDetail} sheets={me?.items.noteSheets ?? 0} onClose={() => setTreeDetail(null)}
+        onChanged={(msg) => { sayRef.current(msg); setTreeDetail(null); treeApi.current?.refresh(); mpRef.current?.notifyTree(); refreshMe.current(); }} />}
       {panel === "inbox" && <Inbox onClose={() => { setPanel(null); refreshMe.current(); }} />}
       {writeTo && me && (
         <NoteEditor title={`${writeTo.nickname}님에게 쪽지`} sheets={me.items.noteSheets} busy={sending} onCancel={() => setWriteTo(null)}
@@ -477,6 +576,37 @@ function Inbox({ onClose }: { onClose: () => void }) {
           </ul>
         )}
       </div>
+    </section>
+  );
+}
+
+/** 소원나무 쪽지 보기 (내 쪽지면 떼기·다시 가리기) */
+function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; sheets: number; onClose: () => void; onChanged: (msg: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const act = async (action: "peel" | "cover") => {
+    if (action === "peel" && !confirm("겹친 장을 떼면 덮개 한 장이 찢어지고, 쪽지는 모두가 볼 수 있게 돼요. 뗄까요?")) return;
+    setBusy(true);
+    const r = await fetch("/api/tree", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: note.id, action }) })
+      .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
+    setBusy(false);
+    if (r?.ok) onChanged(action === "peel" ? "겹친 장을 뗐어요" : "새 노트 한 장으로 다시 가렸어요");
+    else alert(r?.reason === "no_sheet" ? "노트가 없어요" : "처리하지 못했어요");
+  };
+  return (
+    <section role="dialog" aria-label="소원 쪽지" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-[min(100%,22rem)] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+      <div className="flex w-full items-center">
+        <h2 className="text-lg">{note.mine ? "내 소원 쪽지" : `${note.from ?? "누군가"}님의 소원`}</h2>
+        <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
+      </div>
+      {note.strokes && !note.covered ? <NoteView strokes={note.strokes as Strokes} className="w-full max-w-[16rem]" /> : (
+        <div className="flex aspect-square w-full max-w-[16rem] items-center justify-center rounded-full bg-[#f29bb5]/40 text-center text-sm">두 장을 겹쳐 붙여<br />가려진 쪽지예요</div>
+      )}
+      {note.mine && note.covered && <p className="text-center text-xs opacity-60">겹친 장을 떼야 내용을 볼 수 있어요. 떼면 모두가 볼 수 있게 돼요</p>}
+      {note.mine && (
+        note.covered
+          ? <button disabled={busy} onClick={() => act("peel")} className="rounded-full bg-white px-5 py-2 text-sm ring-1 ring-sakura/40">겹친 장 떼서 보기</button>
+          : <button disabled={busy || sheets < 1} onClick={() => act("cover")} className="rounded-full bg-sakura px-5 py-2 text-sm text-white disabled:opacity-50">다시 가리기 (노트 1장)</button>
+      )}
     </section>
   );
 }

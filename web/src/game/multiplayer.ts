@@ -36,6 +36,8 @@ export class Multiplayer {
   onStatus?: (s: NetStatus) => void;
   /** 누가 나에게 쪽지를 건넸을 때 */
   onNote?: (from: string) => void;
+  /** 누가 소원나무 쪽지를 바꿨을 때 */
+  onTreeChanged?: () => void;
 
   constructor(private scene: THREE.Scene) {}
 
@@ -49,6 +51,7 @@ export class Multiplayer {
       this.room = room;
       room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });
       room.onMessage("noteReceived", (m: { from?: string }) => this.onNote?.(String(m?.from ?? "누군가")));
+      room.onMessage("treeChanged", () => this.onTreeChanged?.());
       this.setStatus(true);
     } catch (e) {
       if (this.disposed) return;
@@ -136,6 +139,7 @@ export class Multiplayer {
 
   /** 쪽지를 건넸다고 받는 사람에게 알림 */
   notifyNote(sessionId: string) { this.room?.send("noteSent", { to: sessionId }); }
+  notifyTree() { this.room?.send("treeChanged", {}); }
 
   /** 다른 사람이 깐 돗자리의 빈 옆자리 (같이 앉기용) */
   freeSeats() {

@@ -28,7 +28,7 @@ export default async function Payments({ searchParams }: PageProps<"/admin/payme
     db.execute(sql`select amount, count(*) c, sum(amount) s from orders where status = 'paid' group by amount order by amount`),
     db.execute(sql`select to_char(${KST_DAY}, 'MM-DD') d, sum(amount) s from orders where status = 'paid' and created_at > now() - interval '14 days' group by 1 order by 1`),
     db.select().from(orders).where(status ? eq(orders.status, status) : undefined).orderBy(desc(orders.createdAt)).limit(100),
-    db.execute(sql`select reason, count(*) c, -sum(amount) s from green_ledger where reason like 'shop.%' group by reason`),
+    db.execute(sql`select reason, count(*) c, -sum(amount) s from green_ledger where reason like 'shop.%' or reason = 'fountain' group by reason`),
   ]);
   const st = stats[0] ?? {};
   const max = Math.max(1, ...daily.map((r) => n(r.s)));
@@ -52,10 +52,10 @@ export default async function Payments({ searchParams }: PageProps<"/admin/payme
               <span>{n(r.amount).toLocaleString("ko-KR")}그린</span><span className="tabular-nums">{n(r.c)}건 · {won(n(r.s))}</span>
             </p>
           ))}
-          <h2 className="mb-2 mt-4 font-bold">매점 (그린 사용)</h2>
+          <h2 className="mb-2 mt-4 font-bold">그린 사용 (매점·분수)</h2>
           {shop.length === 0 ? <p className="text-sm opacity-60">아직 구매가 없어요</p> : shop.map((r) => (
             <p key={String(r.reason)} className="flex justify-between border-t border-black/5 py-1.5 text-sm">
-              <span>{r.reason === "shop.notebook" ? "벚꽃잎 노트" : r.reason === "shop.mat" ? "돗자리" : String(r.reason)}</span>
+              <span>{r.reason === "shop.notebook" ? "벚꽃잎 노트" : r.reason === "shop.mat" ? "돗자리" : r.reason === "fountain" ? "분수 동전" : String(r.reason)}</span>
               <span className="tabular-nums">{n(r.c)}개 · {n(r.s).toLocaleString("ko-KR")}그린</span>
             </p>
           ))}

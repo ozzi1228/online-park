@@ -12,6 +12,7 @@ export type MeInfo = {
   charge: { product: string; amount: number }[];
   paymentsReady: boolean;
   unreadNotes: number;
+  fountainPrice: number;
 };
 
 const card = "absolute inset-x-4 bottom-24 z-20 mx-auto max-h-[calc(100dvh-7rem)] w-[min(100%,24rem)] overflow-y-auto rounded-3xl bg-cream/95 p-5 shadow-xl ring-1 ring-sakura/20";

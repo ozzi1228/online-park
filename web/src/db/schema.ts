@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigserial, boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigserial, boolean, index, integer, jsonb, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 const now = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 
@@ -151,10 +151,12 @@ export const notes = pgTable("notes", {
   authorNickname: text(),
   recipientId: text(),                // 건넨 경우 받는 사람 (소원나무에 달면 null)
   strokes: jsonb().notNull(),         // [[색, x1,y1, x2,y2, ...], ...] 0~1000 정수 좌표
-  kind: text().notNull().default("given"), // given | tree (소원나무, 나중에)
+  kind: text().notNull().default("given"), // given(건넨 쪽지) | tree(소원나무에 단 쪽지)
+  posX: real(), posY: real(), posZ: real(), // 소원나무에 단 자리 (월드 좌표)
+  covered: boolean().notNull().default(false), // 한 장 더 풀칠해 내용을 가렸는지 (주인만 볼 수 있음)
   readAt: timestamp({ withTimezone: true }),
   createdAt: now(),
-}, (t) => [index().on(t.recipientId, t.createdAt), index().on(t.authorId, t.createdAt)]);
+}, (t) => [index().on(t.recipientId, t.createdAt), index().on(t.authorId, t.createdAt), index().on(t.kind, t.id)]);
 
 // ---------- 화면 문구 (관리자 편집, 기본값은 src/content) ----------
 export const siteContent = pgTable("site_content", {

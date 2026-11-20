@@ -21,6 +21,13 @@ export const DEFAULTS = {
     notebookSheets: 30,   // 노트 1권 장수
     matPrice: 10,         // 돗자리 (한 번 사면 계속 사용)
   },
+  fountain: {
+    coinPrice: 10,        // 분수에 동전 던지기 (그린)
+  },
+  wishTree: {
+    notesPerUserDaily: 5, // 한 사람이 하루에 달 수 있는 소원 쪽지 수
+    maxVisible: 3000,     // 나무에 보이는 쪽지 최대 수 (최근 것부터)
+  },
   inquiry: {
     dailyLimit: 5,        // 한 사람이 하루에 남길 수 있는 문의 수
     maxLength: 2000,      // 문의 내용 최대 글자 수
@@ -53,6 +60,17 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       notebookPrice: { label: "벚꽃잎 노트 가격", unit: "그린", min: 0, max: 100000 },
       notebookSheets: { label: "노트 1권 장수", unit: "장", min: 1, max: 1000 },
       matPrice: { label: "돗자리 가격", unit: "그린", min: 0, max: 100000 },
+    },
+  },
+  fountain: {
+    title: "분수",
+    fields: { coinPrice: { label: "동전 한 번 가격", unit: "그린", min: 0, max: 100000 } },
+  },
+  wishTree: {
+    title: "소원나무",
+    fields: {
+      notesPerUserDaily: { label: "1인당 하루 쪽지 수", unit: "장", min: 0, max: 100 },
+      maxVisible: { label: "나무에 보이는 쪽지 최대 수", unit: "장", min: 50, max: 20000 },
     },
   },
   inquiry: {
