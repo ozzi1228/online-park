@@ -55,7 +55,7 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
       </div>
       {me.isGuest ? <GuestNote /> : (
         <>
-          <p className="text-3xl tabular-nums">🌱 {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
+          <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
           <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mat ? "있음" : "없음"}</p>
           <h3 className="mb-2 mt-4 text-sm opacity-70">충전하기 (1그린 = 1원)</h3>
           <div className="grid grid-cols-3 gap-2">
@@ -95,7 +95,7 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
     <section role="dialog" aria-label="매점" className={card}>
       <div className="mb-3 flex items-center">
         <h2 className="text-lg">매점</h2>
-        {!me.isGuest && <span className="ml-3 text-sm tabular-nums opacity-70">🌱 {fmt(me.green)}</span>}
+        {!me.isGuest && <span className="ml-3 inline-flex items-center gap-1 text-sm tabular-nums opacity-70"><GreenCoin /> {fmt(me.green)}</span>}
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
       {me.isGuest ? <GuestNote /> : (
@@ -111,5 +111,12 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
       )}
       {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
     </section>
+  );
+}
+
+/** 그린 화폐 아이콘: 청록빛 동전 */
+export function GreenCoin({ className = "size-[1.1em]" }: { className?: string }) {
+  return (
+    <span aria-hidden className={`inline-block shrink-0 rounded-full border border-[#1f7a72] bg-[radial-gradient(circle_at_35%_30%,#9be8dc,#3fb5a6_55%,#22887e)] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.35)] ${className}`} />
   );
 }

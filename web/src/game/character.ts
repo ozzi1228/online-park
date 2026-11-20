@@ -102,6 +102,16 @@ export function makeChar(p: Preset) {
     add(new THREE.BoxGeometry(0.1, 0.42, 0.04), p.inner || "#ffffff", 0, 0.72, 0.17);
     if (p.tie) add(new THREE.BoxGeometry(0.035, 0.2, 0.03), p.tie, 0, 0.76, 0.193);
   }
+  if (tt === "hanbok") { // 저고리: 오른쪽 위로 여민 깃 + 옷고름 (흰 동정은 collar로)
+    const git = p.inner || "#2f4f6f";
+    add(new THREE.BoxGeometry(0.055, 0.34, 0.03), git, 0.035, 0.82, 0.168).rotation.set(-0.25, 0, 0.62);
+    add(new THREE.BoxGeometry(0.05, 0.16, 0.03), git, -0.07, 0.9, 0.162).rotation.set(-0.3, 0, -0.5);
+    if (p.tie) {
+      add(sph(0.03), p.tie, 0.1, 0.72, 0.185);
+      add(new THREE.BoxGeometry(0.035, 0.26, 0.02), p.tie, 0.085, 0.6, 0.19).rotation.z = -0.12;
+      add(new THREE.BoxGeometry(0.03, 0.2, 0.02), p.tie, 0.125, 0.63, 0.188).rotation.z = 0.18;
+    }
+  }
   if (tt === "overalls") {
     add(new THREE.BoxGeometry(0.22, 0.2, 0.04), p.bottom, 0, 0.66, 0.175);
     for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.26, 0.03), p.bottom, s * 0.08, 0.86, 0.165);
@@ -114,7 +124,7 @@ export function makeChar(p: Preset) {
   }
   const arms = [-1, 1].map((s) => {
     const g = new THREE.Group(); g.position.set(s * 0.25, 0.92, 0);
-    add(cap(0.065, 0.2), p.top, 0, -0.16, 0, g);
+    add(cap(tt === "hanbok" ? 0.085 : 0.065, 0.2), p.top, 0, -0.16, 0, g); // 한복은 소매가 넉넉
     add(sph(0.07), p.skin, 0, -0.33, 0, g);
     body.add(g); return g;
   });

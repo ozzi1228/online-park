@@ -18,7 +18,7 @@ import { makeMat, placeMat } from "@/game/mat";
 import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
-import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
+import { GreenCoin, ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
@@ -53,9 +53,10 @@ type Actions = { sit: () => void; stand: () => void; wish: () => void; release: 
 const KIOSK = PROPS.find((p) => p.kind === "kiosk")!;
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
-// 안내원: 단정한 초록 조끼 차림의 젊은 남자
+// 안내원: 옥색 저고리 한복의 젊은 남자. 안내소 안 단 위에 서서 창구로 얼굴을 내밂
 const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side",
-  top: "#6fa58f", topType: "jacket", inner: "#ffffff", tie: "#e98aa0", bottom: "#5b6478", shoes: "#4a3a30" };
+  top: "#a8d5c2", topType: "hanbok", inner: "#2f4f6f", collar: "#ffffff", tie: "#d9607e", bottom: "#efe6d2", shoes: "#4a3a30" };
+const NPC_Y = 0.85; // 창턱 위로 가슴부터 보이는 높이
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -94,7 +95,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     refreshMe.current();
     // 결제하고 돌아온 경우 (?charged=1000)
     const charged = Number(new URLSearchParams(location.search).get("charged"));
-    if (charged > 0) { sayRef.current(`${charged.toLocaleString("ko-KR")}그린이 충전됐어요 🌱`); history.replaceState(null, "", location.pathname); }
+    if (charged > 0) { sayRef.current(`${charged.toLocaleString("ko-KR")}그린이 충전됐어요`); history.replaceState(null, "", location.pathname); }
   }, []);
 
   useEffect(() => {
@@ -135,7 +136,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     refreshTree();
     const npc = makeChar(NPC_LOOK), npcLabel = nameSprite(NPC_NAME);
     npc.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
-    npc.root.position.set(NPC.x, 0, NPC.z); npcLabel.position.set(NPC.x, npc.top + 0.3, NPC.z);
+    npc.root.position.set(NPC.x, NPC_Y, NPC.z); npcLabel.position.set(NPC.x, NPC_Y + npc.top + 0.5, NPC.z);
     scene.add(npc.root, npcLabel);
     let greeted = false;
 
@@ -304,7 +305,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         return;
       }
       // 안내원을 누르면 안내 창
-      screen.set(NPC.x, 1.1, NPC.z).project(camera);
+      screen.set(NPC.x, NPC_Y + 1.3, NPC.z).project(camera);
       if (screen.z < 1 && Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 9 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 70) {
         openInfo(); return;
       }
@@ -412,7 +413,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
       // 안내원: 가까이 오면 나를 바라보고 처음 한 번 인사
       const nd = Math.hypot(pos.x - NPC.x, pos.z - NPC.z);
-      const npcWant = nd < 8 ? Math.atan2(pos.x - NPC.x, pos.z - NPC.z) : NPC.yaw;
+      const npcWant = nd < 8 ? THREE.MathUtils.clamp(Math.atan2(pos.x - NPC.x, pos.z - NPC.z), -0.7, 0.7) : NPC.yaw; // 창구 안이라 고개만 살짝
       npc.root.rotation.y += Math.atan2(Math.sin(npcWant - npc.root.rotation.y), Math.cos(npcWant - npc.root.rotation.y)) * (1 - Math.exp(-dt * 4));
       animateChar(npc, t, dt, "idle");
       if (!greeted && nd < 6) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
@@ -469,8 +470,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {me && (
         <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
-          className="absolute right-4 top-4 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
-          {me.isGuest ? "🌱 그린" : `🌱 ${me.green.toLocaleString("ko-KR")}`}
+          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
+          <GreenCoin /> {me.isGuest ? "그린" : me.green.toLocaleString("ko-KR")}
         </button>
       )}
       {hint && !sitting && (

@@ -221,11 +221,18 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
       break;
     case "booth": // 안내소
       box(3.6, 0.22, 2.8, "#d9cdbd", 0, 0.11, 0);
-      box(3.0, 2.0, 2.2, WALL, 0, 1.22, 0);
+      // 벽: 뒤쪽은 통짜, 앞은 창구 구멍을 낸 얇은 판 (안내원이 안에서 창문으로 얼굴을 내밂)
+      box(3.0, 2.0, 1.4, WALL, 0, 1.22, -0.4);
+      for (const sx of [-1.45, 1.45]) box(0.1, 2.0, 0.8, WALL, sx, 1.22, 0.7);
+      box(3.0, 0.8, 0.06, WALL, 0, 0.62, 1.07); box(3.0, 0.34, 0.06, WALL, 0, 2.05, 1.07);
+      for (const sx of [-1.2, 1.2]) box(0.6, 0.86, 0.06, WALL, sx, 1.45, 1.07);
+      box(2.9, 0.02, 0.8, "#b8a58c", 0, 0.23, 0.7); // 안쪽 바닥
       for (const sx of [-1.5, 1.5]) for (const sz of [-1.1, 1.1]) box(0.18, 2.1, 0.18, PILLAR, sx, 1.27, sz);
       box(3.2, 0.22, 2.4, DAN_GREEN, 0, 2.33, 0); box(3.16, 0.1, 2.36, DAN_RED, 0, 2.17, 0);
       add(hanokRoof(4, 4.6, 3.8, 1.25), GIWA, 0, 2.42, 0, 0.02);
-      lattice(1.8, 0.85, 0, 1.45, 1.12);
+      for (const sx of [-0.92, 0.92]) box(0.06, 0.92, 0.08, PILLAR, sx, 1.45, 1.1); // 창틀
+      box(1.9, 0.06, 0.08, PILLAR, 0, 1.9, 1.1);
+      for (const sx of [-1.2, 1.2]) lattice(0.5, 0.7, sx, 1.45, 1.11);          // 양옆 창살
       box(2.2, 0.08, 0.42, WOOD, 0, 0.98, 1.32);
       board("안내소", 1.3, 0, 2.0, 1.23);
       break;

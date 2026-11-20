@@ -8,7 +8,7 @@ export type Preset = {
   skin: string; hair: string;
   style: "short" | "long" | "wavy" | "bob" | "buns" | "pony" | "twotail" | "manbun" | "braid" | "curly" | "slick" | "bald";
   bangs?: "side" | "none";
-  top: string; topType?: "tee" | "hoodie" | "jacket" | "overalls"; inner?: string; tie?: string;
+  top: string; topType?: "tee" | "hoodie" | "jacket" | "overalls" | "hanbok"; inner?: string; tie?: string;
   bottom: string; bottomType?: "pants" | "wide" | "shorts" | "skirt" | "longskirt";
   shoes: string;
   collar?: string; scarf?: string; bag?: string;
