@@ -44,7 +44,8 @@ const sph = (r: number, sx = 1, sy = 1, sz = 1) => new THREE.SphereGeometry(r, 2
 const cap = (r: number, l: number, sx = 1, sz = 1) => new THREE.CapsuleGeometry(r, l, 6, 14).scale(sx, 1, sz);
 
 // ---------- 얼굴 ----------
-function faceTexture(p: Preset, closed: boolean) {
+/** grin = 입을 벌리고 활짝 웃는 입 */
+export function faceTexture(p: Preset, closed: boolean, grin = false) {
   // 256x192 = 머리 앞면 장식 구간 비율
   const c = document.createElement("canvas"); c.width = 256; c.height = 192;
   const x = c.getContext("2d")!; x.lineCap = "round";
@@ -66,7 +67,12 @@ function faceTexture(p: Preset, closed: boolean) {
   }
   if (p.glasses) { x.beginPath(); x.moveTo(105, 74); x.lineTo(151, 74); x.stroke(); }
   x.strokeStyle = "#8a4a42"; x.lineWidth = 5;
-  x.beginPath(); x.arc(128, 116, 9, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke();
+  if (grin) { // 반달 모양으로 벌린 입 + 혀
+    x.lineJoin = "round"; x.fillStyle = "#b44a5c";
+    x.beginPath(); x.moveTo(114, 111); x.quadraticCurveTo(128, 114, 142, 111); x.quadraticCurveTo(140, 130, 128, 131); x.quadraticCurveTo(116, 130, 114, 111); x.closePath();
+    x.fill(); x.lineWidth = 4; x.stroke();
+    x.fillStyle = "#f08a9a"; x.beginPath(); x.ellipse(128, 126, 6, 3.5, 0, 0, 7); x.fill();
+  } else { x.beginPath(); x.arc(128, 116, 9, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }

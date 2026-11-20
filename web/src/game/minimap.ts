@@ -1,4 +1,4 @@
-// 우하단 미니맵: 내 주변 정사각형. 끌어서 둘러보고, 휠·두 손가락으로 확대/축소.
+// 우하단 미니맵: 내 주변 정사각형, 보는 방향이 항상 위. 끌어서 둘러보고, 휠·두 손가락으로 확대/축소.
 // 손을 떼고 잠시 지나면 내 위치로 부드럽게 돌아옴. 맵 전체는 한 번만 그려두고 잘라서 씀.
 import { BOUNDS, PATHS, PLAZA, PROPS } from "./park-map";
 
@@ -52,7 +52,7 @@ export function createMinimap(canvas: HTMLCanvasElement) {
   const ro = new ResizeObserver(fit); ro.observe(canvas);
 
   // 보기 상태: 반경, 내 위치에서 벗어난 만큼(m)
-  let r = R_DEFAULT, ox = 0, oz = 0, idle = RECENTER_AFTER, last = performance.now();
+  let r = R_DEFAULT, ox = 0, oz = 0, idle = RECENTER_AFTER, last = performance.now(), rot = NaN; // rot = 지도 회전(rad)
   const ptrs = new Map<number, { x: number; y: number }>();
   let pinch = 0;
   const mPerPx = () => (r * 2) / size;
@@ -63,7 +63,10 @@ export function createMinimap(canvas: HTMLCanvasElement) {
   };
   const moveP = (e: PointerEvent) => {
     const p = ptrs.get(e.pointerId); if (!p) return;
-    if (ptrs.size === 1) { ox -= (e.clientX - p.x) * mPerPx(); oz -= (e.clientY - p.y) * mPerPx(); }
+    if (ptrs.size === 1) { // 화면에서 끈 만큼을 지도 회전을 되돌려 월드 좌표로
+      const dx = (e.clientX - p.x) * mPerPx(), dy = (e.clientY - p.y) * mPerPx(), c = Math.cos(rot || 0), s = Math.sin(rot || 0);
+      ox -= dx * c + dy * s; oz -= -dx * s + dy * c;
+    }
     p.x = e.clientX; p.y = e.clientY;
     if (ptrs.size === 2) {
       const [a, c] = [...ptrs.values()], d = Math.hypot(a.x - c.x, a.y - c.y);
@@ -80,8 +83,12 @@ export function createMinimap(canvas: HTMLCanvasElement) {
   canvas.addEventListener("pointercancel", up);
   canvas.addEventListener("wheel", wheel, { passive: false });
 
-  const draw = (x: number, z: number, yaw: number) => {
+  /** yaw = 캐릭터가 보는 쪽(화살표), view = 카메라가 보는 쪽(지도 위쪽) */
+  const draw = (x: number, z: number, yaw: number, view: number) => {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+    // 보는 방향이 위로 오게 천천히 돌림 (월드 +x→오른쪽, +z→아래 기준 각도)
+    const want = -Math.PI / 2 - Math.atan2(Math.cos(view), Math.sin(view));
+    rot = Number.isNaN(rot) ? want : rot + Math.atan2(Math.sin(want - rot), Math.cos(want - rot)) * (1 - Math.exp(-dt * 6));
     if (!size || !canvas.offsetParent) return; // 접혀 있으면 안 그림
     if (ptrs.size === 0 && (idle += dt) > RECENTER_AFTER) { const k = Math.exp(-dt * 3); ox *= k; oz *= k; }
     // 맵 밖으로 너무 멀리 끌려가지 않게
@@ -91,23 +98,31 @@ export function createMinimap(canvas: HTMLCanvasElement) {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = C.grass; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(s * dpr, 0, 0, s * dpr, dpr * (size / 2 - cx * s), dpr * (size / 2 - cz * s));
-    ctx.fillStyle = C.water; ctx.fillRect(x0 - 200, z0 - 200, ww + 400, 200 + PAD); // 강은 화면 끝까지
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(size / 2, size / 2); ctx.rotate(rot); ctx.scale(s, s); ctx.translate(-cx, -cz);
+    ctx.fillStyle = C.water; ctx.fillRect(x0 - 300, z0 - 300, ww + 600, 300 + PAD); // 강은 화면 끝까지
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bg, x0, z0, ww, wh);
 
     // 나: 화면 밖으로 끌려가 있으면 가장자리에 반투명하게
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    let px = size / 2 + (x - cx) * s, pz = size / 2 + (z - cz) * s;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    let px = size / 2 + ((x - cx) * cr - (z - cz) * sr) * s, pz = size / 2 + ((x - cx) * sr + (z - cz) * cr) * s;
     const m = 9, off = px < m || pz < m || px > size - m || pz > size - m;
     px = Math.min(size - m, Math.max(m, px)); pz = Math.min(size - m, Math.max(m, pz));
     ctx.globalAlpha = off ? 0.55 : 1;
-    ctx.translate(px, pz); ctx.rotate(Math.atan2(Math.cos(yaw), Math.sin(yaw)));
+    ctx.translate(px, pz); ctx.rotate(Math.atan2(Math.cos(yaw), Math.sin(yaw)) + rot);
     ctx.fillStyle = "rgba(232,98,138,0.18)"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
     ctx.fillStyle = C.me; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.moveTo(6.5, 0); ctx.lineTo(-4.5, -4.8); ctx.lineTo(-2.2, 0); ctx.lineTo(-4.5, 4.8); ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1;
+    // 북쪽(강 쪽) 표시: 가장자리에 작은 N
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const nx = size / 2 + sr * (size / 2 - 11), ny = size / 2 - cr * (size / 2 - 11);
+    ctx.fillStyle = "rgba(255,250,243,0.92)"; ctx.beginPath(); ctx.arc(nx, ny, 7.5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#6b4450"; ctx.font = "600 9px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("N", nx, ny + 0.5);
   };
   draw.dispose = () => {
     ro.disconnect();

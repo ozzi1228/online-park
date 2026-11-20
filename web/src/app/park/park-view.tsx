@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
-import { animateChar, makeChar, type Mode } from "@/game/character";
+import { animateChar, faceTexture, makeChar, type Mode } from "@/game/character";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -138,7 +138,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     npc.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     npc.root.position.set(NPC.x, NPC_Y, NPC.z); npcLabel.position.set(NPC.x, NPC_Y + npc.top + 0.5, NPC.z);
     scene.add(npc.root, npcLabel);
-    let greeted = false;
+    let greeted = false, npcBowAt = -1;
+    const npcGrin = faceTexture({ ...NPC_LOOK, smile: true }, false, true), npcPlain = npc.texOpen;
+    const smooth = (x: number) => x * x * (3 - 2 * x);
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -422,7 +424,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const npcWant = nd < 8 ? THREE.MathUtils.clamp(Math.atan2(pos.x - NPC.x, pos.z - NPC.z), -0.7, 0.7) : NPC.yaw; // 창구 안이라 고개만 살짝
       npc.root.rotation.y += Math.atan2(Math.sin(npcWant - npc.root.rotation.y), Math.cos(npcWant - npc.root.rotation.y)) * (1 - Math.exp(-dt * 4));
       animateChar(npc, t, dt, "idle");
-      if (!greeted && nd < 6) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
+      // 다가오면 활짝 웃으며 목인사 (멀어졌다 다시 오면 또). 말풍선은 처음 한 번만
+      if (nd < 5.5 && npcBowAt < 0) {
+        npcBowAt = t; npc.texOpen = npcGrin;
+        if (!greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
+      } else if (nd > 9) npcBowAt = -1;
+      const bt = npcBowAt < 0 ? 99 : t - npcBowAt - 0.25; // 고개를 돌릴 틈을 조금 두고 숙임
+      const bow = bt < 0 ? 0 : bt < 0.4 ? smooth(bt / 0.4) : bt < 0.9 ? 1 : bt < 1.6 ? 1 - smooth((bt - 0.9) / 0.7) : 0;
+      if (bow > 0) { npc.head.rotation.x = 0.42 * bow; npc.body.rotation.x = 0.1 * bow; npc.faceMat.map = npc.texOpen; }
+      else if (npc.body.rotation.x) npc.body.rotation.x = 0;
+      if (bt > 3.2 && npc.texOpen === npcGrin) npc.texOpen = npcPlain; // 인사 뒤엔 잔잔한 미소로
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
@@ -437,7 +448,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
         camera.position.copy(camPos); camera.lookAt(camLook);
       } else placeCamera(1 - Math.exp(-dt * 8));
-      drawMini(pos.x, pos.z, yaw);
+      drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
     });
 
