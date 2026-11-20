@@ -306,7 +306,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       // 안내원을 누르면 안내 창
       screen.set(NPC.x, NPC_Y + 1.3, NPC.z).project(camera);
-      if (screen.z < 1 && Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 9 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 70) {
+      if (screen.z < 1 && Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 13 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 90) {
         openInfo(); return;
       }
       // 매점을 누르면 (가까이 있을 때) 매점 창
@@ -384,6 +384,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           const dx = cf.x * forward + cr.x * right, dz = cf.z * forward + cr.z * right, len = Math.hypot(dx, dz);
           const want = Math.atan2(dx, dz);
           yaw += Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw)) * (1 - Math.exp(-dt * TURN_RATE));
+          // 옆으로 걸으면 시야도 그쪽으로 살짝 따라 돎 (정면·뒤로 걸을 땐 sin≈0이라 그대로, 직접 끌어 돌리는 중엔 멈춤)
+          if (drag.x === 0) camYaw += Math.sin(yaw - camYaw) * ((meRef.current?.camera?.follow ?? 40) / 100) * 1.5 * amount * dt;
           const step = WALK * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);

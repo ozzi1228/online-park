@@ -44,7 +44,7 @@ function buildProps(): Prop[] {
   const fixed: Prop[] = [
     { kind: "gate", x: -56.5, z: 10, yaw: 0 },          // 기둥이 길 양옆에 섬
     { kind: "booth", x: -50, z: 5.4, yaw: 0 },          // 안내소: 입구 길을 바라봄
-    { kind: "npc", x: -50, z: 6.55, yaw: 0 },           // 안내원: 안내소 안, 창구 너머로 얼굴만 보임
+    { kind: "npc", x: -50, z: 6.85, yaw: 0 },           // 안내원: 안내소 안, 창구로 얼굴을 살짝 내밂 (비스듬히 봐도 보이게)
     { kind: "kiosk", x: 12, z: 2.5, yaw: Math.PI },     // 매점: 산책로를 바라봄
     { kind: "pavilion", x: -22, z: 15, yaw: 0 },        // 정자 (입구는 남쪽)
     { kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 },

@@ -28,6 +28,9 @@ export const DEFAULTS = {
     notesPerUserDaily: 5, // 한 사람이 하루에 달 수 있는 소원 쪽지 수
     maxVisible: 3000,     // 나무에 보이는 쪽지 최대 수 (최근 것부터)
   },
+  camera: {
+    follow: 40,           // 옆으로 걸을 때 시야가 따라 도는 정도 (0 = 안 돎, 100 = 빠르게)
+  },
   sound: {                // 소리 크기 기본값 (0~100). 각자 화면에서 켜기/끄기·전체 음량 조절
     wind: 60, water: 60, crowd: 45, nature: 40, sfx: 70,
   },
@@ -74,6 +77,12 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     fields: {
       notesPerUserDaily: { label: "1인당 하루 쪽지 수", unit: "장", min: 0, max: 100 },
       maxVisible: { label: "나무에 보이는 쪽지 최대 수", unit: "장", min: 50, max: 20000 },
+    },
+  },
+  camera: {
+    title: "카메라",
+    fields: {
+      follow: { label: "옆으로 걸을 때 시야 따라 돌기", unit: "", min: 0, max: 100 },
     },
   },
   sound: {
