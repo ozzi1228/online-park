@@ -114,9 +114,21 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
   );
 }
 
-/** 그린 화폐 아이콘: 청록빛 동전 */
-export function GreenCoin({ className = "size-[1.1em]" }: { className?: string }) {
+/** 그린 화폐 아이콘: 청록빛 엽전 (네모 구멍 + 새긴 테두리·획) */
+export function GreenCoin({ className = "size-[1.15em]" }: { className?: string }) {
+  const dark = "#155e57", light = "#9fe3d7";
+  // 음각 = 어두운 홈 + 아래쪽에 밝은 턱
+  const cut = (d: string) => (<><path d={d} stroke={light} strokeWidth="1.1" transform="translate(0 0.7)" /><path d={d} stroke={dark} strokeWidth="1.1" /></>);
   return (
-    <span aria-hidden className={`inline-block shrink-0 rounded-full border border-[#1f7a72] bg-[radial-gradient(circle_at_35%_30%,#9be8dc,#3fb5a6_55%,#22887e)] shadow-[inset_0_0_0_2px_rgba(255,255,255,0.35)] ${className}`} />
+    <svg viewBox="0 0 24 24" aria-hidden className={`inline-block shrink-0 ${className}`} fill="none" strokeLinecap="round">
+      <circle cx="12" cy="12" r="11.3" fill="#2e9c8f" stroke={dark} strokeWidth="1" />
+      <circle cx="12" cy="12.5" r="9" stroke={light} strokeWidth="0.9" />
+      <circle cx="12" cy="12" r="9" stroke={dark} strokeWidth="0.9" />
+      <rect x="8.2" y="8.7" width="7.6" height="7.6" stroke={light} strokeWidth="0.9" />
+      <rect x="8.2" y="8.2" width="7.6" height="7.6" stroke={dark} strokeWidth="0.9" />
+      <rect x="9.7" y="9.7" width="4.6" height="4.6" fill={dark} />
+      <path d="M10 14.3h4.3V10" stroke={light} strokeWidth="0.7" />
+      {cut("M10.6 5.2h2.8")}{cut("M10.6 18.6h2.8M12 17.6v2")}{cut("M5.2 10.8v2.6")}{cut("M18.8 10.6v2.8M17.9 12h1.8")}
+    </svg>
   );
 }
