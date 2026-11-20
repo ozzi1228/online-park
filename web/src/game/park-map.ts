@@ -42,7 +42,7 @@ function buildProps(): Prop[] {
   // (남쪽 줄 나무는 x = -48.5 + 7k → 벤치·가로등은 그 사이에)
   for (let x = -45; x <= 53; x += 14) out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
   for (let x = -38; x <= 56; x += 14) if (x !== 46) out.push({ kind: "lamp", x, z: -1.5, yaw: 0 });
-  out.push({ kind: "gate", x: -56.5, z: 10, yaw: Math.PI / 2 });
+  out.push({ kind: "gate", x: -56.5, z: 10, yaw: 0 });          // 기둥이 길 양옆(z±2.2)에 섬
   out.push({ kind: "booth", x: -50, z: 6.2, yaw: 0 });          // 안내소: 입구 길을 바라봄
   out.push({ kind: "kiosk", x: 12, z: 1.6, yaw: Math.PI });     // 매점: 산책로를 바라봄
   out.push({ kind: "pavilion", x: -22, z: 16, yaw: 0 });        // 정자
