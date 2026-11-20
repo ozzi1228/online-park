@@ -1,43 +1,119 @@
-// 우하단 미니맵: 맵 전체를 한 번 그려두고 매 프레임 내 위치 화살표만 덧그림
+// 우하단 미니맵: 내 주변 정사각형. 끌어서 둘러보고, 휠·두 손가락으로 확대/축소.
+// 손을 떼고 잠시 지나면 내 위치로 부드럽게 돌아옴. 맵 전체는 한 번만 그려두고 잘라서 씀.
 import { BOUNDS, PATHS, PLAZA, PROPS } from "./park-map";
 
-const PAD = 4; // 경계 바깥 여백(m) — 강 한 줄 보이게
+const PAD = 6;                 // 경계 바깥 여백(m)
+const RES = 8;                 // 미리 그려둘 해상도 (px/m)
+const R_MIN = 8, R_MAX = 70, R_DEFAULT = 22; // 보이는 반경(m)
+const RECENTER_AFTER = 2.5;    // 손 뗀 뒤 돌아오기까지(초)
+const C = { grass: "#cfe8b4", water: "#a7d9ee", shore: "#e9e1cf", path: "#f6ead9", plaza: "#efe0cc", tree: "#f5b4c8", treeEdge: "#ec9db5", roof: "#5f6b78", wish: "#6aa874", me: "#e8628a" };
+
+function drawWorld(b: CanvasRenderingContext2D) {
+  b.fillStyle = C.water; b.fillRect(BOUNDS.minX - PAD, BOUNDS.minZ - PAD, BOUNDS.maxX - BOUNDS.minX + PAD * 2, PAD);
+  b.fillStyle = C.shore; b.fillRect(BOUNDS.minX - PAD, BOUNDS.minZ - 0.6, BOUNDS.maxX - BOUNDS.minX + PAD * 2, 0.6);
+  b.strokeStyle = C.path; b.lineCap = "round";
+  for (const p of PATHS) { b.lineWidth = p.w; b.beginPath(); b.moveTo(p.x1, p.z1); b.lineTo(p.x2, p.z2); b.stroke(); }
+  b.fillStyle = C.plaza; b.beginPath(); b.arc(PLAZA.x, PLAZA.z, PLAZA.r, 0, 7); b.fill();
+  for (const p of PROPS) {
+    if (p.kind === "tree") {
+      b.fillStyle = C.tree; b.strokeStyle = C.treeEdge; b.lineWidth = 0.25;
+      b.beginPath(); b.arc(p.x, p.z, 2.4 * p.s, 0, 7); b.fill(); b.stroke();
+    } else if (p.kind === "fountain") {
+      b.fillStyle = "#ffffff"; b.beginPath(); b.arc(p.x, p.z, 4.6, 0, 7); b.fill();
+      b.fillStyle = C.water; b.beginPath(); b.arc(p.x, p.z, 4, 0, 7); b.fill();
+    } else if (p.kind === "wishTree") {
+      b.fillStyle = C.wish; b.beginPath(); b.arc(p.x, p.z, 3.4, 0, 7); b.fill();
+    } else if (p.kind === "pavilion") { // 팔각 지붕
+      b.fillStyle = C.roof; b.beginPath();
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2 + Math.PI / 8; b.lineTo(p.x + Math.cos(a) * 5.4, p.z + Math.sin(a) * 5.4); }
+      b.fill();
+    } else if (p.kind === "booth" || p.kind === "kiosk" || p.kind === "gate") { // 기와지붕 (용마루 한 줄)
+      const [w, d] = p.kind === "kiosk" ? [8.4, 6.6] : p.kind === "booth" ? [6.9, 5.7] : [2.6, 9.9];
+      b.save(); b.translate(p.x, p.z); b.rotate(-p.yaw);
+      b.fillStyle = C.roof; b.beginPath(); b.roundRect(-w / 2, -d / 2, w, d, 0.8); b.fill();
+      b.strokeStyle = "#8a96a3"; b.lineWidth = 0.35; b.beginPath();
+      if (w > d) { b.moveTo(-w / 2 + 1, 0); b.lineTo(w / 2 - 1, 0); } else { b.moveTo(0, -d / 2 + 1); b.lineTo(0, d / 2 - 1); }
+      b.stroke(); b.restore();
+    }
+  }
+}
 
 export function createMinimap(canvas: HTMLCanvasElement) {
   const dpr = Math.min(devicePixelRatio, 2);
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  canvas.width = w * dpr; canvas.height = h * dpr;
   const x0 = BOUNDS.minX - PAD, z0 = BOUNDS.minZ - PAD;
-  const sx = w / (BOUNDS.maxX - BOUNDS.minX + PAD * 2), sz = h / (BOUNDS.maxZ - BOUNDS.minZ + PAD * 2);
-  const X = (x: number) => (x - x0) * sx, Z = (z: number) => (z - z0) * sz;
-
-  // 배경은 한 번만
-  const bg = document.createElement("canvas"); bg.width = canvas.width; bg.height = canvas.height;
-  const b = bg.getContext("2d")!; b.scale(dpr, dpr);
-  b.fillStyle = "#c6e5a9"; b.fillRect(0, 0, w, h);
-  b.fillStyle = "#a3d8ef"; b.fillRect(0, 0, w, Z(BOUNDS.minZ));
-  b.strokeStyle = "#f4e7d6"; b.lineCap = "round";
-  for (const p of PATHS) { b.lineWidth = Math.max(2, p.w * sz); b.beginPath(); b.moveTo(X(p.x1), Z(p.z1)); b.lineTo(X(p.x2), Z(p.z2)); b.stroke(); }
-  b.fillStyle = "#efe0cc"; b.beginPath(); b.ellipse(X(PLAZA.x), Z(PLAZA.z), PLAZA.r * sx, PLAZA.r * sz, 0, 0, 7); b.fill();
-  for (const p of PROPS) {
-    if (p.kind === "tree") { b.fillStyle = "#f4adc2"; b.beginPath(); b.arc(X(p.x), Z(p.z), 1.6 * sx * p.s, 0, 7); b.fill(); }
-    else if (p.kind === "fountain") { b.fillStyle = "#7cc3e3"; b.beginPath(); b.arc(X(p.x), Z(p.z), 3 * sx, 0, 7); b.fill(); }
-    else if (p.kind === "wishTree") { b.fillStyle = "#5a9a62"; b.beginPath(); b.arc(X(p.x), Z(p.z), 2 * sx, 0, 7); b.fill(); }
-    else if (p.kind === "booth" || p.kind === "kiosk" || p.kind === "pavilion") {
-      b.fillStyle = p.kind === "pavilion" ? "#6f9c86" : "#e98aa0";
-      const s = p.kind === "pavilion" ? 4.6 : 3.4; b.fillRect(X(p.x) - (s * sx) / 2, Z(p.z) - (s * sz) / 2, s * sx, s * sz);
-    }
-  }
+  const ww = BOUNDS.maxX - BOUNDS.minX + PAD * 2, wh = BOUNDS.maxZ - BOUNDS.minZ + PAD * 2;
+  const bg = document.createElement("canvas"); bg.width = ww * RES; bg.height = wh * RES;
+  const b = bg.getContext("2d")!; b.scale(RES, RES); b.translate(-x0, -z0); drawWorld(b);
 
   const ctx = canvas.getContext("2d")!;
-  return (x: number, z: number, yaw: number) => {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(bg, 0, 0);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // 화살표: yaw 방향(sin, cos)을 화면(x→오른쪽, z→아래)으로
-    ctx.translate(X(x), Z(z)); ctx.rotate(Math.atan2(Math.cos(yaw), Math.sin(yaw)));
-    ctx.fillStyle = "#e8628a"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -5); ctx.lineTo(-2.5, 0); ctx.lineTo(-5, 5); ctx.closePath();
-    ctx.fill(); ctx.stroke();
+  let size = 0;
+  const fit = () => { size = canvas.clientWidth; canvas.width = canvas.height = Math.round(size * dpr); };
+  fit();
+  const ro = new ResizeObserver(fit); ro.observe(canvas);
+
+  // 보기 상태: 반경, 내 위치에서 벗어난 만큼(m)
+  let r = R_DEFAULT, ox = 0, oz = 0, idle = RECENTER_AFTER, last = performance.now();
+  const ptrs = new Map<number, { x: number; y: number }>();
+  let pinch = 0;
+  const mPerPx = () => (r * 2) / size;
+  const zoom = (k: number) => { r = Math.min(R_MAX, Math.max(R_MIN, r * k)); idle = 0; };
+  const down = (e: PointerEvent) => {
+    e.stopPropagation(); canvas.setPointerCapture?.(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); idle = 0;
   };
+  const moveP = (e: PointerEvent) => {
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    if (ptrs.size === 1) { ox -= (e.clientX - p.x) * mPerPx(); oz -= (e.clientY - p.y) * mPerPx(); }
+    p.x = e.clientX; p.y = e.clientY;
+    if (ptrs.size === 2) {
+      const [a, c] = [...ptrs.values()], d = Math.hypot(a.x - c.x, a.y - c.y);
+      if (pinch) zoom(pinch / d);
+      pinch = d;
+    }
+    idle = 0;
+  };
+  const up = (e: PointerEvent) => { ptrs.delete(e.pointerId); pinch = 0; };
+  const wheel = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0015)); };
+  canvas.addEventListener("pointerdown", down);
+  canvas.addEventListener("pointermove", moveP);
+  canvas.addEventListener("pointerup", up);
+  canvas.addEventListener("pointercancel", up);
+  canvas.addEventListener("wheel", wheel, { passive: false });
+
+  const draw = (x: number, z: number, yaw: number) => {
+    const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!size || !canvas.offsetParent) return; // 접혀 있으면 안 그림
+    if (ptrs.size === 0 && (idle += dt) > RECENTER_AFTER) { const k = Math.exp(-dt * 3); ox *= k; oz *= k; }
+    // 맵 밖으로 너무 멀리 끌려가지 않게
+    const cx = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, x + ox)), cz = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z + oz));
+    ox = cx - x; oz = cz - z;
+    const s = size / (r * 2); // px/m
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = C.grass; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(s * dpr, 0, 0, s * dpr, dpr * (size / 2 - cx * s), dpr * (size / 2 - cz * s));
+    ctx.fillStyle = C.water; ctx.fillRect(x0 - 200, z0 - 200, ww + 400, 200 + PAD); // 강은 화면 끝까지
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bg, x0, z0, ww, wh);
+
+    // 나: 화면 밖으로 끌려가 있으면 가장자리에 반투명하게
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let px = size / 2 + (x - cx) * s, pz = size / 2 + (z - cz) * s;
+    const m = 9, off = px < m || pz < m || px > size - m || pz > size - m;
+    px = Math.min(size - m, Math.max(m, px)); pz = Math.min(size - m, Math.max(m, pz));
+    ctx.globalAlpha = off ? 0.55 : 1;
+    ctx.translate(px, pz); ctx.rotate(Math.atan2(Math.cos(yaw), Math.sin(yaw)));
+    ctx.fillStyle = "rgba(232,98,138,0.18)"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = C.me; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.moveTo(6.5, 0); ctx.lineTo(-4.5, -4.8); ctx.lineTo(-2.2, 0); ctx.lineTo(-4.5, 4.8); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  draw.dispose = () => {
+    ro.disconnect();
+    canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", moveP);
+    canvas.removeEventListener("pointerup", up); canvas.removeEventListener("pointercancel", up);
+    canvas.removeEventListener("wheel", wheel);
+  };
+  return draw;
 }

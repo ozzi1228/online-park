@@ -26,7 +26,7 @@ const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.ad
 
 const WALK = 3.0, TURN_RATE = 12;             // m/s, 캐릭터가 이동 방향으로 도는 빠르기
 const CAM_DIST = 5.4, CAM_H = 2.3, DRAG_YAW = 0.006, DRAG_PITCH = 0.004;
-const LOOK_YAW = 1.6, LOOK_PITCH = 0.9;       // 앉아서 방향키로 둘러보는 빠르기 (rad/s)
+const LOOK_YAW = 1.6;                         // 사다리 위에서 방향키로 나무를 돌아보는 빠르기 (rad/s)
 const WISH_SEC = 3.2;
 
 /** 행동 로그 (실패해도 게임은 계속) */
@@ -147,9 +147,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "wish", now: 0, faceCam: false };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
+    let camDist = CAM_DIST;
     const placeCamera = (k: number) => {
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
-      const dist = cameraRoom(pos.x, pos.z, -fx, -fz, CAM_DIST);
+      // 나무에 가리면 빠르게 당기고, 다시 물러날 땐 천천히 (카메라가 튀지 않게)
+      const room = cameraRoom(pos.x, pos.z, -fx, -fz, CAM_DIST);
+      camDist += (room - camDist) * (k >= 1 ? 1 : room < camDist ? Math.min(1, k * 1.2) : k * 0.25);
+      const dist = camDist;
       const want = new THREE.Vector3(pos.x - fx * dist, footY + CAM_H * (0.6 + 0.4 * dist / CAM_DIST) + pitch * 1.6, pos.z - fz * dist);
       const look = new THREE.Vector3(pos.x + fx * 2, footY + 1.9 - pitch * 2.2, pos.z + fz * 2); // 살짝 올려다봐서 꽃이 더 보이게
       camPos.lerp(want, k); camLook.lerp(look, k);
@@ -369,11 +373,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       let walking = false;
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
-      } else if (st.sitting) {
-        // 앉아 있을 땐 방향키 = 카메라를 돌려 앉은 캐릭터와 풍경을 둘러보기
-        camYaw -= right * LOOK_YAW * dt;
-        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH - forward * LOOK_PITCH * dt, -0.7, 0.45);
+      } else if (st.sitting && Math.hypot(forward, right) < 0.05) {
+        // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게)
+        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.7, 0.45);
       } else {
+        if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
         pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.35, 0.45);
         // 카메라 기준 앞/오른쪽으로 이동 방향을 만들고, 캐릭터는 그쪽으로 돌아서 걸음
         const amount = Math.min(1, Math.hypot(forward, right));
@@ -385,7 +389,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           const want = Math.atan2(dx, dz);
           yaw += Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw)) * (1 - Math.exp(-dt * TURN_RATE));
           // 옆으로 걸으면 시야도 그쪽으로 살짝 따라 돎 (정면·뒤로 걸을 땐 sin≈0이라 그대로, 직접 끌어 돌리는 중엔 멈춤)
-          if (drag.x === 0) camYaw += Math.sin(yaw - camYaw) * ((meRef.current?.camera?.follow ?? 40) / 100) * 1.5 * amount * dt;
+          if (drag.x === 0) camYaw += Math.sin(yaw - camYaw) * ((meRef.current?.camera?.follow ?? 0) / 100) * 1.5 * amount * dt;
           const step = WALK * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
@@ -440,13 +444,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     return () => {
       clearInterval(wishTimer);
       window.removeEventListener("pointerdown", wake); window.removeEventListener("keydown", wake); audio.dispose(); audioRef.current = null;
+      drawMini.dispose();
       ro.disconnect(); renderer.setAnimationLoop(null); inp.dispose(); input.current = null; actions.current = null; mp.dispose();
       scene.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
       renderer.dispose(); el.removeChild(renderer.domElement);
     };
   }, [presetId]);
 
-  const pill = "rounded-full bg-cream/90 px-4 py-2 shadow-md";
   const miniOpen = miniPref ?? !touch; // 모바일은 화면이 좁아 미니맵을 접어 둔 채 시작
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
@@ -505,12 +509,6 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </div>
       )}
 
-      {sitting && (
-        <div className="absolute inset-x-4 bottom-24 mx-auto flex w-fit items-center gap-3">
-          <p className={`${pill} pointer-events-none text-sm`}>{touch ? "화면을 끌어서 둘러봐요" : "방향키로 둘러봐요"}</p>
-          <button onClick={() => actions.current?.stand()} className="rounded-full bg-sakura px-5 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">일어나기</button>
-        </div>
-      )}
 
       {writeTree && me && (
         <NoteEditor title="소원 쪽지" sheets={me.items.noteSheets} busy={false} coverOption sendLabel="사다리 올라가기"
@@ -544,12 +542,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { audioRef.current?.pop(); sayRef.current(msg); refreshMe.current(); }} />}
 
       {/* 미니맵: 접었다 펼 수 있음 (모바일은 접힌 채 시작) */}
-      <canvas ref={mini} aria-label="미니맵" aria-hidden={!miniOpen}
-        className={`pointer-events-none absolute bottom-4 right-4 h-[72px] w-[220px] rounded-xl shadow-md ring-2 ring-cream transition-opacity max-sm:h-[54px] max-sm:w-[164px] ${miniOpen ? "" : "invisible opacity-0"}`} />
-      <button onClick={() => setMiniOpen(!miniOpen)} aria-label={miniOpen ? "미니맵 접기" : "미니맵 펼치기"} aria-expanded={miniOpen}
-        className={`absolute right-4 rounded-full bg-cream/90 px-2.5 py-1 text-xs shadow-sm ${miniOpen ? "bottom-[92px] max-sm:bottom-[74px]" : "bottom-4"}`}>
-        {miniOpen ? "지도 접기" : "🗺 지도"}
-      </button>
+      <div className="absolute bottom-4 right-4 size-40 max-sm:size-32">
+        <canvas ref={mini} aria-label="미니맵 (끌어서 둘러보기, 휠로 확대)" aria-hidden={!miniOpen}
+          className={`size-full origin-bottom-right cursor-grab touch-none rounded-2xl shadow-md ring-2 ring-cream transition-[opacity,scale] duration-200 ease-out active:cursor-grabbing ${miniOpen ? "" : "pointer-events-none scale-50 opacity-0"}`} />
+        <button onClick={() => setMiniOpen(!miniOpen)} aria-label={miniOpen ? "미니맵 접기" : "미니맵 펼치기"} aria-expanded={miniOpen}
+          className={`absolute grid size-7 place-items-center rounded-full bg-cream/95 text-ink/70 shadow-md ring-1 ring-black/5 transition-[top,right,bottom] duration-200 hover:text-ink ${miniOpen ? "-top-2.5 -right-2.5" : "bottom-0 right-0"}`}>
+          <svg viewBox="0 0 16 16" className={`size-3.5 transition-transform duration-200 ${miniOpen ? "" : "rotate-180"}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 6.5 8 10.5 12 6.5" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
