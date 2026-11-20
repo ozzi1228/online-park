@@ -15,6 +15,25 @@ export const DEFAULTS = {
   },
 } as const;
 
+/** 관리자 화면에 보일 이름·단위·허용 범위 (DEFAULTS에 칸을 추가하면 여기도 추가) */
+export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K in keyof (typeof DEFAULTS)[G]]: { label: string; unit?: string; min: number; max: number } } } } = {
+  wishPetal: {
+    title: "소원꽃잎",
+    fields: {
+      dailyTotal: { label: "하루 전체 개수 (모든 유저 선착순)", unit: "개", min: 0, max: 100000 },
+      perUserDaily: { label: "1인당 하루 횟수", unit: "번", min: 0, max: 100 },
+      minIntervalSec: { label: "나타나는 간격 (최소)", unit: "초", min: 5, max: 86400 },
+      maxIntervalSec: { label: "나타나는 간격 (최대)", unit: "초", min: 5, max: 86400 },
+    },
+  },
+  green: {
+    title: "그린",
+    fields: {
+      signupBonus: { label: "회원가입 보너스", unit: "그린", min: 0, max: 100000 },
+    },
+  },
+};
+
 type Widen<T> = { -readonly [K in keyof T]: T[K] extends number ? number : T[K] extends object ? Widen<T[K]> : T[K] };
 export type Settings = Widen<typeof DEFAULTS>;
 export type SettingsGroup = keyof Settings;
