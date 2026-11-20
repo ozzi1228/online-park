@@ -6,13 +6,13 @@ export type Preset = {
   name: string;
   tags: Tag[];
   skin: string; hair: string;
-  style: "short" | "long" | "wavy" | "bob" | "buns" | "pony" | "twotail" | "manbun" | "braid" | "curly" | "slick" | "bald";
+  style: "short" | "long" | "wavy" | "bob" | "buns" | "pony" | "twotail" | "manbun" | "braid" | "curly" | "slick" | "bald" | "binyeo";
   bangs?: "side" | "none";
   top: string; topType?: "tee" | "hoodie" | "jacket" | "overalls" | "hanbok"; inner?: string; tie?: string;
-  bottom: string; bottomType?: "pants" | "wide" | "shorts" | "skirt" | "longskirt";
+  bottom: string; bottomType?: "pants" | "wide" | "shorts" | "skirt" | "longskirt" | "chima";
   shoes: string;
   collar?: string; scarf?: string; bag?: string;
-  hat?: "beanie" | "cap" | "bucket" | "beret"; hatColor?: string; ribbon?: string;
+  hat?: "beanie" | "cap" | "bucket" | "beret" | "gat"; hatColor?: string; ribbon?: string; pin?: string;
   glasses?: boolean; smile?: boolean; eye?: string; brow?: string; kid?: boolean;
   hidden?: boolean;
 };

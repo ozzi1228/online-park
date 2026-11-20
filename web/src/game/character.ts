@@ -90,7 +90,7 @@ export function makeChar(p: Preset) {
     const m = at(part(geo, color), x, y, z); parent.add(m); return m;
   };
   // 하체
-  const bareLegs = bt === "skirt" || bt === "longskirt" || bt === "shorts";
+  const bareLegs = bt === "skirt" || bt === "longskirt" || bt === "shorts" || bt === "chima";
   const legs = [-1, 1].map((s) => {
     const g = new THREE.Group(); g.position.set(s * 0.1, 0.46, 0);
     add(bt === "wide" ? cap(0.11, 0.18) : cap(0.085, 0.2), bareLegs ? p.skin : p.bottom, 0, -0.18, 0, g);
@@ -101,6 +101,10 @@ export function makeChar(p: Preset) {
   add(cap(0.2, 0.18, 1, 0.9), p.top, 0, 0.72, 0);
   if (bt === "skirt") add(new THREE.CylinderGeometry(0.19, 0.3, 0.26, 18), p.bottom, 0, 0.5, 0);
   else if (bt === "longskirt") add(new THREE.CylinderGeometry(0.2, 0.34, 0.44, 18), p.bottom, 0, 0.36, 0);
+  else if (bt === "chima") { // 가슴께부터 발끝까지 풍성하게 퍼지는 치마 + 허리 말기
+    add(new THREE.CylinderGeometry(0.215, 0.37, 0.8, 22), p.bottom, 0, 0.47, 0);
+    add(new THREE.CylinderGeometry(0.218, 0.222, 0.05, 22), "#ffffff", 0, 0.86, 0, body);
+  }
   else add(sph(0.2, 1, 0.55, 0.9), p.bottom, 0, 0.5, 0);
   // 상의 디테일
   if (tt === "hoodie") { add(sph(0.2, 1.25, 0.7, 0.9), p.top, 0, 1.0, -0.2); add(new THREE.BoxGeometry(0.2, 0.08, 0.03), p.top, 0, 0.6, 0.175); }
@@ -112,7 +116,11 @@ export function makeChar(p: Preset) {
     const git = p.inner || "#2f4f6f";
     add(new THREE.BoxGeometry(0.055, 0.34, 0.03), git, 0.035, 0.82, 0.168).rotation.set(-0.25, 0, 0.62);
     add(new THREE.BoxGeometry(0.05, 0.16, 0.03), git, -0.07, 0.9, 0.162).rotation.set(-0.3, 0, -0.5);
-    if (p.tie) {
+    if (p.tie && bt === "chima") { // 치마 위로 길게 늘어지는 옷고름
+      add(sph(0.03), p.tie, 0.09, 0.9, 0.2);
+      add(new THREE.BoxGeometry(0.035, 0.34, 0.02), p.tie, 0.075, 0.72, 0.255).rotation.set(-0.19, 0, -0.08);
+      add(new THREE.BoxGeometry(0.03, 0.26, 0.02), p.tie, 0.115, 0.76, 0.25).rotation.set(-0.19, 0, 0.14);
+    } else if (p.tie) {
       add(sph(0.03), p.tie, 0.1, 0.72, 0.185);
       add(new THREE.BoxGeometry(0.035, 0.26, 0.02), p.tie, 0.085, 0.6, 0.19).rotation.z = -0.12;
       add(new THREE.BoxGeometry(0.03, 0.2, 0.02), p.tie, 0.125, 0.63, 0.188).rotation.z = 0.18;
@@ -149,7 +157,7 @@ export function makeChar(p: Preset) {
     hairAt(sph(0.355), 0, 1.27, -0.08);
   } else {
     hairAt(sph(0.36), 0, 1.34, -0.03);
-    const noBangs = p.bangs === "none" || p.style === "slick" || p.style === "manbun";
+    const noBangs = p.bangs === "none" || p.style === "slick" || p.style === "manbun" || p.style === "binyeo";
     const bangs = p.bangs === "side" ? [[-0.15, 0.6], [0.06, 1], [0.2, 0.7]] : [[-0.15, 1], [0, 1], [0.15, 1]];
     if (!noBangs) for (const [bx, k] of bangs) {
       const b = part(sph(0.13, 1, 0.62 * k + 0.2, 0.55), hc);
@@ -170,6 +178,14 @@ export function makeChar(p: Preset) {
   if (p.style === "pony") { hairAt(sph(0.1), 0, 1.45, -0.36); hairAt(cap(0.085, 0.22), 0, 1.24, -0.42); }
   if (p.style === "twotail") for (const s of [-1, 1]) { hairAt(sph(0.08), s * 0.3, 1.36, -0.16); hairAt(cap(0.075, 0.22), s * 0.34, 1.13, -0.14); }
   if (p.style === "manbun") hairAt(sph(0.12), 0, 1.66, -0.14);
+  if (p.style === "binyeo") { // 가르마 + 뒤로 낮게 쪽진 머리 + 가로로 꽂은 비녀
+    hairAt(new THREE.BoxGeometry(0.012, 0.01, 0.2), 0, 1.695, 0.12, p.skin).rotation.x = 0.5;
+    hairAt(sph(0.155, 1.25, 0.85, 0.95), 0, 1.13, -0.37);
+    const pin = p.pin || "#f2c94c";
+    hairAt(new THREE.CylinderGeometry(0.016, 0.016, 0.56, 10), -0.03, 1.15, -0.4, pin).rotation.z = Math.PI / 2;
+    hairAt(sph(0.035, 1.2, 1, 1), -0.32, 1.15, -0.4, pin); // 비녀 머리 장식
+    hairAt(sph(0.018), 0.25, 1.15, -0.4, pin);
+  }
   if (p.style === "braid") for (let i = 0; i < 4; i++) hairAt(sph(0.075 - i * 0.008), 0.29, 1.17 - i * 0.11, 0.1);
   if (p.style === "curly") for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
@@ -180,6 +196,12 @@ export function makeChar(p: Preset) {
   if (p.hat === "beanie") { hairAt(sph(0.38, 1, 0.72, 1), 0, 1.5, -0.02, hcol); hairAt(new THREE.CylinderGeometry(0.375, 0.375, 0.08, 28), 0, 1.42, -0.02, hcol); hairAt(sph(0.07), 0, 1.79, -0.02, hcol); }
   if (p.hat === "cap") { hairAt(sph(0.375, 1, 0.66, 1), 0, 1.5, -0.02, hcol); hairAt(sph(0.2, 1.1, 0.1, 1), 0, 1.44, 0.36, hcol); }
   if (p.hat === "bucket") { hairAt(sph(0.365, 1, 0.66, 1), 0, 1.52, -0.02, hcol); hairAt(new THREE.CylinderGeometry(0.46, 0.5, 0.035, 28), 0, 1.42, -0.02, hcol); }
+  if (p.hat === "gat") { // 갓: 넓은 챙 + 원통 모자
+    const black = p.hatColor || "#26262c";
+    hairAt(new THREE.CylinderGeometry(0.6, 0.6, 0.018, 40), 0, 1.6, -0.02, black);
+    hairAt(new THREE.CylinderGeometry(0.17, 0.19, 0.27, 28), 0, 1.74, -0.02, black);
+    hairAt(new THREE.CylinderGeometry(0.2, 0.2, 0.035, 28), 0, 1.625, -0.02, "#3c3c46"); // 모자 띠
+  }
   if (p.hat === "beret") hairAt(sph(0.37, 1.05, 0.38, 1.05), 0.03, 1.62, -0.02, hcol).rotation.z = -0.22;
   if (p.ribbon) for (const s of [-1, 1]) hairAt(sph(0.06, 1, 0.8, 0.7), 0.24 + s * 0.07, 1.6, 0.06, p.ribbon);
   if (p.kid) { root.scale.setScalar(0.76); head.scale.setScalar(1.12); }

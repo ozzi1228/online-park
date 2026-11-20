@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
-import { animateChar, faceTexture, makeChar, type Mode } from "@/game/character";
+import { animateChar, makeChar, type Mode } from "@/game/character";
+import { Staff } from "@/game/staff";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -24,8 +25,10 @@ const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
 const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
 
-const WALK = 3.0, TURN_RATE = 12;             // m/s, 캐릭터가 이동 방향으로 도는 빠르기
-const CAM_DIST = 5.4, CAM_H = 2.3, DRAG_YAW = 0.006, DRAG_PITCH = 0.004;
+const WALK = 3.0;                             // m/s
+const EYE = 1.5, EYE_SIT = 0.95;             // 1인칭 눈높이 (서 있을 때 / 앉았을 때, 캐릭터 키 기준)
+const DRAG_YAW = 0.006, DRAG_PITCH = 0.004, TOUCH_TURN = 1.8; // 끌어서 둘러보기 / 모바일 한 손가락으로 도는 빠르기(rad/s)
+const PITCH_UP = -0.9, PITCH_DOWN = 1.0;      // 올려다보기·내려다보기 한계 (rad)
 const LOOK_YAW = 1.6;                         // 사다리 위에서 방향키로 나무를 돌아보는 빠르기 (rad/s)
 const WISH_SEC = 3.2;
 
@@ -37,26 +40,42 @@ const logClient = (type: string, data: Record<string, unknown> = {}) =>
 function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
   let best = max;
   for (const c of COLLIDERS) {
-    if (c.t !== "c" || c.r < 0.4) continue;            // 가는 가로등·난간은 무시
+    if (c.t === "b") { // 건물(안내소·매점 등): 상자 벽에 닿기 전까지만
+      if (c.hw < 1 && c.hd < 1) continue;               // 벤치 같은 작은 건 무시
+      const m = 0.35, lo = [c.x - c.hw - m, c.z - c.hd - m], hi = [c.x + c.hw + m, c.z + c.hd + m], o = [x, z], d = [dx, dz];
+      let t0 = 0, t1 = Infinity;
+      for (let i = 0; i < 2; i++) {
+        if (Math.abs(d[i]) < 1e-9) { if (o[i] < lo[i] || o[i] > hi[i]) { t0 = Infinity; break; } continue; }
+        const a = (lo[i] - o[i]) / d[i], b2 = (hi[i] - o[i]) / d[i];
+        t0 = Math.max(t0, Math.min(a, b2)); t1 = Math.min(t1, Math.max(a, b2));
+      }
+      if (t0 <= t1 && t0 > 0.3 && t0 < best) best = t0;
+      continue;
+    }
+    if (c.r < 0.4) continue;                           // 가는 가로등·난간은 무시
     const ox = x - c.x, oz = z - c.z, r = c.r + 0.35;
     const bq = ox * dx + oz * dz, cq = ox * ox + oz * oz - r * r, disc = bq * bq - cq;
     if (disc < 0) continue;
     const hit = -bq - Math.sqrt(disc);
     if (hit > 0.3 && hit < best) best = hit;
   }
-  return Math.max(best, 1.6);
+  return Math.max(best, 1.0);
 }
 
 type MenuItem = { label: string; run?: () => void };
 type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: () => void; stand: () => void; wish: () => void; release: () => void };
-const KIOSK = PROPS.find((p) => p.kind === "kiosk")!;
+const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
-// 안내원: 옥색 저고리 한복의 젊은 남자. 안내소 안 단 위에 서서 창구로 얼굴을 내밂
-const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side",
+// 안내원: 옥색 저고리 한복에 갓을 쓴 젊은 남자. 안내소 안 단 위에 서서 창구로 얼굴을 내밂
+const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side", hat: "gat",
   top: "#a8d5c2", topType: "hanbok", inner: "#2f4f6f", collar: "#ffffff", tie: "#d9607e", bottom: "#efe6d2", shoes: "#4a3a30" };
-const NPC_Y = 0.85; // 창턱 위로 가슴부터 보이는 높이
+const NPC_Y = 0.35; // 안내소 바닥 위. 창턱 위로 가슴부터 보임
+// 매점 직원: 노랑 저고리에 다홍 치마, 옥비녀로 쪽진 머리의 젊은 여자
+const CLERK_LOOK: Preset = { id: "npc-clerk", name: "매점 직원", tags: [], skin: "#f8dfcc", hair: "#2b211d", style: "binyeo", pin: "#7fc8b4",
+  top: "#fbe7a1", topType: "hanbok", inner: "#8a3b55", collar: "#ffffff", tie: "#d2486e", bottom: "#e66a8c", bottomType: "chima", shoes: "#ffffff", smile: false };
+const CLERK = { x: KIOSK.x + Math.sin(KIOSK.yaw) * 0.95 * PROP_S, z: KIOSK.z + Math.cos(KIOSK.yaw) * 0.95 * PROP_S, y: 0.45 };
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -67,6 +86,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [hint, setHint] = useState(true);
   const [net, setNet] = useState<NetStatus | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const menuOpen = useRef(false);
+  useEffect(() => { menuOpen.current = !!menu; }, [menu]);
   const [caught, setCaught] = useState(false);
   const [sitting, setSitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -134,13 +155,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (r?.ok) treeNotes.set(await r.json() as TreeNote[]);
     };
     refreshTree();
-    const npc = makeChar(NPC_LOOK), npcLabel = nameSprite(NPC_NAME);
-    npc.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
-    npc.root.position.set(NPC.x, NPC_Y, NPC.z); npcLabel.position.set(NPC.x, NPC_Y + npc.top + 0.5, NPC.z);
-    scene.add(npc.root, npcLabel);
-    let greeted = false, npcBowAt = -1;
-    const npcGrin = faceTexture({ ...NPC_LOOK, smile: true }, false, true), npcPlain = npc.texOpen;
-    const smooth = (x: number) => x * x * (3 - 2 * x);
+    // 창구 직원들 (안내원·매점 직원)
+    const npc = new Staff(NPC_LOOK, NPC.x, NPC.z, NPC_Y, NPC.yaw), npcLabel = nameSprite(NPC_NAME);
+    const clerk = new Staff(CLERK_LOOK, CLERK.x, CLERK.z, CLERK.y, KIOSK.yaw);
+    npcLabel.position.set(NPC.x, NPC_Y + npc.char.top + 0.5, NPC.z);
+    scene.add(npc.char.root, clerk.char.root, npcLabel);
+    let greeted = false;
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -149,19 +169,23 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "wish", now: 0, faceCam: false };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
-    let camDist = CAM_DIST;
-    const placeCamera = (k: number) => {
-      const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
-      // 나무에 가리면 빠르게 당기고, 다시 물러날 땐 천천히 (카메라가 튀지 않게)
-      const room = cameraRoom(pos.x, pos.z, -fx, -fz, CAM_DIST);
-      camDist += (room - camDist) * (k >= 1 ? 1 : room < camDist ? Math.min(1, k * 1.2) : k * 0.25);
-      const dist = camDist;
-      const want = new THREE.Vector3(pos.x - fx * dist, footY + CAM_H * (0.6 + 0.4 * dist / CAM_DIST) + pitch * 1.6, pos.z - fz * dist);
-      const look = new THREE.Vector3(pos.x + fx * 2, footY + 1.9 - pitch * 2.2, pos.z + fz * 2); // 살짝 올려다봐서 꽃이 더 보이게
-      camPos.lerp(want, k); camLook.lerp(look, k);
+    let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
+    const placeCamera = () => {
+      // 1인칭: 내 눈 높이에서 바로 (지연·흔들림 없이 = 멀미 덜함)
+      const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch);
+      const eyeY = footY + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
+      const eye = new THREE.Vector3(pos.x + fx * 0.25, eyeY, pos.z + fz * 0.25);
+      const look = eye.clone().add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp));
+      if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습
+        const f = showMe * showMe * (3 - 2 * showMe), sx = Math.sin(yaw), sz = Math.cos(yaw);
+        const d = Math.min(2.6, cameraRoom(pos.x, pos.z, sx, sz, 2.6));
+        eye.lerp(new THREE.Vector3(pos.x + sx * d, footY + 1.35, pos.z + sz * d), f);
+        look.lerp(new THREE.Vector3(pos.x, footY + 0.95, pos.z), f);
+      }
+      camPos.copy(eye); camLook.copy(look);
       camera.position.copy(camPos); camera.lookAt(camLook);
     };
-    placeCamera(1);
+    placeCamera();
 
     const inp = new Input(renderer.domElement, coarse); input.current = inp;
     const screen = new THREE.Vector3();
@@ -332,10 +356,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         ] });
         return;
       }
-      // 내 캐릭터를 누르면 메뉴
-      screen.set(pos.x, footY + 0.8, pos.z).project(camera);
-      const sx = rect.left + (screen.x + 1) / 2 * rect.width, sy = rect.top + (1 - screen.y) / 2 * rect.height;
-      if (Math.hypot(sx - tap.x, sy - tap.y) < 60) { openMenu(tap); return; }
+      // 빈 곳을 톡: 모바일은 내 메뉴(앉기 등)를 열고, 메뉴가 떠 있으면 닫음 (PC는 우클릭)
+      if (coarse && !menuOpen.current) { openMenu(tap); return; }
       setMenu(null);
     };
 
@@ -357,41 +379,34 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
-      if (inp.touch) { // 화면에서 캐릭터(허리 높이) → 손가락 방향으로 걸어감
-        screen.set(pos.x, footY + 0.9, pos.z).project(camera);
-        const dx = inp.touch.x - (rect.left + (screen.x + 1) / 2 * rect.width), dy = inp.touch.y - (rect.top + (1 - screen.y) / 2 * rect.height);
+      let touchTurn = 0;
+      if (inp.touch) { // 한 손가락 누르고 있기: 화면 가운데보다 위면 앞으로, 아래면 뒤로, 옆으로 치우치면 그쪽으로 돎
+        const dx = inp.touch.x - (rect.left + rect.width / 2), dy = inp.touch.y - (rect.top + rect.height * 0.55);
         const dead = (v: number, d: number, full: number) => Math.abs(v) < d ? 0 : Math.max(-1, Math.min(1, (v - Math.sign(v) * d) / full));
-        inp.setJoy(dead(dx, 20, 70), dead(dy, 20, 70));
+        inp.setJoy(0, dead(dy, 24, 110)); touchTurn = dead(dx, 30, rect.width * 0.35);
       }
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
-      camYaw -= drag.x * DRAG_YAW;
+      camYaw -= drag.x * DRAG_YAW + touchTurn * TOUCH_TURN * dt;
       if (tree.pending) camYaw -= right * LOOK_YAW * dt; // 사다리 위: 좌우로 나무를 돌아보기
-      if (st.faceCam) { // 소원 빌 땐 캐릭터 얼굴 쪽으로 카메라를 천천히 돌림 (직접 돌리거나 걸으면 해제)
-        const front = yaw + Math.PI;
-        camYaw += Math.atan2(Math.sin(front - camYaw), Math.cos(front - camYaw)) * (1 - Math.exp(-dt * 3));
-        pitch += (0.15 - pitch) * (1 - Math.exp(-dt * 3));
-        if (drag.x !== 0 || t > st.wishUntil + 1.5) st.faceCam = false;
-      }
+      if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 0.8)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
+      showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 3));
       let walking = false;
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
       } else if (st.sitting && Math.hypot(forward, right) < 0.05) {
         // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게)
-        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.7, 0.45);
+        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
       } else {
         if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
-        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.35, 0.45);
-        // 카메라 기준 앞/오른쪽으로 이동 방향을 만들고, 캐릭터는 그쪽으로 돌아서 걸음
+        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
+        if (!st.faceCam) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도)
+        // 보는 방향 기준 앞/옆으로 걸음
         const amount = Math.min(1, Math.hypot(forward, right));
         walking = amount > 0.05;
         if (walking) {
           st.wishUntil = 0; st.faceCam = false; // 걸으면 소원 동작은 멈춤
           const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, cr = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
           const dx = cf.x * forward + cr.x * right, dz = cf.z * forward + cr.z * right, len = Math.hypot(dx, dz);
-          const want = Math.atan2(dx, dz);
-          yaw += Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw)) * (1 - Math.exp(-dt * TURN_RATE));
-          // 옆으로 걸으면 시야도 그쪽으로 살짝 따라 돎 (정면·뒤로 걸을 땐 sin≈0이라 그대로, 직접 끌어 돌리는 중엔 멈춤)
-          if (drag.x === 0) camYaw += Math.sin(yaw - camYaw) * ((meRef.current?.camera?.follow ?? 0) / 100) * 1.5 * amount * dt;
           const step = WALK * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
@@ -419,21 +434,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       coin.update(dt);
 
-      // 안내원: 가까이 오면 나를 바라보고 처음 한 번 인사
-      const nd = Math.hypot(pos.x - NPC.x, pos.z - NPC.z);
-      const npcWant = nd < 8 ? THREE.MathUtils.clamp(Math.atan2(pos.x - NPC.x, pos.z - NPC.z), -0.7, 0.7) : NPC.yaw; // 창구 안이라 고개만 살짝
-      npc.root.rotation.y += Math.atan2(Math.sin(npcWant - npc.root.rotation.y), Math.cos(npcWant - npc.root.rotation.y)) * (1 - Math.exp(-dt * 4));
-      animateChar(npc, t, dt, "idle");
-      // 다가오면 활짝 웃으며 목인사 (멀어졌다 다시 오면 또). 말풍선은 처음 한 번만
-      if (nd < 5.5 && npcBowAt < 0) {
-        npcBowAt = t; npc.texOpen = npcGrin;
-        if (!greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
-      } else if (nd > 9) npcBowAt = -1;
-      const bt = npcBowAt < 0 ? 99 : t - npcBowAt - 0.25; // 고개를 돌릴 틈을 조금 두고 숙임
-      const bow = bt < 0 ? 0 : bt < 0.4 ? smooth(bt / 0.4) : bt < 0.9 ? 1 : bt < 1.6 ? 1 - smooth((bt - 0.9) / 0.7) : 0;
-      if (bow > 0) { npc.head.rotation.x = 0.42 * bow; npc.body.rotation.x = 0.1 * bow; npc.faceMat.map = npc.texOpen; }
-      else if (npc.body.rotation.x) npc.body.rotation.x = 0;
-      if (bt > 3.2 && npc.texOpen === npcGrin) npc.texOpen = npcPlain; // 인사 뒤엔 잔잔한 미소로
+      // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
+      if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
+      clerk.update(t, dt, pos.x, pos.z);
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
@@ -447,7 +450,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camPos.lerp(new THREE.Vector3(WISH_TREE.x - fx * 8.5, 4.2 - pitch * 3, WISH_TREE.z - fz * 8.5), k);
         camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
         camera.position.copy(camPos); camera.lookAt(camLook);
-      } else placeCamera(1 - Math.exp(-dt * 8));
+      } else placeCamera();
+      me.root.visible = !!tree.pending || showMe > 0.02; // 1인칭에선 내 몸은 안 보임
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
     });
@@ -493,7 +497,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요 · 내 캐릭터를 톡 누르면 메뉴" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요 · 우클릭하면 메뉴"}
+          {touch ? "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 돌아요 · 빈 곳을 톡 누르면 메뉴" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요 · 우클릭하면 메뉴"}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
