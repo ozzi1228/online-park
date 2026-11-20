@@ -5,7 +5,7 @@ import { animateChar, disposeChar, makeChar, type Character } from "./character"
 import { PLAYER_R, groundY, type Collider } from "./park-map";
 import { PRESETS } from "./presets";
 
-type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; preset: string; nickname: string };
+type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string };
 type NetState = { players: Map<string, NetPlayer> & { forEach(cb: (p: NetPlayer, id: string) => void): void; size: number } };
 type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number };
 
@@ -92,7 +92,7 @@ export class Multiplayer {
       const y = groundY(o.x, o.z);
       o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw;
       o.label.position.set(o.x, y + o.char.top + 0.3, o.z);
-      animateChar(o.char, t, dt, p.walking || moving ? "walk" : "idle");
+      animateChar(o.char, t, dt, p.walking || moving ? "walk" : p.anim === "sit" ? "sit" : p.anim === "wish" ? "wish" : "idle");
     });
     for (const [id, o] of this.others) if (!seen.has(id)) this.remove(id, o);
     this.setStatus(true);
@@ -104,6 +104,9 @@ export class Multiplayer {
     this.others.delete(id);
   }
   private clear() { for (const [id, o] of this.others) this.remove(id, o); }
+
+  /** 앉기·소원 동작을 다른 사람에게 알림 */
+  sendAnim(a: "idle" | "sit" | "wish") { this.room?.send("anim", a); }
 
   dispose() { this.room?.leave(); this.room = null; this.clear(); }
 }

@@ -38,3 +38,12 @@ test("정자는 남쪽 입구로만 들어갈 수 있음", async () => {
   const north = walk(pv.z - 8, pv.z);           // 북쪽에서 남쪽으로
   assert.equal(groundY(north.x, north.z), 0, "난간을 뚫고 들어감");
 });
+
+test("앉기: 잔디·정자는 되고 길·광장은 안 됨", async () => {
+  const { canSit, PROPS, PLAZA } = await import("./park-map.ts");
+  const pv = PROPS.find((p) => p.kind === "pavilion")!;
+  assert.ok(canSit(-10, 8), "잔디");
+  assert.ok(canSit(pv.x, pv.z), "정자 마루");
+  assert.ok(!canSit(0, -4), "강변 산책로");
+  assert.ok(!canSit(PLAZA.x + 5, PLAZA.z), "분수 광장");
+});

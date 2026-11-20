@@ -12,6 +12,7 @@ const MAX_SPEED = 3.2;            // m/s, 클라이언트 걷기 속도(3.0)보�
 
 const Player = schema({
   x: t.number(), z: t.number(), yaw: t.number(), walking: t.boolean(),
+  anim: t.string(), // "idle" | "sit" | "wish" — 다른 사람에게 보이는 동작
   preset: t.string(), nickname: t.string(),
 }, "Player");
 type Player = SchemaType<typeof Player>;
@@ -60,7 +61,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
       x = SPAWN.x + Math.cos(a) * r * 0.5; z = SPAWN.z + Math.sin(a) * r;
     }
     const p = new Player();
-    Object.assign(p, { x, z, yaw: SPAWN.yaw, walking: false, preset: auth.preset, nickname: auth.nickname });
+    Object.assign(p, { x, z, yaw: SPAWN.yaw, walking: false, anim: "idle", preset: auth.preset, nickname: auth.nickname });
     this.state.players.set(client.sessionId, p);
     this.last.set(client.sessionId, Date.now());
     console.log(`[join] ${auth.nickname} (${this.state.players.size}명)`);
@@ -78,6 +79,11 @@ class ParkRoom extends Room<{ state: ParkState }> {
       if (d > max) { tx = p.x + (dx / d) * max; tz = p.z + (dz / d) * max; }
       const r = move(p.x, p.z, tx, tz, PLAYER_R, this.others(client.sessionId));
       p.x = r.x; p.z = r.z; p.yaw = m.yaw; p.walking = m.walking === true;
+      if (p.walking) p.anim = "idle"; // 걸으면 앉기·소원은 풀림
+    },
+    anim: (client: Client, a: unknown) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p && (a === "idle" || a === "sit" || a === "wish")) p.anim = a;
     },
   };
 

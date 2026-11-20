@@ -164,6 +164,17 @@ export function groundY(x: number, z: number) {
   return 0;
 }
 
+/** 앉을 수 있는 곳: 잔디(길·광장 아닌 곳)나 정자 마루 */
+export function canSit(x: number, z: number) {
+  if (groundY(x, z) > 0) return true;
+  if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r) return false;
+  return !PATHS.some((p) => {
+    const vx = p.x2 - p.x1, vz = p.z2 - p.z1, l2 = vx * vx + vz * vz;
+    const t = Math.max(0, Math.min(1, ((x - p.x1) * vx + (z - p.z1) * vz) / l2));
+    return Math.hypot(x - (p.x1 + vx * t), z - (p.z1 + vz * t)) < p.w / 2;
+  });
+}
+
 export const overlaps = (x: number, z: number, r = PLAYER_R, colliders = COLLIDERS) =>
   colliders.some((c) => {
     if (c.t === "c") return (x - c.x) ** 2 + (z - c.z) ** 2 < (c.r + r) ** 2 - 1e-6;

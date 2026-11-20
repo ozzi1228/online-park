@@ -293,6 +293,14 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
   root.add(g);
 }
 
+/** 꽃잎 한 장 (끝이 살짝 갈라진 벚꽃잎 모양, 길이 약 12cm) */
+export function makePetalGeometry() {
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0); sh.bezierCurveTo(-0.06, 0.03, -0.07, 0.09, -0.03, 0.12);
+  sh.lineTo(0, 0.104); sh.lineTo(0.03, 0.12); sh.bezierCurveTo(0.07, 0.09, 0.06, 0.03, 0, 0);
+  return new THREE.ShapeGeometry(sh).translate(0, -0.06, 0);
+}
+
 // ---------- 바닥 꽃잎 ----------
 // ponytail: 매 프레임 전체 꽃잎을 훑음(O(n), n≈16k, 약 0.2ms). 더 늘리면 격자로 발밑만 검사
 class PetalField {
@@ -454,10 +462,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
   }
 
   // 바닥 꽃잎: 쌓여 있다가 발길에 흐트러지고, 센 바람에 날아올랐다 다시 내려앉음
-  const petalShape = new THREE.Shape();
-  petalShape.moveTo(0, 0); petalShape.bezierCurveTo(-0.06, 0.03, -0.07, 0.09, -0.03, 0.12);
-  petalShape.lineTo(0, 0.104); petalShape.lineTo(0.03, 0.12); petalShape.bezierCurveTo(0.07, 0.09, 0.06, 0.03, 0, 0);
-  const petalGeo = new THREE.ShapeGeometry(petalShape).translate(0, -0.06, 0);
+  const petalGeo = makePetalGeometry();
   const petalMat = new THREE.MeshToonMaterial({ color: "#ffffff", gradientMap: toonGradient(), side: THREE.DoubleSide });
   const d = new THREE.Object3D(), col = new THREE.Color();
   const field = new PetalField(q.groundPetals, petalGeo.clone().scale(1.5, 1.5, 1), petalMat, inside); // 바닥 꽃잎은 멀리서도 보이게 조금 크게
