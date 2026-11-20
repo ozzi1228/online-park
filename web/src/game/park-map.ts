@@ -31,23 +31,40 @@ function rng(seed: number) {
 
 function buildProps(): Prop[] {
   const r = rng(11), out: Prop[] = [];
-  const tree = (x: number, z: number, s = 1) => out.push({ kind: "tree", x: x + (r() - 0.5) * 0.8, z: z + (r() - 0.5) * 0.4, s: s * (0.9 + r() * 0.25), inside: true });
-  // 강변 산책로 양쪽 벚꽃 (여의도 느낌의 터널)
-  for (let x = -52; x <= 56; x += 7) { tree(x, -6.9, 1); tree(x + 3.5, -1.0, 1); }
+  // 고정 시설 먼저 → 나무는 이 근처를 피해서 심음
+  const fixed: Prop[] = [
+    { kind: "gate", x: -56.5, z: 10, yaw: 0 },          // 기둥이 길 양옆(z±2.2)에 섬
+    { kind: "booth", x: -50, z: 6.2, yaw: 0 },          // 안내소: 입구 길을 바라봄
+    { kind: "kiosk", x: 12, z: 1.6, yaw: Math.PI },     // 매점: 산책로를 바라봄
+    { kind: "pavilion", x: -22, z: 16, yaw: 0 },        // 정자
+    { kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 },
+    { kind: "wishTree", x: PLAZA.x, z: PLAZA.z + 7.5, yaw: 0 },
+  ];
+  out.push(...fixed);
+  const free = (x: number, z: number) =>
+    fixed.every((f) => Math.hypot(x - f.x, z - f.z) > (f.kind === "pavilion" ? 8 : 5)) &&
+    Math.hypot(x - PLAZA.x, z - PLAZA.z) > PLAZA.r + 3 && Math.abs(x - PLAZA.x) > 3;
+  const landSide: number[] = [];
+  const tree = (x: number, z: number, s = 1) => {
+    x += (r() - 0.5) * 1.2; z += (r() - 0.5) * 0.4;
+    if (!free(x, z)) return false;
+    out.push({ kind: "tree", x, z, s: s * (0.92 + r() * 0.2), inside: true });
+    return true;
+  };
+  // 강변 산책로: 거대한 벚꽃이 양쪽에서 가지를 뻗어 터널을 만듦 (여의도 느낌)
+  for (let x = -50; x <= 56; x += 13) { tree(x, -6.7); if (tree(x + 6.5, -0.9)) landSide.push(out.at(-1)!.x); }
   // 북쪽 벚꽃길 양쪽
-  for (let x = -46; x <= 36; x += 7) { tree(x, 21.6, 0.95); tree(x + 3.5, 26.6, 0.95); }
-  // 잔디밭에 드문드문 큰 나무
-  for (const [x, z] of [[-30, 8], [-8, 14], [8, 9], [24, 15], [-36, 17]]) tree(x, z, 1.25);
-  // 벤치: 산책로 남쪽 가장자리, 강을 바라봄
-  // (남쪽 줄 나무는 x = -48.5 + 7k → 벤치·가로등은 그 사이에)
-  for (let x = -45; x <= 53; x += 14) out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
-  for (let x = -38; x <= 56; x += 14) if (x !== 46) out.push({ kind: "lamp", x, z: -1.5, yaw: 0 });
-  out.push({ kind: "gate", x: -56.5, z: 10, yaw: 0 });          // 기둥이 길 양옆(z±2.2)에 섬
-  out.push({ kind: "booth", x: -50, z: 6.2, yaw: 0 });          // 안내소: 입구 길을 바라봄
-  out.push({ kind: "kiosk", x: 12, z: 1.6, yaw: Math.PI });     // 매점: 산책로를 바라봄
-  out.push({ kind: "pavilion", x: -22, z: 16, yaw: 0 });        // 정자
-  out.push({ kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 });
-  out.push({ kind: "wishTree", x: PLAZA.x, z: PLAZA.z + 7.5, yaw: 0 });
+  for (let x = -44; x <= 34; x += 13) { tree(x, 20.3, 0.95); tree(x + 6.5, 27.4, 0.95); }
+  // 잔디밭 한가운데 피크닉 그늘 나무
+  for (const [x, z] of [[-31, 8], [-6, 12], [24, 13], [-38, 18], [4, 20]]) tree(x, z, 1.15);
+  // 벤치·가로등: 남쪽 줄 나무 사이사이에 번갈아
+  landSide.sort((a, b) => a - b);
+  for (let i = 0; i < landSide.length - 1; i++) {
+    const x = (landSide[i] + landSide[i + 1]) / 2;
+    if (!free(x, -1.6)) continue;
+    out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
+    if (i % 2) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: 0 });
+  }
   return out;
 }
 export const PROPS = buildProps();
@@ -55,9 +72,9 @@ export const PROPS = buildProps();
 /** 맵 밖 배경 나무 (지나갈 수 없는 곳, 보이기만) */
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
-  for (let x = -90; x <= 90; x += 4.5) out.push({ kind: "tree", x: x + r() * 2, z: -44 - r() * 3, s: 0.9 + r() * 0.3, inside: false }); // 강 건너
-  for (let x = -80; x <= 80; x += 6) out.push({ kind: "tree", x: x + r() * 2, z: 32 + r() * 4, s: 1 + r() * 0.2, inside: false });   // 남쪽 뒤
-  for (let z = -4; z <= 30; z += 6) { out.push({ kind: "tree", x: -66 - r() * 4, z, s: 1, inside: false }); out.push({ kind: "tree", x: 66 + r() * 4, z, s: 1, inside: false }); }
+  for (let x = -100; x <= 100; x += 9) out.push({ kind: "tree", x: x + r() * 3, z: -45 - r() * 4, s: 0.9 + r() * 0.25, inside: false }); // 강 건너
+  for (let x = -90; x <= 90; x += 10) out.push({ kind: "tree", x: x + r() * 3, z: 35 + r() * 5, s: 1 + r() * 0.2, inside: false });   // 남쪽 뒤
+  for (let z = -2; z <= 30; z += 10) { out.push({ kind: "tree", x: -68 - r() * 4, z, s: 1, inside: false }); out.push({ kind: "tree", x: 68 + r() * 4, z, s: 1, inside: false }); }
   return out;
 })();
 
@@ -74,7 +91,7 @@ const box = (x: number, z: number, w: number, d: number, yaw = 0): Box => {
 function buildColliders(): Collider[] {
   const out: Collider[] = [];
   for (const p of PROPS) {
-    if (p.kind === "tree") out.push({ t: "c", x: p.x, z: p.z, r: 0.3 * p.s });
+    if (p.kind === "tree") out.push({ t: "c", x: p.x, z: p.z, r: 0.55 * p.s });
     else if (p.kind === "bench") out.push(box(p.x, p.z, 1.5, 0.5, p.yaw));
     else if (p.kind === "lamp") out.push({ t: "c", x: p.x, z: p.z, r: 0.15 });
     else if (p.kind === "booth") out.push(box(p.x, p.z, 3.2, 2.4, p.yaw));

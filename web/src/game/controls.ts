@@ -1,15 +1,18 @@
-// 입력: PC는 방향키/WASD + 마우스 드래그, 모바일은 조이스틱(화면 컴포넌트가 joy에 씀) + 드래그
+// 입력: PC는 방향키/WASD + 마우스 드래그로 둘러보기.
+// 모바일은 화면을 누르고 있는 위치로 조종: 캐릭터보다 위면 앞으로, 좌우로 옮기면 그쪽으로 돎 (화면 컴포넌트가 joy로 변환)
 const FWD = ["ArrowUp", "KeyW"], BACK = ["ArrowDown", "KeyS"], LEFT = ["ArrowLeft", "KeyA"], RIGHT = ["ArrowRight", "KeyD"];
 const ALL = new Set([...FWD, ...BACK, ...LEFT, ...RIGHT]);
 
 export class Input {
   keys = new Set<string>();
   joy = { x: 0, y: 0 }; // -1~1, y는 아래가 +
+  /** 모바일: 지금 누르고 있는 화면 좌표 (안 누르면 null) */
+  touch: { x: number; y: number } | null = null;
   private dx = 0; private dy = 0;
   private drag: { id: number; x: number; y: number } | null = null;
   private off: (() => void)[] = [];
 
-  constructor(el: HTMLElement) {
+  constructor(el: HTMLElement, steer = false) {
     const typing = (e: Event) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     const down = (e: KeyboardEvent) => { if (typing(e) || !ALL.has(e.code)) return; e.preventDefault(); this.keys.add(e.code); };
     const up = (e: KeyboardEvent) => this.keys.delete(e.code);
@@ -17,14 +20,16 @@ export class Input {
     const pdown = (e: PointerEvent) => {
       if (this.drag || (e.pointerType === "mouse" && e.button !== 0)) return;
       this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-      el.setPointerCapture(e.pointerId);
+      if (steer) this.touch = { x: e.clientX, y: e.clientY };
+      try { el.setPointerCapture(e.pointerId); } catch { /* 이미 뗀 포인터 */ }
     };
     const pmove = (e: PointerEvent) => {
       if (this.drag?.id !== e.pointerId) return;
+      if (steer) { this.touch = { x: e.clientX, y: e.clientY }; return; }
       this.dx += e.clientX - this.drag.x; this.dy += e.clientY - this.drag.y;
       this.drag.x = e.clientX; this.drag.y = e.clientY;
     };
-    const pup = (e: PointerEvent) => { if (this.drag?.id === e.pointerId) this.drag = null; };
+    const pup = (e: PointerEvent) => { if (this.drag?.id === e.pointerId) { this.drag = null; this.touch = null; this.joy = { x: 0, y: 0 }; } };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", blur);
     el.addEventListener("pointerdown", pdown); el.addEventListener("pointermove", pmove);
     el.addEventListener("pointerup", pup); el.addEventListener("pointercancel", pup);

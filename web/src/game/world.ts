@@ -5,8 +5,8 @@ import { OUTLINE, at, part, toon, toonGradient } from "./character";
 import { BACKDROP_TREES, BOUNDS, PATHS, PLAZA, PROPS, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
-export const QUALITY_HIGH: Quality = { cards: 85, groundPetals: 6000, fallingPetals: 600, shadow: 2048, pixelRatio: 2 };
-export const QUALITY_LOW: Quality = { cards: 45, groundPetals: 2500, fallingPetals: 300, shadow: 1024, pixelRatio: 1.5 };
+export const QUALITY_HIGH: Quality = { cards: 38, groundPetals: 16000, fallingPetals: 900, shadow: 2048, pixelRatio: 2 };
+export const QUALITY_LOW: Quality = { cards: 20, groundPetals: 7000, fallingPetals: 400, shadow: 1024, pixelRatio: 1.5 };
 
 const PINKS = ["#f9c6d4", "#f4adc2", "#fbd8e1"];
 const BARK = "#7d5646", WOOD = "#cf9f73", STONE = "#e8dccb", CREAM = "#fff3e6";
@@ -86,35 +86,48 @@ const sign = (text: string, w: number, bg: string) =>
 // ---------- 나무 ----------
 type Spot = { c: THREE.Vector3; r: number; top: number; k: number };
 function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: number) {
-  // 사람이 밑으로 걸어 다니는 벚꽃 터널: 꽃 아랫면이 약 2.6m
+  // 거대한 왕벚나무: 굵은 줄기가 3m쯤에서 갈라져 옆으로 넓게 뻗음. 꽃 아랫면 ≈ 3m, 폭 ≈ 11m, 높이 ≈ 9m
   const g = new THREE.Group(); g.position.set(p.x, 0, p.z); g.scale.setScalar(p.s); g.rotation.y = (p.x * 13.7 + p.z * 7.1) % 6.28;
-  const FORK = 2.4;
-  g.add(at(part(new THREE.CylinderGeometry(0.16, 0.24, FORK + 0.2, 8), BARK, 0.02), 0, (FORK + 0.2) / 2, 0));
+  let n = Math.floor(Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233)) * 2147483646) + 1;
+  const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
+  const FORK = 2.9;
+  g.add(at(part(new THREE.CylinderGeometry(0.34, 0.55, FORK + 0.3, 10), BARK, 0.03), 0, (FORK + 0.3) / 2, 0));
+  g.add(at(part(new THREE.CylinderGeometry(0.55, 0.8, 0.5, 10), BARK, 0.03), 0, 0.25, 0)); // 뿌리 쪽 퍼짐
   const puffs: [THREE.Vector3, number][] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + Math.sin(i * 7 + p.x) * 0.5, tilt = 0.75 + ((i * 37 + p.z) % 4) / 10, len = 1.7 + ((i * 13) % 5) / 10;
-    const b = part(new THREE.CylinderGeometry(0.02, 0.1, len, 6, 1, true), BARK, 0.016);
+  const up = new THREE.Vector3(0, 1, 0), base = new THREE.Vector3(0, FORK, 0);
+  const limb = (dir: THREE.Vector3, len: number, r0: number) => {
+    const b = part(new THREE.CylinderGeometry(r0 * 0.25, r0, len, 7, 1, true), BARK, 0.02);
+    b.quaternion.setFromUnitVectors(up, dir); b.position.copy(base).addScaledVector(dir, len / 2); g.add(b);
+  };
+  for (let i = 0; i < 7; i++) { // 옆으로 뻗는 큰 가지
+    const a = (i / 7) * Math.PI * 2 + rnd() * 0.6, tilt = 0.9 + rnd() * 0.35, len = 3.6 + rnd() * 1.2;
     const dir = new THREE.Vector3(Math.cos(a) * Math.sin(tilt), Math.cos(tilt), Math.sin(a) * Math.sin(tilt));
-    b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    b.position.set(0, FORK, 0).addScaledVector(dir, len / 2); g.add(b);
-    puffs.push([new THREE.Vector3(0, FORK + 0.25, 0).addScaledVector(dir, len * 0.95), 0.85 + (i % 3) * 0.1]);
-    puffs.push([new THREE.Vector3(0, FORK + 0.55, 0).addScaledVector(dir, len * 0.5), 0.7]);
+    limb(dir, len, 0.2);
+    puffs.push([base.clone().addScaledVector(dir, len * 0.5).add(new THREE.Vector3(0, 0.9, 0)), 1.5]);
+    puffs.push([base.clone().addScaledVector(dir, len * 0.85).add(new THREE.Vector3(0, 0.4, 0)), 1.7]);
+    puffs.push([base.clone().addScaledVector(dir, len * 1.08).add(new THREE.Vector3(0, -0.35, 0)), 1.35]); // 끝이 살짝 처짐
   }
-  puffs.push([new THREE.Vector3(0, FORK + 1.6, 0), 1.0]);
+  for (let i = 0; i < 4; i++) { // 위로 솟는 가지
+    const a = (i / 4) * Math.PI * 2 + rnd(), tilt = 0.3 + rnd() * 0.3, len = 2.6 + rnd() * 0.8;
+    const dir = new THREE.Vector3(Math.cos(a) * Math.sin(tilt), Math.cos(tilt), Math.sin(a) * Math.sin(tilt));
+    limb(dir, len, 0.15);
+    puffs.push([base.clone().addScaledVector(dir, len * 1.05), 1.8]);
+  }
+  puffs.push([new THREE.Vector3(0, FORK + 4.2, 0), 2.1]);
   g.updateMatrixWorld(true);
-  for (const [c, r] of puffs) spots.push({ c: g.localToWorld(c.clone()), r: r * p.s, top: (FORK + 1.3) * p.s, k: density });
+  for (const [c, r] of puffs) spots.push({ c: g.localToWorld(c.clone()), r: r * p.s, top: (FORK + 3) * p.s, k: density });
   return g;
 }
 
 // 꽃송이 카드. 24m 구역별로 나눠야 화면 밖 구역을 통째로 건너뜀 (하나로 묶으면 항상 전부 그림)
 function cards(spots: Spot[], tex: THREE.Texture, dark: string, light: string, sunDir: THREE.Vector3, castShadow: boolean) {
   const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.4, side: THREE.DoubleSide });
-  // 카메라 1.6m 안의 꽃은 안 그림 → 꽃 속을 지나갈 때 화면이 분홍으로 덮이지 않음
+  // 카메라 2m 안의 꽃은 안 그림 → 꽃 속을 지나갈 때 화면이 분홍으로 덮이지 않음
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
       .replace("#include <project_vertex>", "#include <project_vertex>\nvCamDist = -mvPosition.z;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
-      .replace("void main() {", "void main() {\n  if (vCamDist < 1.6) discard;");
+      .replace("void main() {", "void main() {\n  if (vCamDist < 2.0) discard;");
   };
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.4 });
   const plane = new THREE.PlaneGeometry(1, 1);
@@ -135,7 +148,7 @@ function cards(spots: Spot[], tex: THREE.Texture, dark: string, light: string, s
       const dep = 0.3 + Math.sqrt(Math.random()) * 0.75;
       d.position.copy(s.c).addScaledVector(u, s.r * dep);
       d.lookAt(d.position.clone().add(u)); d.rotateZ(Math.random() * 6.28); d.rotateX((Math.random() - 0.5) * 1.2);
-      d.scale.setScalar(s.r * (0.6 + Math.random() * 0.45));
+      d.scale.setScalar(Math.min(s.r * 0.6, 1.05) * (0.8 + Math.random() * 0.45)); // 꽃 크기는 일정하게, 대신 장수로 채움
       d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
       const l = THREE.MathUtils.clamp((u.dot(sunDir) * 0.5 + 0.5) * (0.4 + dep * 0.7) + (d.position.y - s.top) * 0.12, 0, 1);
       mesh.setColorAt(i, col.copy(cd).lerp(cl, Math.pow(l, 0.8) * (0.85 + Math.random() * 0.15)));
@@ -220,6 +233,80 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
   root.add(g);
 }
 
+// ---------- 바닥 꽃잎 ----------
+// ponytail: 매 프레임 전체 꽃잎을 훑음(O(n), n≈16k, 약 0.2ms). 더 늘리면 격자로 발밑만 검사
+class PetalField {
+  mesh: THREE.InstancedMesh;
+  private n: number;
+  private p: Float32Array;   // x, y, z, 회전
+  private v: Float32Array;   // vx, vy, vz, 회전 속도
+  private moving: Uint8Array;
+  private d = new THREE.Object3D();
+
+  constructor(n: number, geo: THREE.BufferGeometry, mat: THREE.Material, trees: { x: number; z: number; s: number }[]) {
+    this.n = n; this.p = new Float32Array(n * 4); this.v = new Float32Array(n * 4); this.moving = new Uint8Array(n);
+    this.mesh = new THREE.InstancedMesh(geo, mat, n);
+    this.mesh.receiveShadow = true;
+    this.mesh.frustumCulled = false; // 꽃잎이 날아다녀서 경계 상자가 계속 바뀜
+    const col = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      let x: number, z: number;
+      if (i % 5) { // 80%는 나무 밑에 소복이
+        const t = trees[i % trees.length], r = Math.abs(Math.random() + Math.random() + Math.random() - 1.5) * 4.2 * t.s, a = Math.random() * 6.28;
+        x = t.x + Math.cos(a) * r; z = t.z + Math.sin(a) * r;
+      } else { x = BOUNDS.minX + Math.random() * (BOUNDS.maxX - BOUNDS.minX); z = BOUNDS.minZ + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ); }
+      this.p.set([x, 0.016, z, Math.random() * 6.28], i * 4);
+      this.write(i, 0);
+      this.mesh.setColorAt(i, col.set(PINKS[i % 3]));
+    }
+  }
+
+  private write(i: number, tilt: number) {
+    const p = this.p, o = i * 4, d = this.d;
+    d.position.set(p[o], p[o + 1], p[o + 2]);
+    d.rotation.set(-Math.PI / 2 + tilt, 0, p[o + 3]);
+    d.updateMatrix(); this.mesh.setMatrixAt(i, d.matrix);
+  }
+
+  private kick(i: number, vx: number, vy: number, vz: number) {
+    const v = this.v, o = i * 4;
+    v[o] = vx; v[o + 1] = vy; v[o + 2] = vz; v[o + 3] = (Math.random() - 0.5) * 10;
+    this.moving[i] = 1;
+  }
+
+  update(dt: number, focus: THREE.Vector3, walking: boolean, yaw: number, wind: number) {
+    const { p, v, n } = this;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    // 센 바람이 불면 주변에 쌓인 꽃잎이 군데군데 날아오름
+    const lifts = wind > 1.1 ? Math.floor((wind - 1.1) * 3600 * dt) : 0;
+    for (let k = 0; k < lifts; k++) {
+      const i = Math.floor(Math.random() * n), o = i * 4;
+      if (this.moving[i] || Math.abs(p[o] - focus.x) > 24 || Math.abs(p[o + 2] - focus.z) > 24) continue;
+      this.kick(i, wind * (1.2 + Math.random()), 1.5 + Math.random() * 2.2, (Math.random() - 0.5) * 1.5);
+    }
+    let dirty = false;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (walking && !this.moving[i]) { // 발밑 0.55m 안은 앞·옆으로 살짝 튀며 흩어짐
+        const dx = p[o] - focus.x, dz = p[o + 2] - focus.z, d2 = dx * dx + dz * dz;
+        if (d2 < 0.3) {
+          const d = Math.sqrt(d2) || 0.01, s = 0.8 + Math.random() * 0.9;
+          this.kick(i, (dx / d) * s + fx * 1.2, 0.6 + Math.random() * 0.9, (dz / d) * s + fz * 1.2);
+        }
+      }
+      if (!this.moving[i]) continue;
+      dirty = true;
+      v[o + 1] -= 4.5 * dt;                       // 천천히 떨어짐 (꽃잎은 가벼움)
+      const drag = Math.exp(-dt * 1.8);
+      v[o] = v[o] * drag + (wind - 0.4) * 0.6 * dt; v[o + 2] *= drag;
+      p[o] += v[o] * dt; p[o + 1] += v[o + 1] * dt; p[o + 2] += v[o + 2] * dt; p[o + 3] += v[o + 3] * dt;
+      if (p[o + 1] <= 0.016) { p[o + 1] = 0.016; this.moving[i] = 0; this.write(i, 0); }
+      else this.write(i, Math.sin(p[o + 3] * 2) * 1.2);
+    }
+    if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
 // ---------- 전체 ----------
 export function buildWorld(scene: THREE.Scene, q: Quality) {
   scene.background = canvasTex(2, 256, (x) => {
@@ -231,9 +318,9 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
 
   scene.add(new THREE.HemisphereLight(0xfff4ea, 0xc3b0e0, 1.3));
   const sun = new THREE.DirectionalLight(0xfff0dc, 2.2);
-  const SUN_OFFSET = new THREE.Vector3(12, 22, 14);
+  const SUN_OFFSET = new THREE.Vector3(16, 34, 20);
   sun.castShadow = true; sun.shadow.mapSize.set(q.shadow, q.shadow);
-  Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 70 });
+  Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 90 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
   const sunDir = SUN_OFFSET.clone().normalize();
@@ -276,7 +363,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
   const spots: Spot[] = [], leafSpots: Spot[] = [];
   const statics = new THREE.Group(), extras = new THREE.Group();
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
-    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : q.cards * 0.35));
+    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : q.cards * 0.45));
     else buildProp(p, statics, extras, leafSpots);
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로
@@ -285,43 +372,51 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
   for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
   scene.add(bake(statics), extras);
   const btex = blossomTexture();
-  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#d9819d", "#fff6f8", sunDir, true));
-  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#d9819d", "#fff6f8", sunDir, false)); // 맵 밖 나무는 그림자 없이
+  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#e597ae", "#fff6f8", sunDir, true));
+  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#e597ae", "#fff6f8", sunDir, false)); // 맵 밖 나무는 그림자 없이
   scene.add(cards(leafSpots, leafTexture(), "#3f7a4f", "#bfe3a0", sunDir, true));
 
-  // 바닥에 쌓인 꽃잎 (나무 밑일수록 많이)
+  // 꽃잎이 소복이 쌓인 느낌: 나무 밑에 옅은 분홍 깔개 (값싼 반투명 원)
+  const inside = PROPS.filter((p): p is Extract<Prop, { kind: "tree" }> => p.kind === "tree");
+  {
+    const carpet = canvasTex(128, 128, (x) => {
+      const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, "rgba(244,160,186,0.75)"); gr.addColorStop(0.55, "rgba(247,182,201,0.5)"); gr.addColorStop(1, "rgba(250,205,218,0)");
+      x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    });
+    const mat = new THREE.MeshToonMaterial({ map: carpet, gradientMap: toonGradient(), transparent: true, depthWrite: false });
+    const geo = new THREE.PlaneGeometry(1, 1);
+    for (const t of inside) {
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.set(-Math.PI / 2, 0, t.x); m.position.set(t.x, 0.011, t.z); m.scale.setScalar(13 * t.s); m.receiveShadow = true; m.renderOrder = 1;
+      scene.add(m);
+    }
+  }
+
+  // 바닥 꽃잎: 쌓여 있다가 발길에 흐트러지고, 센 바람에 날아올랐다 다시 내려앉음
   const petalShape = new THREE.Shape();
   petalShape.moveTo(0, 0); petalShape.bezierCurveTo(-0.06, 0.03, -0.07, 0.09, -0.03, 0.12);
   petalShape.lineTo(0, 0.104); petalShape.lineTo(0.03, 0.12); petalShape.bezierCurveTo(0.07, 0.09, 0.06, 0.03, 0, 0);
   const petalGeo = new THREE.ShapeGeometry(petalShape).translate(0, -0.06, 0);
   const petalMat = new THREE.MeshToonMaterial({ color: "#ffffff", gradientMap: toonGradient(), side: THREE.DoubleSide });
-  const inside = PROPS.filter((p) => p.kind === "tree");
   const d = new THREE.Object3D(), col = new THREE.Color();
-  const ground = new THREE.InstancedMesh(petalGeo, petalMat, q.groundPetals);
-  ground.receiveShadow = true;
-  for (let i = 0; i < q.groundPetals; i++) {
-    const t = inside[Math.floor(Math.random() * inside.length)];
-    const r = Math.abs(Math.random() + Math.random() + Math.random() - 1.5) * 3.6, a = Math.random() * 6.28;
-    d.position.set(t.x + Math.cos(a) * r, 0.016, t.z + Math.sin(a) * r);
-    d.rotation.set(-Math.PI / 2, 0, Math.random() * 6.28); d.scale.setScalar(0.8 + Math.random() * 0.6);
-    d.updateMatrix(); ground.setMatrixAt(i, d.matrix); ground.setColorAt(i, col.set(PINKS[i % 3]));
-  }
-  scene.add(ground);
+  const field = new PetalField(q.groundPetals, petalGeo.clone().scale(1.5, 1.5, 1), petalMat, inside); // 바닥 꽃잎은 멀리서도 보이게 조금 크게
+  scene.add(field.mesh);
 
   // 떨어지는 꽃잎: 내 주변에서만 (멀리 있는 건 안 보이니까)
   const falling = new THREE.InstancedMesh(petalGeo, petalMat, q.fallingPetals);
   falling.frustumCulled = false;
   const fp = Array.from({ length: q.fallingPetals }, (_, i) => {
     falling.setColorAt(i, col.set(PINKS[i % 3]));
-    return { x: (Math.random() - 0.5) * 30, y: Math.random() * 5, z: (Math.random() - 0.5) * 30, v: 0.35 + Math.random() * 0.35, ph: Math.random() * 6.28, sp: 1 + Math.random() * 2 };
+    return { x: (Math.random() - 0.5) * 36, y: Math.random() * 9, z: (Math.random() - 0.5) * 36, v: 0.35 + Math.random() * 0.35, ph: Math.random() * 6.28, sp: 1 + Math.random() * 2 };
   });
   scene.add(falling);
 
   const jet = extras.getObjectByName("jet");
 
   return {
-    /** focus = 내 캐릭터 위치. 그림자·꽃잎이 주변을 따라옴 */
-    update(t: number, dt: number, focus: THREE.Vector3) {
+    /** focus = 내 캐릭터 위치(그림자·꽃잎이 따라옴), walking = 걷는 중이면 발밑 꽃잎을 흩뜨림 */
+    update(t: number, dt: number, focus: THREE.Vector3, walking = false, yaw = 0) {
       sun.position.copy(focus).add(SUN_OFFSET); sun.target.position.copy(focus);
       const wind = 0.4 + Math.max(0, Math.sin(t * 0.25)) ** 4 * 1.6; // 가끔 바람이 셈
       for (let i = 0; i < fp.length; i++) {
@@ -330,13 +425,14 @@ export function buildWorld(scene: THREE.Scene, q: Quality) {
         p.x += (Math.sin(t * p.sp + p.ph) * 0.35 + wind) * dt;
         p.z += Math.cos(t * p.sp * 0.7 + p.ph) * 0.2 * dt;
         // 내 주변 30m 상자 안에서 돌고 돌게
-        if (p.y < 0.02) { p.y = 3.5 + Math.random() * 2; p.x = (Math.random() - 0.5) * 30; p.z = (Math.random() - 0.5) * 30; }
-        if (p.x > 15) p.x -= 30;
+        if (p.y < 0.02) { p.y = 4 + Math.random() * 5; p.x = (Math.random() - 0.5) * 36; p.z = (Math.random() - 0.5) * 36; }
+        if (p.x > 18) p.x -= 36;
         d.position.set(focus.x + p.x, p.y, focus.z + p.z);
         d.rotation.set(t * p.sp + p.ph, t * 0.7 + p.ph, Math.sin(t * p.sp) * 0.8);
         d.scale.setScalar(1); d.updateMatrix(); falling.setMatrixAt(i, d.matrix);
       }
       falling.instanceMatrix.needsUpdate = true;
+      field.update(dt, focus, walking, yaw, wind);
       (water.material as THREE.MeshToonMaterial).color.setHSL(0.55, 0.62, 0.79 + Math.sin(t * 1.3) * 0.01);
       if (jet) jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
       return wind;

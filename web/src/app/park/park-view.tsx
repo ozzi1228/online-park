@@ -14,7 +14,7 @@ const isCoarse = () => matchMedia(COARSE).matches;
 const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
 
 const WALK = 3.0, BACK = 1.6, TURN = 2.1;      // m/s, rad/s
-const CAM_DIST = 4.8, CAM_H = 2.2, DRAG_YAW = 0.006, DRAG_PITCH = 0.004;
+const CAM_DIST = 5.4, CAM_H = 2.3, DRAG_YAW = 0.006, DRAG_PITCH = 0.004;
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -48,19 +48,20 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const placeCamera = (k: number) => {
       const fx = Math.sin(yaw), fz = Math.cos(yaw);
       const want = new THREE.Vector3(pos.x - fx * CAM_DIST, CAM_H + pitch * 1.6, pos.z - fz * CAM_DIST);
-      const look = new THREE.Vector3(pos.x + fx * 2, 1.3 - pitch * 2.2, pos.z + fz * 2);
+      const look = new THREE.Vector3(pos.x + fx * 2, 1.9 - pitch * 2.2, pos.z + fz * 2); // 살짝 올려다봐서 꽃이 더 보이게
       camPos.lerp(want, k); camLook.lerp(look, k);
       camera.position.copy(camPos); camera.lookAt(camLook);
     };
     placeCamera(1);
 
-    const inp = new Input(renderer.domElement); input.current = inp;
+    const inp = new Input(renderer.domElement, coarse); input.current = inp;
+    const screen = new THREE.Vector3();
     const drawMini = createMinimap(mini.current!);
 
     const fit = () => {
       const w = el.clientWidth, h = el.clientHeight;
       renderer.setSize(w, h); camera.aspect = w / h;
-      camera.fov = w / h < 0.8 ? 68 : 55; camera.updateProjectionMatrix();
+      camera.fov = w / h < 0.8 ? 72 : 60; camera.updateProjectionMatrix();
     };
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
@@ -71,6 +72,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let moved = false;
     renderer.setAnimationLoop(() => {
       const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+      if (inp.touch) { // 누른 곳이 캐릭터(화면상 허리 높이)보다 위면 전진, 좌우 거리만큼 회전
+        screen.set(pos.x, 0.9, pos.z).project(camera);
+        const r = renderer.domElement.getBoundingClientRect();
+        const dx = inp.touch.x - (r.left + (screen.x + 1) / 2 * r.width), dy = inp.touch.y - (r.top + (1 - screen.y) / 2 * r.height);
+        const dead = (v: number, d: number, full: number) => Math.abs(v) < d ? 0 : Math.max(-1, Math.min(1, (v - Math.sign(v) * d) / full));
+        inp.setJoy(dead(dx, 24, 110), dead(dy, 20, 70));
+      }
       const { forward, turn } = inp.axes(), drag = inp.takeDrag();
       yaw += turn * TURN * dt - drag.x * DRAG_YAW;
       pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, -0.35, 0.45);
@@ -83,7 +91,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       me.root.position.set(pos.x, 0, pos.z); me.root.rotation.y = yaw;
       animateChar(me, t, dt, Math.abs(forward) > 0.05 ? "walk" : "idle");
       focus.set(pos.x, 0, pos.z);
-      world.update(t, dt, focus);
+      world.update(t, dt, focus, Math.abs(forward) > 0.05, yaw);
       placeCamera(1 - Math.exp(-dt * 8));
       drawMini(pos.x, pos.z, yaw);
       renderer.render(scene, camera);
@@ -102,35 +110,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       <p className="pointer-events-none absolute left-4 top-4 rounded-full bg-cream/85 px-3 py-1 text-sm">{nickname}</p>
       {hint && (
         <p className="pointer-events-none absolute inset-x-0 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-sm">
-          {touch ? "왼쪽 조이스틱으로 걷고, 화면을 끌어서 둘러봐요" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요"}
+          {touch ? "가고 싶은 쪽을 누르고 있으면 걸어가요" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요"}
         </p>
       )}
       <canvas ref={mini} aria-label="미니맵"
         className="pointer-events-none absolute bottom-4 right-4 h-[72px] w-[220px] rounded-xl shadow-md ring-2 ring-cream max-sm:h-[54px] max-sm:w-[164px]" />
-      {touch && <Joystick onMove={(x, y) => input.current?.setJoy(x, y)} />}
-    </div>
-  );
-}
-
-function Joystick({ onMove }: { onMove: (x: number, y: number) => void }) {
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
-  const R = 46;
-  const set = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    let x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
-    const l = Math.hypot(x, y); if (l > R) { x *= R / l; y *= R / l; }
-    setKnob({ x, y });
-    onMove(x / R, y / R);
-  };
-  const reset = () => { setKnob({ x: 0, y: 0 }); onMove(0, 0); };
-  return (
-    <div role="application" aria-label="이동 조이스틱"
-      className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-6 size-32 touch-none rounded-full bg-cream/40 ring-2 ring-cream/80"
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); set(e); }}
-      onPointerMove={(e) => { if (e.buttons || e.pointerType === "touch") set(e); }}
-      onPointerUp={reset} onPointerCancel={reset}>
-      <div className="absolute left-1/2 top-1/2 size-14 rounded-full bg-cream shadow-md"
-        style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }} />
     </div>
   );
 }
