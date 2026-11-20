@@ -14,7 +14,7 @@ export const instant = false; // 관리자 화면은 항상 요청 때 최신 �
 export default async function Dashboard() {
   await connection(); // "오늘"은 요청 시각 기준으로 계산
   const today = kstDate();
-  const [visitors, daily, usage, signups, people, green, wish, live, settings] = await Promise.all([
+  const [visitors, daily, usage, signups, people, green, wish, live, openInq, settings] = await Promise.all([
     db.execute(sql`select is_guest, count(distinct user_id) c from event_log where type = 'park.enter' and ${KST_DAY} = ${today}::date group by is_guest`),
     db.execute(sql`select to_char(${KST_DAY}, 'MM-DD') d,
         count(distinct user_id) filter (where not is_guest) members, count(distinct user_id) filter (where is_guest) guests
@@ -27,6 +27,7 @@ export default async function Dashboard() {
         coalesce(sum(amount), 0) balance from green_ledger`),
     db.execute(sql`select caught from wish_petal_days where day = ${today}`),
     db.execute(sql`select count(distinct user_id) c from event_log where at > now() - interval '10 minutes'`),
+    db.execute(sql`select count(*) c from inquiries where status = 'open'`),
     getSettings(),
   ]);
   const vis = { member: 0, guest: 0 }; for (const r of visitors) vis[r.is_guest ? "guest" : "member"] = n(r.c);
@@ -46,6 +47,7 @@ export default async function Dashboard() {
         <Stat label="그린 지급 합계" value={fmt(n(green[0]?.issued))} sub="가입 보너스 + 충전" />
         <Stat label="그린 사용 합계" value={fmt(n(green[0]?.spent))} />
         <Stat label="유저 보유 그린" value={fmt(n(green[0]?.balance))} />
+        <Link href="/admin/inquiries"><Stat label="답변 대기 문의" value={fmt(n(openInq[0]?.c))} sub="눌러서 답변하기" /></Link>
       </section>
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-black/5">

@@ -8,6 +8,7 @@ const NAV = [
   ["/admin", "대시보드"],
   ["/admin/logs", "로그"],
   ["/admin/users", "유저"],
+  ["/admin/inquiries", "문의"],
   ["/admin/payments", "결제"],
   ["/admin/settings", "운영 설정"],
 ] as const;

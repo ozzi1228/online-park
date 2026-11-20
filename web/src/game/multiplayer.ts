@@ -12,7 +12,8 @@ type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: 
 
 export type NetStatus = { online: boolean; count: number };
 
-function nameSprite(text: string) {
+/** 머리 위 이름표 */
+export function nameSprite(text: string) {
   const c = document.createElement("canvas"); c.width = 256; c.height = 64;
   const x = c.getContext("2d")!;
   x.font = "bold 30px 'Gowun Dodum', 'Malgun Gothic', sans-serif";

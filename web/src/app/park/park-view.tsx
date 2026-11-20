@@ -6,9 +6,11 @@ import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
-import { Multiplayer, type NetStatus } from "@/game/multiplayer";
+import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
 import { COLLIDERS, PROPS, PROP_S, SPAWN, canSit, groundY, move } from "@/game/park-map";
-import { PRESETS } from "@/game/presets";
+import { PRESETS, type Preset } from "@/game/presets";
+import { NPC_NAME } from "@/content/guide";
+import { InfoPanel } from "./info-panel";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { makeMat, placeMat } from "@/game/mat";
 import { ShopPanel, WalletPanel, type MeInfo } from "./wallet";
@@ -44,6 +46,10 @@ type MenuItem = { label: string; run?: () => void };
 type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: () => void; stand: () => void; wish: () => void; release: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk")!;
+const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
+// 안내원: 단정한 초록 조끼 차림의 젊은 남자
+const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side",
+  top: "#6fa58f", topType: "jacket", inner: "#ffffff", tie: "#e98aa0", bottom: "#5b6478", shoes: "#4a3a30" };
 
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -59,7 +65,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
   const meRef = useRef<MeInfo | null>(null);
-  const [panel, setPanel] = useState<"wallet" | "shop" | null>(null);
+  const [panel, setPanel] = useState<"wallet" | "shop" | "info" | null>(null);
   const [miniPref, setMiniOpen] = useState<boolean | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 잠깐 뜨는 안내 문구 (setState·ref만 써서 항상 같은 함수)
@@ -98,6 +104,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const petal = new CatchPetal(makePetalGeometry());
     scene.add(petal.group);
     const mat = makeMat(); mat.visible = false; scene.add(mat);
+    const npc = makeChar(NPC_LOOK), npcLabel = nameSprite(NPC_NAME);
+    npc.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    npc.root.position.set(NPC.x, 0, NPC.z); npcLabel.position.set(NPC.x, npc.top + 0.3, NPC.z);
+    scene.add(npc.root, npcLabel);
+    let greeted = false;
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -170,6 +181,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
 
     const nearKiosk = () => Math.hypot(pos.x - KIOSK.x, pos.z - KIOSK.z) < 9;
+    const nearNpc = () => Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 6;
+    const openInfo = () => { setMenu(null); setPanel("info"); logClient("info.open", {}); };
     // 다른 사람 돗자리의 빈 옆자리: 1.6m 안이면 같이 앉을 수 있음
     const nearSeat = () => mp.freeSeats().find((s) => Math.hypot(s.x - pos.x, s.z - pos.z) < 1.6);
     const joinMat = (seat: { x: number; z: number; yaw: number; owner: string }) => {
@@ -180,7 +193,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
     const openMenu = (tap: Tap) => {
-      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }] : [];
+      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }] : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => joinMat(seat) });
@@ -201,6 +214,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           logClient("petal.missed", { height: Math.round(y * 100) / 100 });
         }
         return;
+      }
+      // 안내원을 누르면 안내 창
+      screen.set(NPC.x, 1.1, NPC.z).project(camera);
+      if (screen.z < 1 && Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 9 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 70) {
+        openInfo(); return;
       }
       // 매점을 누르면 (가까이 있을 때) 매점 창
       screen.set(KIOSK.x, 1.6 * PROP_S, KIOSK.z).project(camera);
@@ -282,6 +300,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       me.root.position.set(pos.x, footY, pos.z); me.root.rotation.y = yaw;
       animateChar(me, t, dt, mode);
 
+      // 안내원: 가까이 오면 나를 바라보고 처음 한 번 인사
+      const nd = Math.hypot(pos.x - NPC.x, pos.z - NPC.z);
+      const npcWant = nd < 8 ? Math.atan2(pos.x - NPC.x, pos.z - NPC.z) : NPC.yaw;
+      npc.root.rotation.y += Math.atan2(Math.sin(npcWant - npc.root.rotation.y), Math.cos(npcWant - npc.root.rotation.y)) * (1 - Math.exp(-dt * 4));
+      animateChar(npc, t, dt, "idle");
+      if (!greeted && nd < 6) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
+
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
       world.update(t, dt, focus, walking, yaw);
@@ -354,6 +379,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </div>
       )}
 
+      {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
       {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { sayRef.current(msg); refreshMe.current(); }} />}
 

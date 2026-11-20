@@ -128,3 +128,18 @@ export const inventory = pgTable("inventory", {
   qty: integer().notNull().default(0),
   updatedAt: now().$onUpdate(() => new Date()),
 }, (t) => [uniqueIndex().on(t.userId, t.item)]);
+
+// ---------- 안내소 문의 ----------
+export const inquiries = pgTable("inquiries", {
+  id: bigserial({ mode: "number" }).primaryKey(),
+  userId: text().notNull(),
+  nickname: text(),                   // 남길 당시 닉네임 (나중에 바뀌어도 기록 유지)
+  isGuest: boolean().notNull().default(false),
+  email: text().notNull(),            // 답변받을 이메일
+  category: text().notNull(),         // general | payment | bug | flyer | other
+  content: text().notNull(),
+  status: text().notNull().default("open"), // open → answered → closed
+  reply: text(),
+  repliedAt: timestamp({ withTimezone: true }),
+  createdAt: now(),
+}, (t) => [index().on(t.userId, t.createdAt), index().on(t.status, t.createdAt)]);

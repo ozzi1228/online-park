@@ -21,6 +21,10 @@ export const DEFAULTS = {
     notebookSheets: 30,   // 노트 1권 장수
     matPrice: 10,         // 돗자리 (한 번 사면 계속 사용)
   },
+  inquiry: {
+    dailyLimit: 5,        // 한 사람이 하루에 남길 수 있는 문의 수
+    maxLength: 2000,      // 문의 내용 최대 글자 수
+  },
 } as const;
 
 /** 관리자 화면에 보일 이름·단위·허용 범위 (DEFAULTS에 칸을 추가하면 여기도 추가) */
@@ -49,6 +53,13 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       notebookPrice: { label: "벚꽃잎 노트 가격", unit: "그린", min: 0, max: 100000 },
       notebookSheets: { label: "노트 1권 장수", unit: "장", min: 1, max: 1000 },
       matPrice: { label: "돗자리 가격", unit: "그린", min: 0, max: 100000 },
+    },
+  },
+  inquiry: {
+    title: "문의",
+    fields: {
+      dailyLimit: { label: "1인당 하루 문의 수", unit: "개", min: 1, max: 100 },
+      maxLength: { label: "문의 내용 최대 길이", unit: "자", min: 100, max: 10000 },
     },
   },
 };

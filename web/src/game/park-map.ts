@@ -18,7 +18,7 @@ export const pavilionCorner = (k: number, r: number) => {
 /** yaw: 0이면 +z를 봄. 방향 벡터 = (sin yaw, cos yaw) */
 export type Prop =
   | { kind: "tree"; x: number; z: number; s: number; inside: boolean }
-  | { kind: "bench" | "lamp" | "booth" | "kiosk" | "pavilion" | "fountain" | "wishTree" | "gate"; x: number; z: number; yaw: number };
+  | { kind: "bench" | "lamp" | "booth" | "kiosk" | "pavilion" | "fountain" | "wishTree" | "gate" | "npc"; x: number; z: number; yaw: number };
 
 export type Path = { x1: number; z1: number; x2: number; z2: number; w: number };
 
@@ -44,6 +44,7 @@ function buildProps(): Prop[] {
   const fixed: Prop[] = [
     { kind: "gate", x: -56.5, z: 10, yaw: 0 },          // 기둥이 길 양옆에 섬
     { kind: "booth", x: -50, z: 5.4, yaw: 0 },          // 안내소: 입구 길을 바라봄
+    { kind: "npc", x: -47.6, z: 7.9, yaw: 0 },          // 안내원 (안내소 창구 옆, 길가)
     { kind: "kiosk", x: 12, z: 2.5, yaw: Math.PI },     // 매점: 산책로를 바라봄
     { kind: "pavilion", x: -22, z: 15, yaw: 0 },        // 정자 (입구는 남쪽)
     { kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 },
@@ -117,6 +118,7 @@ function buildColliders(): Collider[] {
     }
     else if (p.kind === "fountain") circle(p.x, p.z, 3.1 * S);
     else if (p.kind === "wishTree") { circle(p.x, p.z, 0.6 * S); out.push(box(p.x, p.z - 1.1 * S, 0.7 * S, 0.5 * S)); } // 줄기 + 사다리
+    else if (p.kind === "npc") circle(p.x, p.z, 0.32);
     else if (p.kind === "gate") for (const s of [-1, 1]) out.push(box(p.x, p.z + s * 2.3 * S, 0.6 * S, 0.6 * S));
   }
   return out;
