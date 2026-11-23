@@ -16,7 +16,7 @@ git fetch -q origin && git checkout -q "$BRANCH" && git reset -q --hard "origin/
 cp ~/sakura.env deploy/.env
 C="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
 \$C build
-\$C --profile migrate run --rm migrate
+\$C --profile migrate run --rm -T migrate < /dev/null  # 입력을 막아야 이 뒤 명령이 먹히지 않음
 \$C up -d --remove-orphans
 docker image prune -f >/dev/null
 \$C ps
