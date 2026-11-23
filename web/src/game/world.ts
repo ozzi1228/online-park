@@ -54,52 +54,47 @@ function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D) => 
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
-// 꽃송이 덩어리: 끝이 살짝 파인 하트 꽃잎 다섯 장, 가운데로 갈수록 분홍, 실처럼 가는 꽃술.
-// 뒤쪽 송이는 살짝 어둡게 먼저 그려서 겹친 깊이감
+// 꽃송이 카드: 수채화처럼 부드러운 송이 덩어리 몇 개. 송이마다 위쪽은 밝고 아래쪽은 살짝 진한 분홍,
+// 꽃은 테두리·잎맥 없이 겹친 다섯 잎. 가운데만 아주 작게 진분홍 (멀리서 점처럼 보이지 않게)
 const blossomTexture = () => canvasTex(512, 512, (x) => {
-  x.lineCap = "round";
-  const flower = (cx: number, cy: number, s: number, rot: number, shade: number) => {
-    const tip = `rgb(${255 - shade * 8},${253 - shade * 16},${254 - shade * 12})`;
+  const PAL = ["#fde2ea", "#fbd3df", "#f9c3d3", "#f6b4c8", "#fce6ed"];
+  // 빈 곳에도 아주 옅게 분홍을 깔아 둠: 멀리서 흐려질 때 가장자리가 검거나 하얗게 테두리 지지 않게
+  x.fillStyle = "rgba(246,182,201,0.03)"; x.fillRect(0, 0, 512, 512);
+  const flower = (cx: number, cy: number, s: number, rot: number, col: string, light: number) => {
+    x.fillStyle = col;
     for (let k = 0; k < 5; k++) {
-      const pa = rot + k * 1.2566 + (Math.random() - 0.5) * 0.18, ps = s * (0.92 + Math.random() * 0.16);
-      x.save(); x.translate(cx, cy); x.rotate(pa);
-      const gr = x.createLinearGradient(0, 0, ps * 1.15, 0);
-      gr.addColorStop(0, "#f7aec3"); gr.addColorStop(0.3, "#fde0e8"); gr.addColorStop(0.75, tip); gr.addColorStop(1, tip);
-      x.fillStyle = gr;
-      // 하트 꽃잎: 밑동은 좁고 끝은 넓으며 가운데가 살짝 파임
-      x.beginPath(); x.moveTo(0, 0);
-      x.bezierCurveTo(ps * 0.35, -ps * 0.5, ps * 1.05, -ps * 0.55, ps * 1.12, -ps * 0.14);
-      x.quadraticCurveTo(ps * 0.98, -ps * 0.02, ps * 1.02, 0);
-      x.quadraticCurveTo(ps * 0.98, ps * 0.02, ps * 1.12, ps * 0.14);
-      x.bezierCurveTo(ps * 1.05, ps * 0.55, ps * 0.35, ps * 0.5, 0, 0);
-      x.fill();
-      x.strokeStyle = "rgba(214,120,150,0.28)"; x.lineWidth = 1.1; x.stroke(); // 꽃잎 가장자리
-      x.strokeStyle = "rgba(240,150,175,0.22)"; x.lineWidth = 0.8;           // 잎맥
-      for (const v of [-0.18, 0, 0.18]) { x.beginPath(); x.moveTo(ps * 0.2, 0); x.quadraticCurveTo(ps * 0.6, v * ps * 0.6, ps * 0.92, v * ps * 1.1); x.stroke(); }
+      const pa = rot + k * 1.2566 + (Math.random() - 0.5) * 0.25;
+      x.save(); x.translate(cx + Math.cos(pa) * s * 0.42, cy + Math.sin(pa) * s * 0.42); x.rotate(pa);
+      x.beginPath(); x.ellipse(0, 0, s * 0.5, s * 0.38, 0, 0, 7); x.fill();
       x.restore();
     }
-    // 가운데 은은한 붉은 기 + 가는 꽃술 (점처럼 다닥다닥 말고 실처럼)
-    const cg = x.createRadialGradient(cx, cy, 0, cx, cy, s * 0.34);
-    cg.addColorStop(0, "rgba(226,110,145,0.5)"); cg.addColorStop(1, "rgba(247,174,195,0)");
-    x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, s * 0.34, 0, 7); x.fill();
-    const n = 9 + Math.floor(Math.random() * 5);
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * 6.28 + Math.random() * 0.4, l = s * (0.3 + Math.random() * 0.18);
-      const ex = cx + Math.cos(a) * l, ey = cy + Math.sin(a) * l;
-      x.strokeStyle = "rgba(225,135,165,0.55)"; x.lineWidth = 0.8; x.beginPath(); x.moveTo(cx, cy); x.lineTo(ex, ey); x.stroke();
-      x.fillStyle = "rgba(242,206,140,0.8)"; x.beginPath(); x.arc(ex, ey, 0.9, 0, 7); x.fill(); // 꽃밥
-    }
+    // 빛 받는 쪽 살짝 밝게
+    const hg = x.createRadialGradient(cx - s * 0.3, cy - s * 0.35, 0, cx, cy, s);
+    hg.addColorStop(0, `rgba(255,255,255,${0.35 * light})`); hg.addColorStop(1, "rgba(255,255,255,0)");
+    x.globalCompositeOperation = "source-atop"; // 이미 그린 꽃잎 위에만 (빈 곳에 흰 테두리가 생기지 않게)
+    x.fillStyle = hg; x.beginPath(); x.arc(cx, cy, s * 0.9, 0, 7); x.fill();
+    x.globalCompositeOperation = "source-over";
+    const cg = x.createRadialGradient(cx, cy, 0, cx, cy, s * 0.22);
+    cg.addColorStop(0, "rgba(232,120,155,0.75)"); cg.addColorStop(1, "rgba(246,177,198,0)");
+    x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, s * 0.22, 0, 7); x.fill();
   };
-  // 송이(2~4송이씩 모임)를 흩뿌림: 뒤(어둡게) → 앞(밝게)
-  for (let layer = 2; layer >= 0; layer--) {
-    for (let i = 0; i < 9; i++) {
-      const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 175;
-      const gx = 256 + Math.cos(a) * d, gy = 256 + Math.sin(a) * d, m = 2 + Math.floor(Math.random() * 3);
-      for (let j = 0; j < m; j++) {
-        const s = 22 + Math.random() * 12;
-        flower(gx + (Math.random() - 0.5) * s * 1.6, gy + (Math.random() - 0.5) * s * 1.6, s, Math.random() * 6.28, layer);
-      }
+  for (let c = 0; c < 6; c++) { // 송이 덩어리
+    const a = (c / 6) * 6.28 + Math.random() * 0.8, d = c === 0 ? 0 : 100 + Math.random() * 70;
+    const gx = 256 + Math.cos(a) * d, gy = 256 + Math.sin(a) * d, R = 70 + Math.random() * 25;
+    // 송이 속은 꽉 차게: 밑에 부드러운 분홍 덩어리를 깔아 멀리서 봐도 구멍 숭숭(자글자글) 안 보이게
+    const ug = x.createRadialGradient(gx, gy + R * 0.1, R * 0.2, gx, gy, R * 0.95);
+    ug.addColorStop(0, "#f4b6c8"); ug.addColorStop(0.7, "rgba(246,186,203,0.95)"); ug.addColorStop(1, "rgba(248,196,211,0)");
+    x.fillStyle = ug; x.beginPath(); x.ellipse(gx, gy, R, R * 0.88, 0, 0, 7); x.fill();
+    for (let i = 0; i < 34; i++) { // 아래(그늘)에서 위(빛)로 쌓음
+      const t = i / 33, ang = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * R;
+      const fy = gy + Math.sin(ang) * rr * 0.85 + (1 - t) * R * 0.35 - R * 0.15;
+      const shade = Math.min(4, Math.floor((1 - t) * 4 + Math.random() * 1.2));
+      flower(gx + Math.cos(ang) * rr, fy, 17 + Math.random() * 10, Math.random() * 6.28, PAL[3 - Math.min(3, shade)] ?? PAL[0], t);
     }
+  }
+  for (let i = 0; i < 10; i++) { // 송이 사이 떠도는 작은 꽃·봉오리
+    const a = Math.random() * 6.28, d = 150 + Math.random() * 80;
+    flower(256 + Math.cos(a) * d, 256 + Math.sin(a) * d, 9 + Math.random() * 6, Math.random() * 6.28, PAL[Math.floor(Math.random() * 5)], 0.5);
   }
 });
 // 나무껍질: 갈색 바탕에 세로 결 + 벚나무 특유의 가로 숨구멍 줄무늬 + 옹이 (위아래·좌우로 이어짐)
@@ -204,14 +199,37 @@ function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: 
 }
 
 // 꽃송이 카드. 24m 구역별로 나눠야 화면 밖 구역을 통째로 건너뜀 (하나로 묶으면 항상 전부 그림)
-function cards(spots: Spot[], tex: THREE.Texture, dark: string, light: string, sunDir: THREE.Vector3, castShadow: boolean) {
-  const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.4, side: THREE.DoubleSide });
-  // 카메라 2m 안의 꽃은 안 그림 → 꽃 속을 지나갈 때 화면이 분홍으로 덮이지 않음
+type Light = { sunDir: { value: THREE.Vector3 }; sunColor: { value: THREE.Color }; haze: { value: THREE.Color } };
+function cards(spots: Spot[], tex: THREE.Texture, dark: string, light: string, sunDir: THREE.Vector3, castShadow: boolean, lit: Light) {
+  const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
-      .replace("#include <project_vertex>", "#include <project_vertex>\nvCamDist = -mvPosition.z;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;")
-      .replace("void main() {", "void main() {\n  if (vCamDist < 2.0) discard;");
+    Object.assign(sh.uniforms, { uSunDir: lit.sunDir, uSunColor: lit.sunColor, uHaze: lit.haze });
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;\nvarying vec3 vWorld, vCardN;")
+      .replace("#include <project_vertex>", `#include <project_vertex>
+vCamDist = -mvPosition.z;
+#ifdef USE_INSTANCING
+mat4 cardM = modelMatrix * instanceMatrix;
+#else
+mat4 cardM = modelMatrix;
+#endif
+vWorld = (cardM * vec4(transformed, 1.0)).xyz;
+vCardN = normalize(mat3(cardM) * vec3(0.0, 0.0, 1.0));`);
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vCamDist;\nvarying vec3 vWorld, vCardN;\nuniform vec3 uSunDir, uSunColor, uHaze;")
+      // 카메라 2m 안의 꽃은 안 그림 → 꽃 속을 지나갈 때 화면이 분홍으로 덮이지 않음.
+      // 거의 옆으로 누운 카드는 가는 실선처럼 보여 지저분하니 안 그림
+      .replace("void main() {", "void main() {\n  if (vCamDist < 2.0 || abs(dot(normalize(vCardN), normalize(cameraPosition - vWorld))) < 0.24) discard;")
+      // 멀수록 텍스처를 흐리게(밉맵을 한 단계 위로) → 작은 꽃 무늬가 자글자글 대신 부드러운 송이로
+      .replace("#include <map_fragment>", "diffuseColor *= texture2D(map, vMapUv, clamp((vCamDist - 18.0) / 16.0, 0.0, 2.2));")
+      .replace("#include <opaque_fragment>", `{
+  vec3 V = normalize(cameraPosition - vWorld);
+  // 해를 등지고 보면 햇살이 꽃잎을 통과해 따뜻하게 빛남 (역광), 해를 마주한 쪽은 화사하게
+  float back = pow(max(dot(-V, uSunDir), 0.0), 3.0);
+  float front = max(dot(V, uSunDir), 0.0);
+  outgoingLight += uSunColor * (back * 0.32 + front * 0.06) * smoothstep(0.0, 0.25, uSunDir.y);
+  // 멀리 있는 나무일수록 옅고 뽀얗게 (공기 원근)
+  outgoingLight = mix(outgoingLight, uHaze, smoothstep(22.0, 95.0, vCamDist) * 0.42);
+}
+#include <opaque_fragment>`);
   };
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: tex, alphaTest: 0.4 });
   const plane = new THREE.PlaneGeometry(1, 1);
@@ -232,7 +250,8 @@ function cards(spots: Spot[], tex: THREE.Texture, dark: string, light: string, s
       const dep = 0.3 + Math.sqrt(Math.random()) * 0.75;
       d.position.copy(s.c).addScaledVector(u, s.r * dep);
       d.lookAt(d.position.clone().add(u)); d.rotateZ(Math.random() * 6.28); d.rotateX((Math.random() - 0.5) * 1.2);
-      d.scale.setScalar(Math.min(s.r * 0.6, 1.05) * (0.8 + Math.random() * 0.45)); // 꽃 크기는 일정하게, 대신 장수로 채움
+      // 꽃 크기는 일정하게, 대신 장수로 채움. 멀리 있는(카드 수를 줄인) 나무는 큼직하게 → 덩어리가 꽉 차 보임
+      d.scale.setScalar(Math.min(s.r * 0.6, 1.05) * (0.8 + Math.random() * 0.45) * (s.c.z < -38 ? 1.7 : 1)); // 강 건너편
       d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
       const l = THREE.MathUtils.clamp((u.dot(sunDir) * 0.5 + 0.5) * (0.4 + dep * 0.7) + (d.position.y - s.top) * 0.12, 0, 1);
       mesh.setColorAt(i, col.copy(cd).lerp(cl, Math.pow(l, 0.8) * (0.85 + Math.random() * 0.15)));
@@ -534,9 +553,10 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
   scene.add(bake(statics), extras);
   const btex = blossomTexture();
-  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#eaa6ba", "#fffafb", sunDir, true));
-  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#eaa6ba", "#fffafb", sunDir, false)); // 맵 밖 나무는 그림자 없이
-  scene.add(cards(leafSpots, leafTexture(), "#3f7a4f", "#bfe3a0", sunDir, true));
+  const lit = { sunDir: sky.uniforms.sunDir, sunColor: sky.uniforms.sunColor, haze: { value: fog.color } };
+  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#efb3c4", "#fdeef2", sunDir, true, lit));
+  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#efb3c4", "#fdeef2", sunDir, false, lit)); // 맵 밖 나무는 그림자 없이
+  scene.add(cards(leafSpots, leafTexture(), "#3f7a4f", "#bfe3a0", sunDir, true, lit));
 
   // 꽃잎이 소복이 쌓인 느낌: 나무 밑에 옅은 분홍 깔개 (값싼 반투명 원)
   const inside = PROPS.filter((p): p is Extract<Prop, { kind: "tree" }> => p.kind === "tree");

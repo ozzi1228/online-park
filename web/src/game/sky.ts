@@ -8,8 +8,8 @@ const KEYS: Key[] = [
   { h: 0, zenith: "#0d1a3d", horizon: "#2e3a6e", cloud: "#4a5585", shade: "#262f57", sun: "#9fb4ff", sunI: 0.35, hemi: 0.75, night: 1 },
   { h: 4.5, zenith: "#14224a", horizon: "#3c4a80", cloud: "#5a6596", shade: "#2c355f", sun: "#9fb4ff", sunI: 0.35, hemi: 0.8, night: 1 },
   { h: 6, zenith: "#6f8fcf", horizon: "#f8c8b0", cloud: "#ffe3d6", shade: "#c49aa6", sun: "#ffc9a0", sunI: 1.3, hemi: 1.0, night: 0.15 },
-  { h: 8, zenith: "#5aa7ea", horizon: "#d9eefa", cloud: "#ffffff", shade: "#c5d6ea", sun: "#fff0dc", sunI: 2.1, hemi: 1.25, night: 0 },
-  { h: 15.5, zenith: "#4f9de6", horizon: "#d6ecf9", cloud: "#ffffff", shade: "#c2d3e8", sun: "#fff0dc", sunI: 2.2, hemi: 1.3, night: 0 },
+  { h: 8, zenith: "#5aa7ea", horizon: "#e2f0f8", cloud: "#ffffff", shade: "#cfd8ea", sun: "#ffe6c6", sunI: 2.3, hemi: 1.3, night: 0 },
+  { h: 15.5, zenith: "#4f9de6", horizon: "#e4eef5", cloud: "#fffaf3", shade: "#cdd4e6", sun: "#ffdfba", sunI: 2.4, hemi: 1.32, night: 0 },
   { h: 17.5, zenith: "#6b88c9", horizon: "#f9c7a6", cloud: "#ffe2cf", shade: "#cf9ea8", sun: "#ffc08a", sunI: 1.6, hemi: 1.1, night: 0 },
   { h: 18.7, zenith: "#4b4f93", horizon: "#f49b8c", cloud: "#f8b9a8", shade: "#8f6f9c", sun: "#ff9f80", sunI: 1.0, hemi: 0.95, night: 0.35 },
   { h: 20, zenith: "#18234d", horizon: "#45467a", cloud: "#5d5a8c", shade: "#2c2f5c", sun: "#a7b6ff", sunI: 0.4, hemi: 0.8, night: 0.9 },
@@ -120,7 +120,7 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
       lightDir.copy(u.sunDir.value); lightDir.y = Math.max(lightDir.y, 0.55); lightDir.normalize();
       sun.color.copy(u.sunColor.value); sun.intensity = a.sunI + (b.sunI - a.sunI) * k;
       hemi.intensity = a.hemi + (b.hemi - a.hemi) * k;
-      hemi.color.copy(tmp.copy(u.horizon.value).lerp(new THREE.Color("#fff4ea"), 0.6));
+      hemi.color.copy(tmp.copy(u.horizon.value).lerp(new THREE.Color("#ffedd8"), 0.65)); // 햇살 받은 듯 따스한 빛
       // 안개는 지평선 색에 벚꽃 분홍을 살짝
       fog.color.copy(u.horizon.value).lerp(pinkMist, 0.35 * (1 - u.night.value));
     },
