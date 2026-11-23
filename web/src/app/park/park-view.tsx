@@ -439,15 +439,17 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 1.2)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
       showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 5)); // 느린 PC에서도 장면이 끝나기 전에 다 돌아오게
+      // 위아래 끌기: 옆으로 돌리며 끌 때 섞이는 작은 세로 움직임은 무시 (모르는 새 하늘을 보게 되지 않게)
+      const dragY = Math.abs(drag.y) > Math.abs(drag.x) * 0.6 ? drag.y : 0;
       let walking = false;
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
       } else if (st.sitting && (Math.hypot(forward, right) < 0.05 || st.waitRelease)) {
         // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게)
-        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
+        pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
       } else {
         if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
-        pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
+        pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
         if (!st.faceCam) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도)
         // 보는 방향 기준 앞/옆으로 걸음
         const amount = Math.min(1, Math.abs(forward));
@@ -456,6 +458,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           st.wishUntil = 0; st.faceCam = false; // 걸으면 소원 동작은 멈춤
           const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
           const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
+          if (dragY === 0 && drag.x === 0) pitch += (0 - pitch) * (1 - Math.exp(-dt * 1.2)); // 걸으면 시선이 천천히 앞으로 돌아옴
           const step = WALK * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
