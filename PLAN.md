@@ -209,10 +209,10 @@ Phase 2(청소도구, 전단 게시판 + 토스 빌링키 자동결제)는 출�
 ## 7. Azure 배포 (2026-11-23 결정)
 
 - **월 예산 한도: 2만 원.** Azure 예산 알림을 2만 원에 걸어 둠 (알림만 오고 자동으로 멈추지는 않음)
-- **구성**: 리눅스 VM 1대(Ubuntu, `Standard_B2ats_v2` 2코어·1GB, 스왑 2GB) 안에 Docker Compose로 웹앱·실시간 서버·Caddy(자동 HTTPS). DB는 Azure Database for PostgreSQL 유연한 서버 `B1ms`(버스트, 32GB)
-- **주소**: 도메인 사기 전까지 Azure가 주는 `<이름>.koreacentral.cloudapp.azure.com` (Caddy가 HTTPS 인증서 자동 발급). 실시간 서버는 같은 주소의 `/realtime` 경로
-- **예상 요금** (한국 중부, 부가세 별도, 2026-11 검색 기준 — 정확한 값은 Azure 가격 계산기로 확인)
-  - 무료 계정 12개월 동안: VM(B2ats v2 월 750시간)은 무료. DB B1ms가 무료 서비스에 포함되면 거의 0원, 아니면 DB만 월 약 2만~3만 원
+- **구성**: 리눅스 VM 1대(Ubuntu ARM, `Standard_B2pts_v2` 2코어·1GB, 스왑 2GB — 일본 동부. 한국 중부는 무료 체험 구독에 작은 VM이 막혀 있었음) 안에 Docker Compose로 웹앱·실시간 서버·Caddy(자동 HTTPS). DB는 Azure Database for PostgreSQL 유연한 서버 `B1ms`(버스트, 32GB)
+- **주소**: 도메인 사기 전까지 Azure가 주는 `<이름>.japaneast.cloudapp.azure.com` (Caddy가 HTTPS 인증서 자동 발급). 실시간 서버는 같은 주소의 `/realtime` 경로
+- **예상 요금** (일본 동부도 비슷, 부가세 별도, 2026-11 검색 기준 — 정확한 값은 Azure 가격 계산기로 확인)
+  - 무료 계정 12개월 동안: VM(B2pts v2 월 750시간)은 무료. DB B1ms가 무료 서비스에 포함되면 거의 0원, 아니면 DB만 월 약 2만~3만 원
   - 무료 기간 이후: VM 약 1.2만 원 + DB 약 3만 원 → **월 4만 원대로 한도 초과**
   - 그래서 한도 안에 두려면 무료 기간이 끝날 때 DB를 VM 안의 Postgres로 옮김 (`deploy/docker-compose.yml`의 `localdb` 구성, 그때 VM은 2GB급으로) → 월 약 1.5만~2만 원
 - **비밀값**: 운영용 `.env`는 VM에만 있음 (레포에 올리지 않음). 처음 배포 때 스크립트가 새로 만들고, 관리자 비밀번호·토스 키는 사용자가 직접 입력

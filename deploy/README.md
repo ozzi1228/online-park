@@ -15,8 +15,8 @@ VM 한 대(웹앱 + 실시간 서버 + Caddy HTTPS, Docker Compose) + Azure Data
 bash deploy/azure-create.sh
 ```
 
-- 리소스 그룹 `sakura-park`, VM `Standard_B2ats_v2`(Ubuntu 24.04, 스왑 2GB), PostgreSQL `B1ms` 32GB, 80·443 포트, 월 2만 원 예산 알림
-- 주소: `https://sakura-park-XXXX.koreacentral.cloudapp.azure.com` (도메인 사면 바꿈)
+- 리소스 그룹 `sakura-park`, VM `Standard_B2pts_v2`(Ubuntu 24.04 ARM, 일본 동부, 스왑 2GB), PostgreSQL `B1ms` 32GB, 80·443 포트, 월 2만 원 예산 알림
+- 주소: `https://sakura-park-XXXX.japaneast.cloudapp.azure.com` (도메인 사면 바꿈)
 - 운영 비밀값은 VM의 `~/sakura.env`에만 저장 (DB 비밀번호·인증 비밀값은 자동 생성)
 - 관리자 비밀번호·토스 키는 직접 입력: `bash deploy/set-secret.sh ADMIN_PASSWORD`
 

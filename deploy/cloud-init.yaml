@@ -1,5 +1,6 @@
 #cloud-config
-# Azure VM 첫 부팅 때: Docker 설치 + 스왑 2GB(메모리 1GB라 빌드 때 필요) + git
+# First boot on the Azure VM: install Docker, add 2GB swap (VM has 1GB RAM, builds need it), git.
+# Keep this file ASCII-only: the Windows Azure CLI reads it with the system codepage.
 package_update: true
 packages: [docker.io, docker-compose-v2, git]
 runcmd:

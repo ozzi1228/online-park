@@ -9,7 +9,7 @@ source deploy/.target
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
 
 echo "▶ $HOST 에 $BRANCH 배포"
-ssh "sakura@$HOST" bash -s <<EOF
+ssh -i "${KEY:-$HOME/.ssh/sakura_azure}" -o IdentitiesOnly=yes "sakura@$HOST" bash -s <<EOF
 set -euo pipefail
 cd ~/app
 git fetch -q origin && git checkout -q "$BRANCH" && git reset -q --hard "origin/$BRANCH"
