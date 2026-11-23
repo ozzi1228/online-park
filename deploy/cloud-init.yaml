@@ -1,0 +1,9 @@
+#cloud-config
+# Azure VM 첫 부팅 때: Docker 설치 + 스왑 2GB(메모리 1GB라 빌드 때 필요) + git
+package_update: true
+packages: [docker.io, docker-compose-v2, git]
+runcmd:
+  - fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - usermod -aG docker sakura
+  - systemctl enable --now docker

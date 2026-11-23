@@ -1,0 +1,10 @@
+# 주소 하나로: /realtime/* 는 실시간 서버(웹소켓), 나머지는 웹앱. HTTPS 인증서는 Caddy가 자동 발급·갱신
+{$SITE_HOST} {
+	encode zstd gzip
+	handle_path /realtime/* {
+		reverse_proxy realtime:2567
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

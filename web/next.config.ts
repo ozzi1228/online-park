@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const devOrigins = (process.env.DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const nextConfig: NextConfig = {
+  output: "standalone", // 운영 Docker 이미지용 (deploy/)
   allowedDevOrigins: ["*.ts.net", ...devOrigins],
   cacheComponents: true,
   partialPrefetching: true,

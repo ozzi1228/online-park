@@ -1,0 +1,70 @@
+# 운영(Azure VM) 구성: 웹앱 + 실시간 서버 + Caddy(HTTPS 자동). DB는 Azure Database for PostgreSQL.
+# 실행(VM에서): docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# DB를 VM 안에 두고 싶으면(무료 기간 이후 비용 절감): --profile localdb 를 붙이고 .env의 DATABASE_URL을 localdb로
+name: sakura
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
+    env_file: .env
+    environment:
+      BETTER_AUTH_URL: https://${SITE_HOST}
+      NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
+    restart: unless-stopped
+    mem_limit: 450m
+
+  realtime:
+    build:
+      context: ..
+      dockerfile: realtime/Dockerfile
+    environment:
+      REALTIME_SECRET: ${REALTIME_SECRET}
+      WEB_URL: http://web:3000
+    restart: unless-stopped
+    mem_limit: 200m
+
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_HOST: ${SITE_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, realtime]
+    restart: unless-stopped
+    mem_limit: 100m
+
+  # DB 스키마 반영 (배포 때 한 번 돌고 끝남)
+  migrate:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+      target: build
+      args:
+        NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
+    env_file: .env
+    command: ["node", "node_modules/drizzle-kit/bin.cjs", "push", "--force"]
+    profiles: ["migrate"]
+
+  # (선택) VM 안의 Postgres — Azure DB 대신 쓸 때만
+  localdb:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: sakura
+      POSTGRES_PASSWORD: ${LOCALDB_PASSWORD:-change-me}
+      POSTGRES_DB: sakura
+    volumes: [pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
+    mem_limit: 250m
+    profiles: ["localdb"]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
