@@ -555,6 +555,24 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   statics.traverse((o) => { if (o instanceof THREE.Mesh && (o.material as THREE.MeshToonMaterial).map) keep.push(o); });
   for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
   scene.add(bake(statics), extras);
+
+  // 가로등 청사초롱: 해 지면 따뜻하게 켜짐 (불빛 + 초롱 빛남 + 둘레 은은한 빛무리)
+  const glowTex = canvasTex(64, 64, (x) => {
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255,226,170,1)"); g.addColorStop(0.35, "rgba(255,200,130,0.45)"); g.addColorStop(1, "rgba(255,190,120,0)");
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  });
+  const lanterns = PROPS.filter((p) => p.kind === "lamp").map((p) => {
+    const yaw = (p as { yaw: number }).yaw, S = PROP_S;
+    const pos = new THREE.Vector3(p.x + Math.cos(yaw) * 0.42 * S, 2.25 * S, p.z - Math.sin(yaw) * 0.42 * S);
+    const light = new THREE.PointLight("#ffc68a", 0, 9, 1.6); light.position.copy(pos);
+    const shine = new THREE.Mesh(new THREE.BoxGeometry(0.31 * S, 0.33 * S, 0.31 * S), new THREE.MeshBasicMaterial({ color: "#ffdca8", transparent: true, opacity: 0, depthWrite: false }));
+    shine.position.copy(pos);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.position.copy(pos); halo.scale.setScalar(2.4);
+    scene.add(light, shine, halo);
+    return { light, shine, halo, ph: p.x };
+  });
   const btex = blossomTexture();
   const lit = { sunDir: sky.uniforms.sunDir, sunColor: sky.uniforms.sunColor, haze: { value: fog.color } };
   scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#efb3c4", "#fdeef2", sunDir, true, lit));
@@ -601,6 +619,13 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
     addCoin: (x: number, z: number) => fountain?.addCoin(x, z),
     update(t: number, dt: number, focus: THREE.Vector3, walking = false, yaw = 0) {
       fountain?.update(t, dt, fog);
+      const on = THREE.MathUtils.smoothstep(sky.uniforms.night.value, 0.15, 0.6); // 해 질 녘부터 서서히
+      for (const l of lanterns) {
+        const flick = 1 + Math.sin(t * 7.3 + l.ph) * 0.03 + Math.sin(t * 13.1 + l.ph * 2) * 0.02; // 초롱불 살짝 일렁임
+        l.light.intensity = on * 6 * flick;
+        (l.shine.material as THREE.MeshBasicMaterial).opacity = on * 0.9;
+        l.halo.material.opacity = on * 0.75 * flick; l.halo.visible = on > 0.01;
+      }
       sky.update(t, focus);
       sun.position.copy(focus).addScaledVector(sky.lightDir, 45); sun.target.position.copy(focus);
       const wind = 0.4 + Math.max(0, Math.sin(t * 0.25)) ** 4 * 1.6; // 가끔 바람이 셈

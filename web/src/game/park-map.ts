@@ -73,7 +73,7 @@ function buildProps(): Prop[] {
     const x = landSide[i] + 3.25; // 강가 나무와 길 쪽 나무 사이 → 벤치에 앉으면 강이 탁 트여 보임
     if (!free(x, -1.6)) continue;
     out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
-    if (i % 2) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: 0 });
+    if (i % 2) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: Math.PI }); // 초롱이 벤치 쪽으로
   }
   return out;
 }
