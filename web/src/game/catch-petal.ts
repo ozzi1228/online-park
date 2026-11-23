@@ -38,9 +38,9 @@ export class CatchPetal {
   update(t: number, dt: number, me: { x: number; z: number; yaw: number }, paused: boolean) {
     if (!this.active) {
       if (!this.enabled || paused || t < this.nextAt) return;
-      // 캐릭터 앞 1.6m, 좌우로 조금 흔들린 자리 위에서 시작
-      const side = (Math.random() - 0.5) * 0.8, fx = Math.sin(me.yaw), fz = Math.cos(me.yaw);
-      this.group.position.set(me.x + fx * 1.6 + fz * side, 3.6, me.z + fz * 1.6 - fx * side);
+      // 눈앞 2.2m, 좌우로 조금 흔들린 자리 위에서 시작 (1인칭 시야 안에서 내려오는 게 보이게)
+      const side = (Math.random() - 0.5) * 1.0, fx = Math.sin(me.yaw), fz = Math.cos(me.yaw);
+      this.group.position.set(me.x + fx * 2.2 + fz * side, 3.0, me.z + fz * 2.2 - fx * side);
       this.v = { x: 0, y: 0.5, z: 0, ph: Math.random() * 6 };
       this.active = true; this.group.visible = true;
       return;

@@ -443,7 +443,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   const spots: Spot[] = [], leafSpots: Spot[] = [];
   const statics = new THREE.Group(), extras = new THREE.Group();
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
-    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : q.cards * 0.45));
+    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -40 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
     else buildProp(p, statics, extras, leafSpots);
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로

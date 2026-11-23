@@ -141,7 +141,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     me.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     scene.add(me.root);
     const petal = new CatchPetal(makePetalGeometry());
-    scene.add(petal.group);
+    // 잡은 소원꽃잎: 1인칭이라 내 손이 안 보이니 눈앞 아래쪽에 두 손에 담긴 듯 띄워 둠
+    const held = petal.group.clone(true); held.visible = false;
+    scene.add(petal.group, held);
     const mat = makeMat(); mat.visible = false; scene.add(mat);
     const treeNotes = new TreeNotes(makePetalGeometry()); scene.add(treeNotes.group);
     // 소리: 첫 터치·키 입력 때 켜짐 (브라우저 정책)
@@ -191,7 +193,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     placeCamera();
 
     const inp = new Input(renderer.domElement, coarse); input.current = inp;
-    const screen = new THREE.Vector3();
+    const screen = new THREE.Vector3(), tapRay = new THREE.Raycaster();
     const drawMini = createMinimap(mini.current!);
     const mp = new Multiplayer(scene);
     mp.onStatus = setNet;
@@ -330,8 +332,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         const n = treeNotes.pick(camera, rect, tap.x, tap.y);
         if (n) { setMenu(null); setTreeDetail(n); logClient("tree.view", { noteId: n.id }); return; }
       }
+      // 분수: 누른 곳이 분수 물(수면 높이에서 반지름 안)이면 동전 메뉴
+      const onWater = (() => {
+        tapRay.setFromCamera(new THREE.Vector2(((tap.x - rect.left) / rect.width) * 2 - 1, -((tap.y - rect.top) / rect.height) * 2 + 1), camera);
+        const hit = tapRay.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.5 * PROP_S), new THREE.Vector3());
+        return !!hit && Math.hypot(hit.x - FOUNTAIN.x, hit.z - FOUNTAIN.z) < 3 * PROP_S;
+      })();
       screen.set(FOUNTAIN.x, 1.2 * PROP_S, FOUNTAIN.z).project(camera);
-      if (screen.z < 1 && nearFountain() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 120) {
+      if (nearFountain() && (onWater || (screen.z < 1 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 120))) {
         setMenu({ x: tap.x, y: tap.y, items: [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] }); return;
       }
       if (petal.hit(camera, rect, tap.x, tap.y)) {
@@ -351,8 +359,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         openInfo(); return;
       }
       // 매점을 누르면 (가까이 있을 때) 매점 창
-      screen.set(KIOSK.x, 1.6 * PROP_S, KIOSK.z).project(camera);
-      if (screen.z < 1 && nearKiosk() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 110) {
+      screen.set(CLERK.x, CLERK.y + 1.2, CLERK.z).project(camera); // 매점 직원 얼굴 근처를 누르면
+      if (screen.z < 1 && nearKiosk() && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 150) {
         setMenu(null); setPanel("shop"); return;
       }
       // 다른 사람을 누르면 그 사람에게 할 수 있는 것
@@ -483,6 +491,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
         camera.position.copy(camPos); camera.lookAt(camLook);
       } else placeCamera();
+      held.visible = st.holding && showMe < 0.02;
+      if (held.visible) { // 눈앞 아래쪽, 살랑살랑
+        camera.getWorldDirection(screen);
+        held.position.copy(camera.position).addScaledVector(screen, 0.75).add(new THREE.Vector3(0, -0.3 + Math.sin(t * 2) * 0.015, 0));
+        held.children[1].rotation.set(Math.sin(t * 1.3) * 0.3, t * 0.8, 0.2);
+      }
       me.root.visible = !!tree.pending || showMe > 0.02; // 1인칭에선 내 몸은 안 보임
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);

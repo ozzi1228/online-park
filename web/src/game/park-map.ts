@@ -82,7 +82,10 @@ export const PROPS = buildProps();
 /** 맵 밖 배경 나무 (지나갈 수 없는 곳, 보이기만) */
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
-  for (let x = -100; x <= 100; x += 9) out.push({ kind: "tree", x: x + r() * 3, z: -45 - r() * 4, s: 0.9 + r() * 0.25, inside: false }); // 강 건너
+  // 강 건너: 물가부터 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃)
+  for (const [z0, step, s0] of [[-42.5, 6.5, 1.25], [-47, 7, 1.45], [-52, 7.5, 1.65]] as const)
+    for (let x = -105 + r() * step; x <= 105; x += step * (0.85 + r() * 0.3))
+      out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
   for (let x = -90; x <= 90; x += 10) out.push({ kind: "tree", x: x + r() * 3, z: 35 + r() * 5, s: 1 + r() * 0.2, inside: false });   // 남쪽 뒤
   for (let z = -2; z <= 30; z += 10) { out.push({ kind: "tree", x: -68 - r() * 4, z, s: 1, inside: false }); out.push({ kind: "tree", x: 68 + r() * 4, z, s: 1, inside: false }); }
   return out;
