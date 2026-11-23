@@ -36,6 +36,8 @@ export const DEFAULTS = {
   },
   controls: {
     turnSpeed: 110,       // 좌우 키로 몸·시야가 도는 빠르기 (도/초)
+    cameraBackCm: 250,    // 시점: 내 머리 뒤로 떨어진 거리 (0 = 완전 1인칭, 클수록 내 캐릭터가 많이 보임)
+    cameraSideCm: 55,     // 시점: 오른쪽으로 비켜선 거리 (내 캐릭터가 화면 왼쪽 아래에 보이게)
   },
   sound: {                // 소리 크기 기본값 (0~100). 각자 화면에서 켜기/끄기·전체 음량 조절
     wind: 60, water: 60, crowd: 45, nature: 40, sfx: 70,
@@ -98,6 +100,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     title: "조작",
     fields: {
       turnSpeed: { label: "좌우 키로 도는 빠르기", unit: "도/초", min: 30, max: 300 },
+      cameraBackCm: { label: "시점: 내 캐릭터 뒤 거리 (0 = 완전 1인칭)", unit: "cm", min: 0, max: 400 },
+      cameraSideCm: { label: "시점: 오른쪽으로 비켜선 거리", unit: "cm", min: 0, max: 150 },
     },
   },
   sound: {

@@ -6,7 +6,7 @@ import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
-import { CatBrain } from "@/game/cat-brain";
+import { CatBrain, type CatState } from "@/game/cat-brain";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -172,6 +172,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let greeted = false;
     // 공원 고양이: 실시간 서버가 움직여 모두가 같은 고양이를 봄. 서버에 못 붙었을 땐 내 브라우저가 직접 움직임
     const cat = new CatView(scene), soloCat = new CatBrain();
+    let lastCat: CatState | null = null;
+    const catOn = (s: { x: number; z: number }) => !!lastCat?.active && lastCat.y > 0.4 && Math.hypot(lastCat.x - s.x, lastCat.z - s.z) < 0.4;
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -181,15 +183,21 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
-    let baseFov = 60;
+    let baseFov = 60, firstPerson = false;
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
-      // 1인칭: 내 눈 높이에서 바로 (지연·흔들림 없이 = 멀미 덜함)
-      const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch);
+      // 어깨 너머 시점: 내 머리 뒤 살짝 오른쪽에서, 내가 보는 쪽을 봄 → 화면 왼쪽 아래에 내 캐릭터가 살짝 보임
+      // (지연·흔들림 없이 바로 따라감 = 멀미 덜함. 관리자에서 뒤 거리를 0으로 하면 완전 1인칭)
+      const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
       const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
-      const eye = new THREE.Vector3(at.x + fx * 0.25, eyeY, at.z + fz * 0.25);
-      const look = eye.clone().add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp));
+      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 250) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 55) / 100;
+      const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
+      const shoulder = room > 0.9; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때만 1인칭으로
+      const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
+      const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + (shoulder ? 0.5 : 0), at.z - fz * dBack + rz * sd);
+      const look = new THREE.Vector3(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
+      firstPerson = !shoulder;
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
         const f = showMe * showMe * (3 - 2 * showMe), fy = st.bench?.yaw ?? yaw, sx = Math.sin(fy), sz = Math.cos(fy);
         const d = Math.min(2.6, cameraRoom(at.x, at.z, sx, sz, 2.6)), low = st.sitting ? 0.35 : 0;
@@ -427,6 +435,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
+      // 조이스틱: 3초 동안 안 만지면 살며시 숨김 (숨어 있어도 그 자리를 누르면 바로 잡힘)
+      if (joyBase.current) joyBase.current.style.opacity = inp.joyHeld || performance.now() - inp.lastTouch < 3000 ? "1" : "0";
       // 조이스틱 손잡이 그리기 (잡은 손가락을 따라감)
       if (knob.current) {
         const z = joyZone(), k = inp.joyKnob;
@@ -477,7 +487,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             const others = mp.colliders();
             const seat = BENCH_SEATS.filter((s) => Math.hypot(s.fx - pos.x, s.fz - pos.z) < 0.55
               && Math.sin(yaw) * Math.sin(s.yaw) + Math.cos(yaw) * Math.cos(s.yaw) < -0.4
-              && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45))
+              && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45)
+              && !catOn(s)) // 고양이가 앉은 자리는 비워 둠 (옆자리에 앉으면 고양이와 나란히)
               .sort((a, b) => Math.hypot(a.fx - pos.x, a.fz - pos.z) - Math.hypot(b.fx - pos.x, b.fz - pos.z))[0];
             if (seat) sitBench(seat);
           }
@@ -512,8 +523,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
       clerk.update(t, dt, pos.x, pos.z);
-      let catState = mp.cat();
+      let catState = mp.cat(); lastCat = catState;
       if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCat.cfg, meRef.current.cat); soloCat.update(dt, [{ x: pos.x, z: pos.z }]); catState = soloCat.s; }
+      lastCat = catState;
       cat.update(t, dt, catState, pos);
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
@@ -529,13 +541,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
         camera.position.copy(camPos); camera.lookAt(camLook);
       } else placeCamera();
-      held.visible = st.holding && showMe < 0.02;
+      held.visible = st.holding && showMe < 0.02 && firstPerson; // 내 손이 안 보이는 1인칭일 때만 눈앞에 띄움
       if (held.visible) { // 눈앞 아래쪽, 살랑살랑
         camera.getWorldDirection(screen);
         held.position.copy(camera.position).addScaledVector(screen, 0.75).add(new THREE.Vector3(0, -0.3 + Math.sin(t * 2) * 0.015, 0));
         held.children[1].rotation.set(Math.sin(t * 1.3) * 0.3, t * 0.8, 0.2);
       }
-      me.root.visible = !!tree.pending || showMe > 0.02; // 1인칭에선 내 몸은 안 보임
+      me.root.visible = !!tree.pending || showMe > 0.02 || !firstPerson; // 완전 1인칭일 때만 내 몸을 숨김
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
     });
@@ -581,7 +593,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "왼쪽 아래 동그라미를 밀어서 걷고 돌아요 · 화면을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
+          {touch ? "아래 동그라미를 밀어서 걷고 돌아요 · 화면을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
@@ -642,7 +654,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
       {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
       {touch && (
-        <div ref={joyBase} aria-hidden className="pointer-events-none absolute bottom-8 left-8 grid size-28 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
+        <div ref={joyBase} aria-hidden className="pointer-events-none absolute bottom-8 left-1/2 grid -translate-x-1/2 transition-opacity duration-500 size-28 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
           <div ref={knob} className="size-12 rounded-full bg-cream/90 shadow-md ring-1 ring-black/5" />
         </div>
       )}

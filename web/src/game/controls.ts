@@ -16,6 +16,9 @@ export class Input {
   joyKnob: { x: number; y: number } | null = null;
   /** 화면이 알려주는 조이스틱 자리 (모바일에서만) */
   joyZone: (() => JoyZone | null) | null = null;
+  /** 마지막으로 화면을 만진 시각 (조이스틱을 잠시 숨겼다 보이게 할 때) */
+  lastTouch = performance.now();
+  get joyHeld() { return this.joyId !== null; }
   private joyId: number | null = null;
   private dx = 0; private dy = 0;
   private pts = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
@@ -37,6 +40,7 @@ export class Input {
     };
     const pdown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.pointerType !== "mouse") this.lastTouch = performance.now();
       try { el.setPointerCapture(e.pointerId); } catch { /* 이미 뗀 포인터 */ }
       const z = this.touchDevice && e.pointerType !== "mouse" ? this.joyZone?.() : null;
       if (z && this.joyId === null && Math.hypot(e.clientX - z.x, e.clientY - z.y) < z.r * 1.5) { // 조이스틱 (조금 넉넉하게 잡힘)
