@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { DEFAULTS, META, getSettings, type SettingsGroup } from "@/lib/settings";
 import { resetGroup, saveGroup } from "./actions";
+import { SaveButton } from "../../save-button";
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
@@ -46,7 +47,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
                 ))}
                 <div className="flex justify-end gap-2">
                   {changed && <button formAction={resetGroup} className="rounded-full px-4 py-1.5 text-sm ring-1 ring-black/10">기본값으로</button>}
-                  <button className="rounded-full bg-sakura px-5 py-1.5 text-sm text-white">저장</button>
+                  <SaveButton className="px-5 py-1.5" />
                 </div>
               </form>
             </section>

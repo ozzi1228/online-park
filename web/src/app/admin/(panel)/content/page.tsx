@@ -5,6 +5,7 @@ import { siteContent } from "@/db/schema";
 import { getGuide, guideToText } from "@/lib/content";
 import { kst } from "@/lib/format";
 import { resetGuide, saveGuide } from "./actions";
+import { SaveButton } from "../../save-button";
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
@@ -41,7 +42,7 @@ export default async function ContentPage({ searchParams }: PageProps<"/admin/co
         </label>
         <div className="flex justify-end gap-2">
           {row && <button formAction={resetGuide} className="rounded-full px-4 py-2 text-sm ring-1 ring-black/10">기본 문구로</button>}
-          <button className="rounded-full bg-sakura px-6 py-2 text-sm text-white">저장</button>
+          <SaveButton className="px-6 py-2" />
         </div>
       </form>
     </div>

@@ -7,6 +7,7 @@ import { inquiries } from "@/db/schema";
 import { kst } from "@/lib/format";
 import { INQUIRY_CATEGORIES, INQUIRY_STATUS } from "@/lib/inquiry";
 import { reply } from "../actions";
+import { SaveButton } from "../../../save-button";
 
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
 
@@ -45,7 +46,7 @@ export default async function InquiryDetail({ params, searchParams }: PageProps<
           <select name="status" defaultValue={q.status === "open" ? "answered" : q.status} className="rounded-lg bg-cream px-3 py-2 ring-1 ring-black/10" aria-label="상태">
             <option value="answered">답변 완료</option><option value="open">답변 대기</option><option value="closed">종료</option>
           </select>
-          <button className="rounded-full bg-sakura px-5 py-2 text-white">저장</button>
+          <SaveButton className="px-5 py-2 text-base" />
           {saved && <span role="status" className="text-emerald-600">저장했어요 ✓</span>}
           <span className="ml-auto text-xs opacity-50">이메일 자동 발송은 메일 서비스 연결 후 (지금은 위 주소로 직접 보내기)</span>
         </div>
