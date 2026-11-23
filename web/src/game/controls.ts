@@ -1,60 +1,63 @@
-// 입력 (일반 3인칭 게임 방식): 이동은 카메라 기준, 캐릭터는 가는 쪽을 바라봄.
-// PC: 방향키/WASD 이동 + 마우스 드래그로 카메라 회전, 클릭 = 탭, 우클릭 = 메뉴.
-// 모바일: 한 손가락을 누르고 있으면 그쪽(화면상 캐릭터 기준 방향)으로 걸어감, 두 손가락으로 끌면 카메라 회전,
-//        짧게 톡 = 탭. 앉아 있을 때(steer=false)는 한 손가락으로 끌면 둘러보기.
+// 입력 (1인칭).
+// PC: ↑↓(W·S) 앞뒤로 걷기, ←→(A·D) 몸·시야 돌리기, 마우스로 끌어서 둘러보기, 클릭 = 탭, 우클릭 = 메뉴.
+// 모바일: 왼쪽 아래 조이스틱을 밀면 위아래 = 앞뒤로 걷기, 좌우 = 돌기. 그 밖에서 한 손가락으로 끌면 둘러보기, 짧게 톡 = 탭.
 const FWD = ["ArrowUp", "KeyW"], BACK = ["ArrowDown", "KeyS"], LEFT = ["ArrowLeft", "KeyA"], RIGHT = ["ArrowRight", "KeyD"];
 const ALL = new Set([...FWD, ...BACK, ...LEFT, ...RIGHT]);
 const TAP_MS = 300, TAP_PX = 10;
 
 export type Tap = { x: number; y: number; menu: boolean };
+/** 조이스틱 자리 (화면 좌표): 가운데와 반지름 */
+export type JoyZone = { x: number; y: number; r: number };
 
 export class Input {
   keys = new Set<string>();
   joy = { x: 0, y: 0 }; // -1~1, x는 오른쪽 +, y는 화면 아래 +
-  /** 모바일: 한 손가락으로 누르고 있는 화면 좌표 (안 누르면 null) */
-  touch: { x: number; y: number } | null = null;
-  /** 모바일에서 한 손가락 = 걷기(true) / 둘러보기(false, 앉아 있을 때) */
-  steer: boolean;
+  /** 조이스틱을 잡고 있는 동안 손가락 위치 (그리기용, 안 잡으면 null) */
+  joyKnob: { x: number; y: number } | null = null;
+  /** 화면이 알려주는 조이스틱 자리 (모바일에서만) */
+  joyZone: (() => JoyZone | null) | null = null;
+  private joyId: number | null = null;
   private dx = 0; private dy = 0;
   private pts = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
   private taps: Tap[] = [];
   private off: (() => void)[] = [];
 
   constructor(el: HTMLElement, private touchDevice = false) {
-    this.steer = touchDevice;
     const typing = (e: Event) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
     const down = (e: KeyboardEvent) => { if (typing(e) || !ALL.has(e.code)) return; e.preventDefault(); this.keys.add(e.code); };
     const up = (e: KeyboardEvent) => this.keys.delete(e.code);
-    const blur = () => { this.keys.clear(); this.pts.clear(); this.touch = null; };
-    const sync = () => { // 한 손가락 = 이동, 두 손가락 = 카메라
-      const one = this.steer && this.pts.size === 1 ? [...this.pts.values()][0] : null;
-      // 짧은 탭 중엔 걷지 않게: 누른 지 TAP_MS가 지나거나 꽤 움직였을 때부터 조종
-      const holding = one && (performance.now() - one.t > TAP_MS || Math.hypot(one.x - one.sx, one.y - one.sy) > TAP_PX);
-      this.touch = holding ? { x: one.x, y: one.y } : null;
-      if (!holding) this.joy = { x: 0, y: 0 };
+    const blur = () => { this.keys.clear(); this.pts.clear(); this.releaseJoy(); };
+    const joyMove = (x: number, y: number) => {
+      const z = this.joyZone?.(); if (!z) return;
+      let vx = (x - z.x) / z.r, vy = (y - z.y) / z.r; const l = Math.hypot(vx, vy);
+      if (l > 1) { vx /= l; vy /= l; }
+      const dead = (v: number) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88); // 살짝 건드린 건 무시
+      this.joy = { x: dead(vx), y: dead(vy) };
+      this.joyKnob = { x: z.x + vx * z.r, y: z.y + vy * z.r };
     };
-    this.syncTouch = sync;
     const pdown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
       try { el.setPointerCapture(e.pointerId); } catch { /* 이미 뗀 포인터 */ }
-      sync();
+      const z = this.touchDevice && e.pointerType !== "mouse" ? this.joyZone?.() : null;
+      if (z && this.joyId === null && Math.hypot(e.clientX - z.x, e.clientY - z.y) < z.r * 1.5) { // 조이스틱 (조금 넉넉하게 잡힘)
+        this.joyId = e.pointerId; joyMove(e.clientX, e.clientY); return;
+      }
+      this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
     };
     const pmove = (e: PointerEvent) => {
+      if (e.pointerId === this.joyId) { joyMove(e.clientX, e.clientY); return; }
       const p = this.pts.get(e.pointerId);
       if (!p) return;
       const mx = e.clientX - p.x, my = e.clientY - p.y;
       p.x = e.clientX; p.y = e.clientY;
-      const dragging = Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_PX;
-      if (dragging && (!this.steer || this.pts.size >= 2)) { const n = this.steer ? this.pts.size : 1; this.dx += mx / n; this.dy += my / n; }
-      sync();
+      if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_PX) { const n = this.pts.size; this.dx += mx / n; this.dy += my / n; } // 끌기 = 둘러보기
     };
     const pup = (e: PointerEvent) => {
+      if (e.pointerId === this.joyId) { this.releaseJoy(); return; }
       const p = this.pts.get(e.pointerId);
       this.pts.delete(e.pointerId);
       if (p && performance.now() - p.t < TAP_MS && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < TAP_PX && this.pts.size === 0)
         this.taps.push({ x: e.clientX, y: e.clientY, menu: false });
-      sync();
     };
     const context = (e: MouseEvent) => { e.preventDefault(); this.taps.push({ x: e.clientX, y: e.clientY, menu: true }); };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", blur);
@@ -66,15 +69,11 @@ export class Input {
     );
   }
 
-  private syncTouch: () => void;
+  private releaseJoy() { this.joyId = null; this.joy = { x: 0, y: 0 }; this.joyKnob = null; }
   private any(codes: string[]) { return codes.some((c) => this.keys.has(c)) ? 1 : 0; }
 
-  /** 걷기 ↔ 둘러보기 전환 (앉으면 false) */
-  setSteer(on: boolean) { this.steer = this.touchDevice && on; this.syncTouch(); }
-
-  /** 카메라 기준 이동량. forward: 화면 안쪽(+), right: 오른쪽(+) */
+  /** forward: 앞(+)/뒤(-), right: 오른쪽으로 돌기(+) */
   axes() {
-    this.syncTouch(); // 길게 누르는 중인지 매 프레임 갱신
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     return {
       forward: clamp(this.any(FWD) - this.any(BACK) - this.joy.y),
@@ -82,9 +81,7 @@ export class Input {
     };
   }
 
-  setJoy(x: number, y: number) { this.joy = { x, y }; }
-
-  /** 지난 프레임 이후 카메라를 돌린 드래그 픽셀 */
+  /** 지난 프레임 이후 끌어서 둘러본 픽셀 */
   takeDrag() { const d = { x: this.dx, y: this.dy }; this.dx = this.dy = 0; return d; }
 
   /** 지난 프레임 이후의 탭·우클릭 */

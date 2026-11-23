@@ -67,14 +67,15 @@ export class ParkAudio {
     // 바람: 낮게 웅웅거리는 갈색 소음
     const wf = this.filter("lowpass", 400, 0.7), wg = this.gain(this.master, 0);
     wf.connect(wg); loop("brown", wf); this.wind = { gain: wg, filter: wf };
-    // 강물: 넓게 흐르는 소리 + 졸졸 떨어지는 작은 소리
+    // 강물: 낮고 부드럽게 흐르는 소리(높은 쉭쉭 소리는 걸러냄) + 맑은 물방울 소리(bubble)
     this.river = this.gain(this.master, 0);
-    const rf = this.filter("bandpass", 900, 0.8); rf.connect(this.river); loop("pink", rf);
-    this.trickle = this.gain(this.river, 0);
-    const tf = this.filter("bandpass", 2600, 3); tf.connect(this.trickle); loop("white", tf);
-    // 분수: 물이 떨어지는 쏴아 소리
+    const rl = this.filter("lowpass", 900, 0.5), rl2 = this.filter("lowpass", 1400, 0.5);
+    rl.connect(rl2); rl2.connect(this.river); loop("pink", rl);
+    this.trickle = this.gain(this.master, 0); // 물방울 소리 크기 (강·분수 가까운 정도)
+    // 분수: 떨어지는 물 — 가운데 대역만 남기고 지직거리는 높은 소리는 깎음
     this.fountain = this.gain(this.master, 0);
-    const ff = this.filter("highpass", 1400, 0.7); ff.connect(this.fountain); loop("white", ff);
+    const fb = this.filter("bandpass", 1700, 0.55), fl = this.filter("lowpass", 4200, 0.5);
+    fb.connect(fl); fl.connect(this.fountain); loop("pink", fb);
     // 웅성임: 말소리 대역의 소리 덩어리 몇 개가 띄엄띄엄
     this.crowd = this.gain(this.master, 0);
     for (let i = 0; i < 4; i++) {
@@ -100,12 +101,15 @@ export class ParkAudio {
     const gust = clamp01((s.wind - 0.4) / 1.6);
     this.set(this.wind.gain.gain, (L.wind / 100) * (0.12 + 0.45 * gust));
     this.set(this.wind.filter.frequency, 280 + 900 * gust, 0.8);
-    this.set(this.river.gain, (L.water / 100) * 0.45 * clamp01(1 - s.riverDist / 28) ** 1.6);
-    this.set(this.fountain.gain, (L.water / 100) * 0.3 * clamp01(1 - s.fountainDist / 22) ** 2);
+    const nearRiver = clamp01(1 - s.riverDist / 28) ** 1.6, nearFountain = clamp01(1 - s.fountainDist / 22) ** 2;
+    const swell = 0.8 + 0.14 * Math.sin(now * 0.37) + 0.06 * Math.sin(now * 1.1); // 강물이 천천히 넘실
+    this.set(this.river.gain, (L.water / 100) * 0.5 * nearRiver * swell, 0.8);
+    this.set(this.fountain.gain, (L.water / 100) * 0.26 * nearFountain, 0.6);
+    this.set(this.trickle.gain, (L.water / 100) * Math.max(nearRiver * 0.5, nearFountain), 0.5);
     this.sfxBus.gain.value = L.sfx / 100;
-    if (now > this.nextTrickle) { // 졸졸: 작은 물방울 소리가 들쭉날쭉
-      this.nextTrickle = now + 0.06 + Math.random() * 0.12;
-      this.trickle.gain.setTargetAtTime(Math.random() ** 3 * 0.9, now, 0.02);
+    if (now > this.nextTrickle && (nearRiver > 0.02 || nearFountain > 0.02)) { // 졸졸·퐁: 물방울이 띄엄띄엄
+      this.nextTrickle = now + (nearFountain > nearRiver ? 0.05 + Math.random() * 0.12 : 0.12 + Math.random() * 0.35);
+      this.bubble();
     }
     // 웅성임: 멀리서 늘 조금 + 가까운 사람 수만큼
     this.set(this.crowd.gain, (L.crowd / 100) * (0.04 + 0.07 * Math.min(s.nearby, 6)), 1);
@@ -124,6 +128,15 @@ export class ParkAudio {
       else if (night) { this.cricket(); this.nextBird = now + 1.5 + Math.random() * 3; }
       else this.nextBird = now + 5;
     }
+  }
+
+  /** 물방울 하나: 짧게 위로 올라가는 맑은 사인음 (물속 공기방울이 터지는 소리) */
+  private bubble() {
+    const ctx = this.ctx!, at = ctx.currentTime, f = 500 + Math.random() * 900, dur = 0.05 + Math.random() * 0.07;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(f, at); o.frequency.exponentialRampToValueAtTime(f * (1.6 + Math.random() * 0.8), at + dur);
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(0.05 + Math.random() * 0.07, at + 0.006); g.gain.exponentialRampToValueAtTime(0.0005, at + dur);
+    o.connect(g); g.connect(this.trickle); o.start(at); o.stop(at + dur + 0.02);
   }
 
   private tone(to: AudioNode, type: OscillatorType, f0: number, f1: number, at: number, dur: number, vol: number) {

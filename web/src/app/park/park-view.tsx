@@ -29,7 +29,7 @@ const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.ad
 
 const WALK = 3.0;                             // m/s
 const EYE = 1.5, EYE_SIT = 0.95;             // 1인칭 눈높이 (서 있을 때 / 앉았을 때, 캐릭터 키 기준)
-const DRAG_YAW = 0.006, DRAG_PITCH = 0.004, TOUCH_TURN = 1.8; // 끌어서 둘러보기 / 모바일 한 손가락으로 도는 빠르기(rad/s)
+const DRAG_YAW = 0.006, DRAG_PITCH = 0.004; // 끌어서 둘러보기 빠르기
 const PITCH_UP = -0.9, PITCH_DOWN = 1.0;      // 올려다보기·내려다보기 한계 (rad)
 const LOOK_YAW = 1.6;                         // 사다리 위에서 방향키로 나무를 돌아보는 빠르기 (rad/s)
 const WISH_SEC = 3.2;
@@ -82,6 +82,7 @@ const CLERK = { x: KIOSK.x + Math.sin(KIOSK.yaw) * 0.95 * PROP_S, z: KIOSK.z + M
 export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
   const box = useRef<HTMLDivElement>(null);
   const mini = useRef<HTMLCanvasElement>(null);
+  const joyBase = useRef<HTMLDivElement>(null), knob = useRef<HTMLDivElement>(null);
   const input = useRef<Input | null>(null);
   const actions = useRef<Actions | null>(null);
   const touch = useSyncExternalStore(subscribeCoarse, isCoarse, () => false);
@@ -204,6 +205,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     placeCamera();
 
     const inp = new Input(renderer.domElement, coarse); input.current = inp;
+    // 모바일 조이스틱 자리: 화면의 조이스틱 동그라미 위치를 그대로
+    const joyZone = () => { const r = joyBase.current?.getBoundingClientRect(); return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 } : null; };
+    inp.joyZone = joyZone;
     const screen = new THREE.Vector3(), tapRay = new THREE.Raycaster();
     const drawMini = createMinimap(mini.current!);
     const mp = new Multiplayer(scene);
@@ -217,14 +221,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // ---------- 행동 ----------
     const stand = () => {
       if (!st.sitting) return;
-      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false); inp.setSteer(true);
+      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false);
       if (st.bench) { st.bench = null; st.stoodAt = st.now; }
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
     };
     // 벤치에 걸어 들어가면 자동으로 앉음: 돌아서 벤치가 보는 쪽(강)을 바라봄
     const sitBench = (seat: BenchSeat) => {
       st.sitting = true; st.bench = seat; st.onMat = false; st.wishUntil = 0; st.waitRelease = true;
-      setSitting(true); setMenu(null); inp.setSteer(false);
+      setSitting(true); setMenu(null);
       pos.x = seat.fx; pos.z = seat.fz; yaw = seat.yaw; st.camTurn = seat.yaw; pitch = 0.08;
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), bench: true });
     };
@@ -232,7 +236,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       sit: () => {
         setMenu(null);
         if (!canSit(pos.x, pos.z)) { sayRef.current("여기선 앉을 수 없어요. 잔디밭이나 정자로 가 볼까요?"); return; }
-        st.sitting = true; st.wishUntil = 0; setSitting(true); inp.setSteer(false);
+        st.sitting = true; st.wishUntil = 0; setSitting(true);
         camYaw = yaw;
         // 돗자리가 있으면 잔디밭에선 깔고 앉음 (정자 마루에선 그냥 앉음)
         // 돗자리는 통째로 잔디 위일 때만 (길·광장에 걸치면 그냥 앉음)
@@ -324,11 +328,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const joinMat = (seat: { x: number; z: number; yaw: number; owner: string }) => {
       setMenu(null);
       pos.x = seat.x; pos.z = seat.z; yaw = camYaw = seat.yaw; // 바로 옆이라 서버 이동 판정 안에서 따라옴
-      st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true); inp.setSteer(false);
+      st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true);
       sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
-    const openMenu = (tap: Tap) => {
+    const openMenu = (tap: Tap, onlyActionable = false) => {
       const sheets = meRef.current?.items.noteSheets ?? 0;
       const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
         : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
@@ -341,7 +345,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       items.push(...(st.sitting ? [{ label: "일어나기", run: () => actions.current!.stand() }]
         : canSit(pos.x, pos.z) ? [{ label: "여기 앉기", run: () => actions.current!.sit() }]
         : [{ label: "여기선 앉을 수 없어요" }]));
-      setMenu({ x: tap.x, y: tap.y, items });
+      if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
+      setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== "여기선 앉을 수 없어요") : items });
     };
     const handleTap = (tap: Tap, rect: DOMRect) => {
       if (tree.pending) { // 사다리 위: 누른 가지 사이에 쪽지 미리보기
@@ -398,7 +403,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         return;
       }
       // 빈 곳을 톡: 모바일은 내 메뉴(앉기 등)를 열고, 메뉴가 떠 있으면 닫음 (PC는 우클릭)
-      if (coarse && !menuOpen.current) { openMenu(tap); return; }
+      // 모바일은 할 수 있는 게 있을 때만 메뉴 (이동하려다 톡 닿을 때마다 "앉을 수 없어요"가 뜨지 않게)
+      if (coarse && !menuOpen.current) { openMenu(tap, true); return; }
       setMenu(null);
     };
 
@@ -421,11 +427,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
-      let touchTurn = 0;
-      if (inp.touch) { // 한 손가락 누르고 있기: 화면 가운데보다 위면 앞으로, 아래면 뒤로, 옆으로 치우치면 그쪽으로 돎
-        const dx = inp.touch.x - (rect.left + rect.width / 2), dy = inp.touch.y - (rect.top + rect.height * 0.55);
-        const dead = (v: number, d: number, full: number) => Math.abs(v) < d ? 0 : Math.max(-1, Math.min(1, (v - Math.sign(v) * d) / full));
-        inp.setJoy(0, dead(dy, 24, 110)); touchTurn = dead(dx, 30, rect.width * 0.35);
+      // 조이스틱 손잡이 그리기 (잡은 손가락을 따라감)
+      if (knob.current) {
+        const z = joyZone(), k = inp.joyKnob;
+        knob.current.style.transform = z && k ? `translate(${k.x - z.x}px, ${k.y - z.y}px)` : "translate(0px, 0px)";
       }
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       if (Math.hypot(forward, right) < 0.05) st.waitRelease = false; // 앉은 뒤엔 키를 한 번 뗐다 눌러야 일어남
@@ -434,7 +439,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camYaw += d * (1 - Math.exp(-dt * 4));
         if (Math.abs(d) < 0.01 || drag.x !== 0) st.camTurn = null;
       }
-      camYaw -= drag.x * DRAG_YAW + touchTurn * TOUCH_TURN * dt;
+      camYaw -= drag.x * DRAG_YAW;
       if (tree.pending) camYaw -= right * LOOK_YAW * dt; // 사다리 위: 좌우로 나무를 돌아보기
       else { // 좌우 키 = 몸과 시야가 같이 그쪽으로 돎 (살살 붙었다 살살 멈춤)
         const turnSpeed = ((meRef.current?.controls?.turnSpeed ?? 110) * Math.PI) / 180;
@@ -576,7 +581,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 돌아요 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
+          {touch ? "왼쪽 아래 동그라미를 밀어서 걷고 돌아요 · 화면을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
@@ -634,6 +639,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
       {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { audioRef.current?.pop(); sayRef.current(msg); refreshMe.current(); }} />}
+
+      {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
+      {touch && (
+        <div ref={joyBase} aria-hidden className="pointer-events-none absolute bottom-8 left-8 grid size-28 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
+          <div ref={knob} className="size-12 rounded-full bg-cream/90 shadow-md ring-1 ring-black/5" />
+        </div>
+      )}
 
       {/* 미니맵: 접었다 펼 수 있음 (모바일은 접힌 채 시작) */}
       <div className="absolute bottom-4 right-4 size-40 max-sm:size-32">
