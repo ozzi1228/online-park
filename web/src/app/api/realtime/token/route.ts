@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 
 // 실시간 서버 입장권: 1분짜리, 서버끼리만 아는 비밀값으로 서명 (realtime/src/index.ts 의 verify 와 짝)
 export async function GET(req: Request) {
-  const secret = process.env.REALTIME_SECRET, url = process.env.NEXT_PUBLIC_REALTIME_URL;
+  // REALTIME_URL은 실행할 때 읽음 (운영 이미지를 주소와 상관없이 하나로 빌드하려고). 개발용 예전 이름도 받음
+  const secret = process.env.REALTIME_SECRET, url = process.env.REALTIME_URL ?? process.env.NEXT_PUBLIC_REALTIME_URL;
   if (!secret || !url) return Response.json({ error: "realtime not configured" }, { status: 503 });
 
   const session = await auth.api.getSession({ headers: req.headers });

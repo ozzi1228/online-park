@@ -27,7 +27,9 @@ git push            # GitHub에 올라간 코드가 배포됨
 bash deploy/deploy.sh
 ```
 
-VM에서 최신 코드 받기 → 이미지 빌드 → DB 스키마 반영(drizzle push) → 재시작.
+push하면 GitHub Actions가 ARM 이미지를 빌드해 ghcr.io에 올림(`.github/workflows/images.yml`, 공개 레포라 무료, 3~5분).
+`deploy.sh`는 그 커밋의 이미지가 올라오길 기다렸다가 VM에서 받기 → DB 스키마 반영(drizzle push) → 재시작 (VM에선 1~2분).
+급할 때 VM에서 직접 빌드: `BUILD_ON_VM=1 bash deploy/deploy.sh` (메모리가 작아 10~15분)
 
 ## 비용 줄이기 (무료 기간이 끝나면)
 

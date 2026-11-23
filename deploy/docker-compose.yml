@@ -1,23 +1,24 @@
 # 운영(Azure VM) 구성: 웹앱 + 실시간 서버 + Caddy(HTTPS 자동). DB는 Azure Database for PostgreSQL.
-# 실행(VM에서): docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# 이미지는 GitHub Actions가 빌드해 ghcr.io에 올린 것(TAG = 커밋)을 받아서 씀 → deploy/deploy.sh
+# (급할 때 VM에서 직접 빌드: ... up -d --build)
 # DB를 VM 안에 두고 싶으면(무료 기간 이후 비용 절감): --profile localdb 를 붙이고 .env의 DATABASE_URL을 localdb로
 name: sakura
 
 services:
   web:
+    image: ${IMAGE_PREFIX:-ghcr.io/ozzi1228/online-park}-web:${TAG:-latest}
     build:
       context: ..
       dockerfile: web/Dockerfile
-      args:
-        NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
     env_file: .env
     environment:
       BETTER_AUTH_URL: https://${SITE_HOST}
-      NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
+      REALTIME_URL: wss://${SITE_HOST}/realtime
     restart: unless-stopped
     mem_limit: 450m
 
   realtime:
+    image: ${IMAGE_PREFIX:-ghcr.io/ozzi1228/online-park}-realtime:${TAG:-latest}
     build:
       context: ..
       dockerfile: realtime/Dockerfile
@@ -42,12 +43,11 @@ services:
 
   # DB 스키마 반영 (배포 때 한 번 돌고 끝남)
   migrate:
+    image: ${IMAGE_PREFIX:-ghcr.io/ozzi1228/online-park}-migrate:${TAG:-latest}
     build:
       context: ..
       dockerfile: web/Dockerfile
       target: build
-      args:
-        NEXT_PUBLIC_REALTIME_URL: wss://${SITE_HOST}/realtime
     env_file: .env
     command: ["node", "node_modules/drizzle-kit/bin.cjs", "push", "--force"]
     profiles: ["migrate"]

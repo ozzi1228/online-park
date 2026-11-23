@@ -1,0 +1,76 @@
+# 운영 이미지 빌드: push할 때마다 GitHub의 ARM 빌드 서버에서 만들어 ghcr.io에 올림 (공개 레포라 무료).
+# Azure VM은 deploy/deploy.sh가 이 이미지를 받아서 켜기만 함 (VM에서 빌드하면 메모리가 작아 10~15분 걸려서)
+# 이미지에는 비밀값이 없음 — 주소·비밀값은 VM의 ~/sakura.env 에서 실행할 때 넣음
+name: images
+
+on:
+  push:
+    branches: [park, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # DB 스키마 반영용 (빌드 단계 그대로: drizzle-kit 포함)
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          target: build
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/online-park-migrate:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/online-park-migrate:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+      # 웹앱 실행 이미지 (위 빌드를 캐시로 이어 받음)
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          target: run
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/online-park-web:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/online-park-web:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=web
+
+  realtime:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: realtime/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/online-park-realtime:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/online-park-realtime:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=realtime
+          cache-to: type=gha,mode=max,scope=realtime
