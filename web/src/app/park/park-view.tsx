@@ -97,6 +97,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [me, setMe] = useState<MeInfo | null>(null);
   const meRef = useRef<MeInfo | null>(null);
   const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | null>(null);
+  const panelOpen = useRef(false);
+  useEffect(() => { panelOpen.current = panel !== null; }, [panel]);
   const [writeTo, setWriteTo] = useState<{ sessionId: string; uid: string; nickname: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [writeTree, setWriteTree] = useState(false);          // 소원 쪽지 쓰는 중
@@ -186,14 +188,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let baseFov = 60, firstPerson = false;
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
-      // 어깨 너머 시점: 내 머리 뒤 살짝 오른쪽에서, 내가 보는 쪽을 봄 → 화면 왼쪽 아래에 내 캐릭터가 살짝 보임
+      // 뒤에서 보는 시점: 내 머리 뒤 조금 위에서, 내가 보는 쪽을 봄 → 화면 가운데 아래에 내 캐릭터가 살짝 보임
+      // 앉아서 풍경 볼 땐(벤치·돗자리·잔디) 1인칭으로 — 내 몸이 풍경을 가리지 않게
       // (지연·흔들림 없이 바로 따라감 = 멀미 덜함. 관리자에서 뒤 거리를 0으로 하면 완전 1인칭)
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
       const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
-      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 250) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 55) / 100;
+      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 250) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
-      const shoulder = room > 0.9; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때만 1인칭으로
+      const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
       const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
       const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + (shoulder ? 0.5 : 0), at.z - fz * dBack + rz * sd);
       const look = new THREE.Vector3(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
@@ -331,6 +334,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
     const nearNpc = () => Math.hypot(pos.x - NPC.x, pos.z - NPC.z) < 6;
     const openInfo = () => { setMenu(null); setPanel("info"); logClient("info.open", {}); };
+    const talkers = [
+      { x: NPC.x, z: NPC.z, armed: true, t: 0, open: openInfo },
+      { x: CLERK.x, z: CLERK.z, armed: true, t: 0, open: () => { setMenu(null); setPanel("shop"); logClient("shop.open", { by: "approach" }); } },
+    ];
     // 다른 사람 돗자리의 빈 옆자리: 1.6m 안이면 같이 앉을 수 있음
     const nearSeat = () => mp.freeSeats().find((s) => Math.hypot(s.x - pos.x, s.z - pos.z) < 1.6);
     const joinMat = (seat: { x: number; z: number; yaw: number; owner: string }) => {
@@ -523,6 +530,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
       clerk.update(t, dt, pos.x, pos.z);
+      // 직원에게 말 걸기: 누르지 않아도 바로 앞에 서서 바라보면 1초쯤 뒤에 저절로 (지나가기만 하면 안 걸리게)
+      for (const w of talkers) {
+        const dx = w.x - pos.x, dz = w.z - pos.z, d = Math.hypot(dx, dz);
+        if (d > 3.2) { w.armed = true; w.t = 0; continue; }       // 멀어지면 다시 말 걸 수 있게
+        const facing = d > 0 && (Math.sin(yaw) * dx + Math.cos(yaw) * dz) / d > 0.72;
+        if (w.armed && d < 2.1 && facing && !st.sitting && !tree.pending && !panelOpen.current) {
+          w.t += dt;
+          if (w.t > 0.9) { w.armed = false; w.t = 0; w.open(); }
+        } else w.t = 0;
+      }
       let catState = mp.cat(); lastCat = catState;
       if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCat.cfg, meRef.current.cat); soloCat.update(dt, [{ x: pos.x, z: pos.z }]); catState = soloCat.s; }
       lastCat = catState;
