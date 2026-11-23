@@ -391,9 +391,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
-    let moved = false, turnVel = 0;
+    let moved = false, turnVel = 0, gameT = 0;
     renderer.setAnimationLoop(() => {
-      const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+      // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 소원꽃잎이 떨어지지 않게)
+      const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
       st.now = t;
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
