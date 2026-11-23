@@ -20,8 +20,16 @@ const socialProviders = Object.fromEntries(
 );
 export const enabledProviders = Object.keys(socialProviders);
 
+// 개발 중 휴대폰 등 다른 기기 주소에서도 로그인되게 (.env.local 의 DEV_ORIGINS, 운영에선 BETTER_AUTH_URL만)
+const devHosts = process.env.NODE_ENV === "development" ? (process.env.DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean) : [];
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
+  trustedOrigins: (req) => {
+    const o = req?.headers.get("origin");
+    if (!o || !devHosts.length) return [];
+    try { return devHosts.includes(new URL(o).hostname) ? [o] : []; } catch { return []; }
+  },
   socialProviders,
   user: {
     additionalFields: {
