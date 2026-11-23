@@ -8,7 +8,7 @@ import { Staff } from "@/game/staff";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
-import { BENCH_SEATS, COLLIDERS, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
+import { BENCH_SEATS, COLLIDERS, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
 import { PRESETS, type Preset } from "@/game/presets";
 import { NPC_NAME } from "@/content/guide";
 import { InfoPanel } from "./info-panel";
@@ -170,7 +170,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish", now: 0, faceCam: false,
-      bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null };
+      bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
@@ -261,6 +261,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const nearKiosk = () => Math.hypot(pos.x - KIOSK.x, pos.z - KIOSK.z) < 9;
     const nearFountain = () => Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z) < 9;
     const nearTree = () => Math.hypot(pos.x - WISH_TREE.x, pos.z - WISH_TREE.z) < 8;
+    // 소원 쪽지 쓰기 → 다 쓰면 사다리에 올라 달 자리를 고름
+    const openTreeEditor = () => {
+      setMenu(null);
+      const me = meRef.current;
+      if (!me || me.isGuest) { sayRef.current("소원 쪽지는 회원만 달 수 있어요"); return; }
+      if ((me.items.noteSheets ?? 0) < 1) { sayRef.current("노트가 있어야 소원 쪽지를 달 수 있어요 (매점에서 살 수 있어요)"); return; }
+      setPanel(null); setWriteTree(true); logClient("tree.open_editor", {});
+    };
     // 분수에 동전: 서버에서 그린 차감 → 동전이 물에 퐁당 → 정면 보고 소원
     const tossCoin = async () => {
       setMenu(null);
@@ -311,7 +319,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
         : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
         : nearTree() ? [meRef.current?.isGuest ? { label: "소원 쪽지는 회원만 달 수 있어요" } : sheets < 1 ? { label: "노트가 있어야 소원 쪽지를 달 수 있어요" }
-          : { label: `소원 쪽지 달기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTree(true); logClient("tree.open_editor", {}); } }]
+          : { label: `소원 쪽지 달기 (노트 ${sheets}장)`, run: openTreeEditor }]
         : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
@@ -451,6 +459,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
               .sort((a, b) => Math.hypot(a.fx - pos.x, a.fz - pos.z) - Math.hypot(b.fx - pos.x, b.fz - pos.z))[0];
             if (seat) sitBench(seat);
           }
+          // 사다리 앞에서 나무 쪽으로 걸어 들어가면 쪽지 쓰기 (한 번 뜨면 1.5m 떨어졌다 와야 다시)
+          const ld = Math.hypot(pos.x - LADDER_FOOT.x, pos.z - LADDER_FOOT.z);
+          if (ld > 1.5) st.ladderArmed = true;
+          else if (st.ladderArmed && forward > 0 && ld < 0.55 && Math.cos(yaw) < -0.6) { st.ladderArmed = false; openTreeEditor(); }
           if (!moved) { moved = true; setHint(false); }
         }
       }

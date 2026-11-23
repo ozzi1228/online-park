@@ -80,7 +80,7 @@ export class TreeNotes {
 }
 
 /** 사다리 꼭대기 근처 (캐릭터가 올라가 서 있는 자리) */
-export const LADDER_TOP = { x: WISH_TREE.x, y: 1.9 * PROP_S, z: WISH_TREE.z - 1.35 * PROP_S };
+export const LADDER_TOP = { x: WISH_TREE.x, y: 1.9 * PROP_S, z: WISH_TREE.z + 1.35 * PROP_S };
 
 /** 분수 동전: 손에서 물로 포물선 → 물보라 */
 export class CoinToss {

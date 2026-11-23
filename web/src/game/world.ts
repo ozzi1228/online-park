@@ -140,17 +140,6 @@ function trunkGeo(r0: number, r1: number, h: number, seed: number) {
   return g;
 }
 const barkPart = (geo: THREE.BufferGeometry, t = 0.03) => { const m = part(geo, BARK, t); m.userData.bark = true; return m; };
-// 초록 소원나무 잎 덩어리
-const leafTexture = () => canvasTex(256, 256, (x) => {
-  for (let i = 0; i < 28; i++) {
-    const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 95, s = 14 + Math.random() * 12;
-    x.save(); x.translate(128 + Math.cos(a) * d, 128 + Math.sin(a) * d); x.rotate(Math.random() * 6.28);
-    x.fillStyle = Math.random() < 0.5 ? "#ffffff" : "#e6efe0";
-    x.beginPath(); x.ellipse(0, 0, s, s * 0.55, 0, 0, 7); x.fill();
-    x.strokeStyle = "rgba(90,120,80,0.35)"; x.lineWidth = 2; x.beginPath(); x.moveTo(-s * 0.8, 0); x.lineTo(s * 0.8, 0); x.stroke();
-    x.restore();
-  }
-});
 function signTex(text: string, bg: string, fg = "#6b4450") {
   return canvasTex(512, 160, (x) => {
     x.fillStyle = bg; x.beginPath(); x.roundRect(4, 4, 504, 152, 36); x.fill();
@@ -286,7 +275,7 @@ function hanokRoof(sides: 4 | 8, w: number, d: number, h: number) {
   return g;
 }
 
-function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: Spot[]) {
+function buildProp(p: Prop, root: THREE.Group) {
   const S = PROP_S;
   const g = new THREE.Group(); g.position.set(p.x, 0, p.z); if (p.kind !== "tree") g.rotation.y = p.yaw;
   g.scale.setScalar(S); // 나무에 맞춘 현실 크기
@@ -380,16 +369,37 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
     }
     case "fountain": break; // fountain.ts에서 따로 만듦 (물·동전·물보라가 움직여서)
     case "wishTree": {
-      add(new THREE.CylinderGeometry(0.35, 0.55, 2.4, 10), BARK, 0, 1.2, 0, 0.02);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * 6.28 + 0.4, dir = new THREE.Vector3(Math.cos(a) * 0.7, 0.75, Math.sin(a) * 0.7).normalize();
-        const b = part(new THREE.CylinderGeometry(0.05, 0.16, 2, 7, 1, true), BARK, T);
-        b.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); b.position.set(0, 2.2, 0).addScaledVector(dir, 1); g.add(b);
+      // 소원나무: 잎 없이 가지만. 사람들이 매단 쪽지가 잎이 되어 달수록 풍성해짐.
+      // 굵은 가지는 쪽지 다는 자리(WISH_CANOPY 잎 덩어리 영역)마다 뻗고, 끝은 잔가지로 갈라짐
+      g.add(at(barkPart(trunkGeo(0.3, 0.55, 2.5, 3), T), 0, 1.25, 0));
+      let n = 12345; const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
+      const up = new THREE.Vector3(0, 1, 0);
+      const limb = (from: THREE.Vector3, to: THREE.Vector3, r0: number, r1: number, t = 0.01) => {
+        const d = to.clone().sub(from), len = d.length();
+        const geo = new THREE.CylinderGeometry(r1, r0, len, r0 > 0.06 ? 9 : 5, 2, true), uv = geo.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), uv.getY(i) * len * 0.5);
+        const m = barkPart(geo, t);
+        m.quaternion.setFromUnitVectors(up, d.normalize()); m.position.copy(from).add(to).multiplyScalar(0.5); g.add(m);
+        g.add(at(new THREE.Mesh(new THREE.SphereGeometry(r0 * 0.98, 8, 6), toon(BARK)), from.x, from.y, from.z)); // 이음매
+      };
+      const rdir = () => new THREE.Vector3(rnd() - 0.5, rnd() * 0.8 - 0.2, rnd() - 0.5).normalize();
+      const top = new THREE.Vector3(0, 2.4, 0);
+      for (const c of WISH_CANOPY) {
+        const lc = new THREE.Vector3((c.x - p.x) / S, c.y / S, (c.z - p.z) / S), rr = c.r / S;
+        const mid = top.clone().lerp(lc, 0.55).add(rdir().multiplyScalar(0.15));
+        limb(top, mid, 0.17, 0.11, 0.014);
+        for (let k = 0; k < 3; k++) {
+          const tip = lc.clone().add(rdir().multiplyScalar(rr * (0.55 + rnd() * 0.35)));
+          limb(mid, tip, 0.1, 0.035);
+          for (let j = 0; j < 3; j++) { // 잔가지 (여기에 쪽지가 매달린 느낌)
+            const base = mid.clone().lerp(tip, 0.45 + rnd() * 0.5);
+            const out = base.clone().sub(lc).normalize().add(rdir().multiplyScalar(0.8)).normalize();
+            limb(base, base.clone().addScaledVector(out, 0.45 + rnd() * 0.35), 0.03, 0.01, 0.006);
+          }
+        }
       }
-      // 잎 덩어리는 park-map의 WISH_CANOPY (쪽지 다는 자리와 같은 영역)
-      for (const c of WISH_CANOPY) leafSpots.push({ c: new THREE.Vector3(c.x, c.y, c.z), r: c.r, top: 3.6 * S, k: 40 });
-      // 사다리 (분수 쪽에 기대어 둠)
-      const lad = new THREE.Group(); lad.position.set(0, 0, -1.0); lad.rotation.x = 0.25;
+      // 사다리: 분수 반대편(광장 바깥쪽)에 기대어 둠 → 넓은 쪽에서 다가가 오르기 쉽게
+      const lad = new THREE.Group(); lad.position.set(0, 0, 1.0); lad.rotation.x = -0.25;
       for (const s of [-1, 1]) lad.add(at(part(new THREE.BoxGeometry(0.06, 3.2, 0.06), WOOD, T), s * 0.25, 1.55, 0));
       for (let i = 0; i < 8; i++) lad.add(at(part(new THREE.BoxGeometry(0.5, 0.05, 0.05), WOOD, T), 0, 0.3 + i * 0.38, 0));
       g.add(lad);
@@ -532,13 +542,13 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   }
 
   // 나무·소품
-  const spots: Spot[] = [], leafSpots: Spot[] = [];
+  const spots: Spot[] = [];
   const statics = new THREE.Group(), extras = new THREE.Group();
   let fountain: ReturnType<typeof createFountain> | null = null;
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
     if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -40 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
     else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
-    else buildProp(p, statics, extras, leafSpots);
+    else buildProp(p, statics);
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로
   const keep: THREE.Object3D[] = [];
@@ -549,7 +559,6 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   const lit = { sunDir: sky.uniforms.sunDir, sunColor: sky.uniforms.sunColor, haze: { value: fog.color } };
   scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#efb3c4", "#fdeef2", sunDir, true, lit));
   scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#efb3c4", "#fdeef2", sunDir, false, lit)); // 맵 밖 나무는 그림자 없이
-  scene.add(cards(leafSpots, leafTexture(), "#3f7a4f", "#bfe3a0", sunDir, true, lit));
 
   // 꽃잎이 소복이 쌓인 느낌: 나무 밑에 옅은 분홍 깔개 (값싼 반투명 원)
   const inside = PROPS.filter((p): p is Extract<Prop, { kind: "tree" }> => p.kind === "tree");
