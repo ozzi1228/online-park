@@ -99,12 +99,13 @@ export class ParkAudio {
     if (!ctx || ctx.state !== "running") return;
     const L = this.levels, now = ctx.currentTime;
     const gust = clamp01((s.wind - 0.4) / 1.6);
-    this.set(this.wind.gain.gain, (L.wind / 100) * (0.12 + 0.45 * gust));
-    this.set(this.wind.filter.frequency, 280 + 900 * gust, 0.8);
-    const nearRiver = clamp01(1 - s.riverDist / 28) ** 1.6, nearFountain = clamp01(1 - s.fountainDist / 22) ** 2;
+    this.set(this.wind.gain.gain, (L.wind / 100) * (0.04 + 0.16 * gust)); // 바람은 배경에 살짝
+    this.set(this.wind.filter.frequency, 250 + 650 * gust, 0.8);
+    // 물가에 다가갈수록 확 커지게 (멀면 거의 안 들리고 가까우면 또렷)
+    const nearRiver = clamp01(1 - s.riverDist / 30) ** 2.2, nearFountain = clamp01(1 - s.fountainDist / 22) ** 2.2;
     const swell = 0.8 + 0.14 * Math.sin(now * 0.37) + 0.06 * Math.sin(now * 1.1); // 강물이 천천히 넘실
-    this.set(this.river.gain, (L.water / 100) * 0.5 * nearRiver * swell, 0.8);
-    this.set(this.fountain.gain, (L.water / 100) * 0.26 * nearFountain, 0.6);
+    this.set(this.river.gain, (L.water / 100) * 0.9 * nearRiver * swell, 0.8);
+    this.set(this.fountain.gain, (L.water / 100) * 0.45 * nearFountain, 0.6);
     this.set(this.trickle.gain, (L.water / 100) * Math.max(nearRiver * 0.5, nearFountain), 0.5);
     this.sfxBus.gain.value = L.sfx / 100;
     if (now > this.nextTrickle && (nearRiver > 0.02 || nearFountain > 0.02)) { // 졸졸·퐁: 물방울이 띄엄띄엄

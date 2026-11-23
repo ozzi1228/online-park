@@ -2,6 +2,7 @@
 // PC: ↑↓(W·S) 앞뒤로 걷기, ←→(A·D) 몸·시야 돌리기, 마우스로 끌어서 둘러보기, 클릭 = 탭, 우클릭 = 메뉴.
 // 모바일: 화면 아래쪽 어디든 누르면 그 자리에 조이스틱이 생김 — 위아래 = 앞뒤로 걷기, 좌우 = 돌기.
 //        위쪽에서 한 손가락으로 끌면 둘러보기, 짧게 톡 = 탭 (아래쪽에서 톡 해도 탭).
+//        앉아 있을 땐 조이스틱 없이 어디서든 끌면 둘러보기, 짧게 톡 = 일어나기.
 const FWD = ["ArrowUp", "KeyW"], BACK = ["ArrowDown", "KeyS"], LEFT = ["ArrowLeft", "KeyA"], RIGHT = ["ArrowRight", "KeyD"];
 const ALL = new Set([...FWD, ...BACK, ...LEFT, ...RIGHT]);
 const TAP_MS = 300, TAP_PX = 10;
@@ -21,6 +22,8 @@ export class Input {
   /** 마지막으로 화면을 만진 시각 (조이스틱을 잠시 숨겼다 보이게 할 때) */
   lastTouch = performance.now();
   get joyHeld() { return this.joyId !== null; }
+  /** 앉아 있는 동안: 조이스틱 대신 어디서든 끌면 둘러보기, 짧게 톡 = 탭(일어나기) */
+  seated = false;
   private joyId: number | null = null;
   private dx = 0; private dy = 0;
   private pts = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
@@ -46,7 +49,7 @@ export class Input {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (e.pointerType !== "mouse") this.lastTouch = performance.now();
       try { el.setPointerCapture(e.pointerId); } catch { /* 이미 뗀 포인터 */ }
-      if (this.touchDevice && e.pointerType !== "mouse" && this.joyId === null && e.clientY > window.innerHeight * JOY_AREA) {
+      if (this.touchDevice && e.pointerType !== "mouse" && !this.seated && this.joyId === null && e.clientY > window.innerHeight * JOY_AREA) {
         // 화면 아래쪽을 누르면 그 자리가 조이스틱 가운데
         this.joyId = e.pointerId; this.joyCenter = { x: e.clientX, y: e.clientY }; this.joyStart = { t: performance.now(), moved: false };
         joyMove(e.clientX, e.clientY); return;

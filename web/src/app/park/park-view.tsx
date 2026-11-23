@@ -194,7 +194,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
       const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
-      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 250) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
+      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 320) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
       const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
       const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
@@ -416,6 +416,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       // 빈 곳을 톡: 모바일은 내 메뉴(앉기 등)를 열고, 메뉴가 떠 있으면 닫음 (PC는 우클릭)
       // 모바일은 할 수 있는 게 있을 때만 메뉴 (이동하려다 톡 닿을 때마다 "앉을 수 없어요"가 뜨지 않게)
+      if (coarse && st.sitting) { setMenu(null); stand(); return; } // 앉아 있을 때 빈 곳 톡 = 일어나기 (끌면 둘러보기)
       if (coarse && !menuOpen.current) { openMenu(tap, true); return; }
       setMenu(null);
     };
@@ -446,6 +447,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (c) { joyBase.current.style.left = `${c.x - JOY_R}px`; joyBase.current.style.top = `${c.y - JOY_R}px`; }
         knob.current.style.transform = c && k ? `translate(${k.x - c.x}px, ${k.y - c.y}px)` : "translate(0px, 0px)";
       }
+      inp.seated = coarse && st.sitting;
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       if (Math.hypot(forward, right) < 0.05) st.waitRelease = false; // 앉은 뒤엔 키를 한 번 뗐다 눌러야 일어남
       if (st.camTurn !== null) { // 벤치에 앉으면 시야가 벤치 앞쪽으로 천천히 돎
@@ -486,11 +488,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
           pos.x = np.x; pos.z = np.z;
-          // 벤치 앞에서 벤치 쪽으로 걸어 들어가면 앉음 (일어난 직후·남이 앉은 자리는 빼고)
-          if (forward > 0 && st.now - st.stoodAt > 1) {
+          // 벤치 쪽으로 걸어 들어가거나, 벤치를 등지고 뒷걸음질로 붙으면 앉음 (일어난 직후·남이 앉은 자리는 빼고)
+          if (st.now - st.stoodAt > 1) {
             const others = mp.colliders();
             const seat = BENCH_SEATS.filter((s) => Math.hypot(s.fx - pos.x, s.fz - pos.z) < 0.55
-              && Math.sin(yaw) * Math.sin(s.yaw) + Math.cos(yaw) * Math.cos(s.yaw) < -0.4
+              && (Math.sin(yaw) * Math.sin(s.yaw) + Math.cos(yaw) * Math.cos(s.yaw)) * Math.sign(forward) < -0.4
               && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45)
               && !catOn(s)) // 고양이가 앉은 자리는 비워 둠 (옆자리에 앉으면 고양이와 나란히)
               .sort((a, b) => Math.hypot(a.fx - pos.x, a.fz - pos.z) - Math.hypot(b.fx - pos.x, b.fz - pos.z))[0];
