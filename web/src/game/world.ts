@@ -4,6 +4,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { OUTLINE, at, part, toon, toonGradient } from "./character";
 import { createSky } from "./sky";
 import { createRiver } from "./water";
+import { createFountain } from "./fountain";
 import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
@@ -377,17 +378,7 @@ function buildProp(p: Prop, root: THREE.Group, extras: THREE.Group, leafSpots: S
       box(1.3, floorH * 0.5, 0.5, STONE, 0, floorH * 0.25, postR * Math.cos(Math.PI / 8) + 0.3); // 디딤돌
       break;
     }
-    case "fountain": {
-      cyl(3, 3.1, 0.5, STONE, 0, 0.25, 0, 40);
-      const water = new THREE.Mesh(new THREE.CylinderGeometry(2.75 * S, 2.75 * S, 0.06, 40), new THREE.MeshToonMaterial({ color: "#9fd6ee", gradientMap: toonGradient() }));
-      extras.add(at(water, p.x, 0.48 * S, p.z));
-      cyl(0.35, 0.5, 1.4, STONE, 0, 0.9, 0, 20);
-      cyl(1.1, 0.4, 0.3, STONE, 0, 1.65, 0, 28);
-      // 물줄기: 위로 솟았다 떨어지는 반투명 기둥 (update에서 출렁임)
-      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.08 * S, 0.22 * S, 1.2 * S, 12, 1, true), new THREE.MeshBasicMaterial({ color: "#eaf7ff", transparent: true, opacity: 0.7 }));
-      jet.position.set(p.x, 2.3 * S, p.z); jet.name = "jet"; extras.add(jet);
-      break;
-    }
+    case "fountain": break; // fountain.ts에서 따로 만듦 (물·동전·물보라가 움직여서)
     case "wishTree": {
       add(new THREE.CylinderGeometry(0.35, 0.55, 2.4, 10), BARK, 0, 1.2, 0, 0.02);
       for (let i = 0; i < 5; i++) {
@@ -543,8 +534,10 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   // 나무·소품
   const spots: Spot[] = [], leafSpots: Spot[] = [];
   const statics = new THREE.Group(), extras = new THREE.Group();
+  let fountain: ReturnType<typeof createFountain> | null = null;
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
     if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -40 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
+    else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
     else buildProp(p, statics, extras, leafSpots);
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로
@@ -592,11 +585,13 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   });
   scene.add(falling);
 
-  const jet = extras.getObjectByName("jet");
 
   return {
     /** focus = 내 캐릭터 위치(그림자·꽃잎이 따라옴), walking = 걷는 중이면 발밑 꽃잎을 흩뜨림 */
+    /** 분수에 던진 동전이 바닥에 남음 */
+    addCoin: (x: number, z: number) => fountain?.addCoin(x, z),
     update(t: number, dt: number, focus: THREE.Vector3, walking = false, yaw = 0) {
+      fountain?.update(t, dt, fog);
       sky.update(t, focus);
       sun.position.copy(focus).addScaledVector(sky.lightDir, 45); sun.target.position.copy(focus);
       const wind = 0.4 + Math.max(0, Math.sin(t * 0.25)) ** 4 * 1.6; // 가끔 바람이 셈
@@ -615,7 +610,6 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
       falling.instanceMatrix.needsUpdate = true;
       field.update(dt, focus, walking, yaw, wind);
       river.update(t, fog);
-      if (jet) jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
       return wind;
     },
   };

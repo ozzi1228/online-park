@@ -89,7 +89,7 @@ export class CoinToss {
   private ring: THREE.Mesh;
   private from = new THREE.Vector3(); private to = new THREE.Vector3();
   private t = -1;
-  onSplash?: () => void;
+  onSplash?: (at: THREE.Vector3) => void;
 
   constructor() {
     this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 18), new THREE.MeshBasicMaterial({ color: "#f2c94c" }));
@@ -114,7 +114,7 @@ export class CoinToss {
       this.coin.position.y += Math.sin(Math.PI * k) * 1.8; // 포물선
       this.coin.rotation.x += dt * 18;
     } else if (this.t < FLY + SPLASH) {
-      if (this.coin.visible) { this.coin.visible = false; this.ring.visible = true; this.ring.position.copy(this.to).add(new THREE.Vector3(0, 0.02, 0)); this.onSplash?.(); }
+      if (this.coin.visible) { this.coin.visible = false; this.ring.visible = true; this.ring.position.copy(this.to).add(new THREE.Vector3(0, 0.02, 0)); this.onSplash?.(this.to); }
       const k = (this.t - FLY) / SPLASH;
       this.ring.scale.setScalar(1 + k * 5);
       (this.ring.material as THREE.MeshBasicMaterial).opacity = 1 - k;

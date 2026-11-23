@@ -271,7 +271,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       coin.throw(new THREE.Vector3(pos.x, footY + 1.1, pos.z), FOUNTAIN); audio.jingle();
       refreshMe.current();
     };
-    coin.onSplash = () => { audio.plop(); setTimeout(() => audio.chime(), 400); st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
+    coin.onSplash = (at) => { world.addCoin(at.x, at.z); audio.plop(); setTimeout(() => audio.chime(), 400); st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
     // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
     treeApi.current = {
       start: (strokes, covered) => {
