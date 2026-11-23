@@ -5,7 +5,7 @@ import "./globals.css";
 const gowun = Gowun_Dodum({ weight: "400", subsets: ["latin"], variable: "--font-gowun" });
 
 export const metadata: Metadata = {
-  title: "사이버 벚꽃 놀이",
+  title: "온라인 벚꽃놀이",
   description: "사람 많은 데 가지 말고, 온라인으로 벚꽃 구경해요.",
   icons: { icon: "/logo.png" },
 };

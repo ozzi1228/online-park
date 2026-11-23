@@ -5,6 +5,7 @@ import { OUTLINE, at, part, toon, toonGradient } from "./character";
 import { createSky } from "./sky";
 import { createRiver } from "./water";
 import { createFountain } from "./fountain";
+import { createCity } from "./city";
 import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
@@ -524,15 +525,8 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, -7.9);
   const bank = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
   const river = createRiver(scene, sky.uniforms, { y: -0.75, z: -24.2, width: 32, bankZ: -8.2 });
-  flat(new THREE.PlaneGeometry(400, 30), "#bfdea2", 0, -0.3, -55);
-  {
-    const city = new THREE.Group();
-    for (let x = -150; x <= 150; x += 6 + Math.random() * 5) {
-      const h = 8 + Math.random() * 26, w = 5 + Math.random() * 5;
-      city.add(at(part(new THREE.BoxGeometry(w, h, 5), ["#cfc6e2", "#d9cfe8", "#c4cbe3"][Math.floor(Math.random() * 3)], 0), x, h / 2 - 0.3, -66 - Math.random() * 10));
-    }
-    scene.add(bake(city, false));
-  }
+  flat(new THREE.PlaneGeometry(520, 150), "#bfdea2", 0, -0.3, -115); // 강 건너 땅 (도시 아래까지)
+  const city = createCity(scene, sky.uniforms, fog); // 강 건너 도시·산·다리 (city.ts)
 
   // 난간 (강 쪽 경계)
   {
@@ -620,6 +614,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
     addCoin: (x: number, z: number) => fountain?.addCoin(x, z),
     update(t: number, dt: number, focus: THREE.Vector3, walking = false, yaw = 0) {
       fountain?.update(t, dt, fog);
+      city.update(t);
       const on = THREE.MathUtils.smoothstep(sky.uniforms.night.value, 0.15, 0.6); // 해 질 녘부터 서서히
       for (const l of lanterns) {
         const flick = 1 + Math.sin(t * 7.3 + l.ph) * 0.03 + Math.sin(t * 13.1 + l.ph * 2) * 0.02; // 초롱불 살짝 일렁임

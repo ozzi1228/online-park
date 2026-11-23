@@ -83,7 +83,7 @@ export const PROPS = buildProps();
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
   // 강 건너: 물가부터 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃)
-  for (const [z0, step, s0] of [[-42.5, 6.5, 1.25], [-47, 7, 1.45], [-52, 7.5, 1.65]] as const)
+  for (const [z0, step, s0] of [[-42.5, 6.5, 1.1], [-47, 7, 1.25], [-52, 7.5, 1.4]] as const)
     for (let x = -105 + r() * step; x <= 105; x += step * (0.85 + r() * 0.3))
       out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
   for (let x = -90; x <= 90; x += 10) out.push({ kind: "tree", x: x + r() * 3, z: 35 + r() * 5, s: 1 + r() * 0.2, inside: false });   // 남쪽 뒤
