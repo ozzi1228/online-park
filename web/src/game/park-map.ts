@@ -10,6 +10,8 @@ export const PROP_S = 1.5;
 
 // 팔각정: 꼭짓점 각도 θ = π/8 + kπ/4, 위치 (R·sinθ, R·cosθ) → 남쪽(+z) 한 면이 입구
 export const PAVILION = { postR: 2.3, floorR: 2.5, floorH: 0.35 }; // PROP_S 곱하기 전 값
+/** 정자 입구가 있는 변: 꼭짓점 k→k+1 (3 = 북쪽, 공원 입구 길에서 오면 바로 정면) */
+export const PAVILION_DOOR = 3;
 export const pavilionCorner = (k: number, r: number) => {
   const a = Math.PI / 8 + (k * Math.PI) / 4;
   return [r * Math.sin(a), r * Math.cos(a)] as const;
@@ -46,7 +48,7 @@ function buildProps(): Prop[] {
     { kind: "booth", x: -50, z: 5.4, yaw: 0 },          // 안내소: 입구 길을 바라봄
     { kind: "npc", x: -50, z: 6.85, yaw: 0 },           // 안내원: 안내소 안, 창구로 얼굴을 살짝 내밂 (비스듬히 봐도 보이게)
     { kind: "kiosk", x: 12, z: 2.5, yaw: Math.PI },     // 매점: 산책로를 바라봄
-    { kind: "pavilion", x: -22, z: 15, yaw: 0 },        // 정자 (입구는 남쪽)
+    { kind: "pavilion", x: -22, z: 15, yaw: 0 },        // 정자 (입구는 북쪽 = 입구 길에서 다가오는 쪽)
     { kind: "fountain", x: PLAZA.x, z: PLAZA.z, yaw: 0 },
     { kind: "wishTree", x: PLAZA.x, z: PLAZA.z + 7.5, yaw: 0 },
   ];
@@ -115,7 +117,7 @@ function buildColliders(): Collider[] {
       for (let k = 0; k < 8; k++) {
         const [x0, z0] = pavilionCorner(k, PAVILION.postR * S), [x1, z1] = pavilionCorner(k + 1, PAVILION.postR * S);
         circle(p.x + x0, p.z + z0, 0.16 * S);
-        if (k === 7) continue; // 꼭짓점 7→0 사이가 입구
+        if (k === PAVILION_DOOR) continue; // 꼭짓점 3→4 사이(북쪽)가 입구
         for (let i = 1; i < 6; i++) circle(p.x + x0 + ((x1 - x0) * i) / 6, p.z + z0 + ((z1 - z0) * i) / 6, 0.12);
       }
     }

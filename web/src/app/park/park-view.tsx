@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, type Mode } from "@/game/character";
@@ -579,6 +579,19 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
   }, [presetId]);
 
+  // 열린 창 닫기: Esc 키, 또는 창 바깥(어두운 곳)을 누르면
+  const closePanels = useCallback(() => {
+    setPanel((p) => { if (p === "inbox") refreshMe.current(); return null; });
+    setTreeDetail(null);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      closePanels();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closePanels]);
   const miniOpen = miniPref ?? !touch; // 모바일은 화면이 좁아 미니맵을 접어 둔 채 시작
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
@@ -650,6 +663,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             {treeMode === "ready" && <button onClick={() => treeApi.current?.confirm()} className="rounded-full bg-sakura px-5 py-1.5 text-sm text-white">여기에 달기</button>}
           </div>
         </div>
+      )}
+      {(panel || treeDetail) && ( // 창 바깥: 누르면 닫힘 (모바일은 바깥 터치, PC는 바깥 클릭)
+        <div aria-hidden className="absolute inset-0 z-10 bg-black/10" onPointerDown={(e) => { e.preventDefault(); closePanels(); }} />
       )}
       {treeDetail && <TreeNotePanel note={treeDetail} sheets={me?.items.noteSheets ?? 0} onClose={() => setTreeDetail(null)}
         onChanged={(msg) => { sayRef.current(msg); setTreeDetail(null); treeApi.current?.refresh(); mpRef.current?.notifyTree(); refreshMe.current(); }} />}

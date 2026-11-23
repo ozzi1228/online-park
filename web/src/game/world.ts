@@ -6,7 +6,7 @@ import { createSky } from "./sky";
 import { createRiver } from "./water";
 import { createFountain } from "./fountain";
 import { createCity } from "./city";
-import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
+import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PAVILION_DOOR, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
 export const QUALITY_HIGH: Quality = { cards: 38, groundPetals: 16000, fallingPetals: 900, shadow: 2048, pixelRatio: 2 };
@@ -358,14 +358,14 @@ function buildProp(p: Prop, root: THREE.Group) {
         const len = Math.hypot(x1 - x0, z1 - z0), yaw = Math.atan2(x1 - x0, z1 - z0), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
         box(0.16, 0.2, len, DAN_GREEN, mx, top - 0.1, mz).rotation.y = yaw;    // 위 도리
         box(0.12, 0.1, len, DAN_RED, mx, top - 0.26, mz).rotation.y = yaw;
-        if (k === 7) continue;                                               // 남쪽 입구는 난간 없음
+        if (k === PAVILION_DOOR) continue;                                   // 입구 쪽은 난간 없음
         box(0.07, 0.06, len, WOOD, mx, fy + 0.45, mz).rotation.y = yaw;      // 난간
         box(0.05, 0.05, len, WOOD, mx, fy + 0.12, mz).rotation.y = yaw;
         for (let i = 1; i < 5; i++) box(0.04, 0.33, 0.04, WOOD, x0 + ((x1 - x0) * i) / 5, fy + 0.28, z0 + ((z1 - z0) * i) / 5, 0.008);
       }
       add(hanokRoof(8, 7.6, 7.6, 1.6), GIWA, 0, top, 0, 0.022);
       cyl(0.06, 0.12, 0.35, "#3f434a", 0, top + 1.6, 0, 8); add(new THREE.SphereGeometry(0.12, 10, 8), "#3f434a", 0, top + 1.85, 0);
-      box(1.3, floorH * 0.5, 0.5, STONE, 0, floorH * 0.25, postR * Math.cos(Math.PI / 8) + 0.3); // 디딤돌
+      box(1.3, floorH * 0.5, 0.5, STONE, 0, floorH * 0.25, -(postR * Math.cos(Math.PI / 8) + 0.3)); // 디딤돌 (입구 앞, 북쪽)
       break;
     }
     case "fountain": break; // fountain.ts에서 따로 만듦 (물·동전·물보라가 움직여서)
