@@ -7,7 +7,7 @@ import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
 import { CatBrain, type CatState } from "@/game/cat-brain";
-import { Input, type Tap } from "@/game/controls";
+import { Input, JOY_R, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
 import { BENCH_SEATS, COLLIDERS, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
@@ -216,9 +216,6 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     placeCamera();
 
     const inp = new Input(renderer.domElement, coarse); input.current = inp;
-    // 모바일 조이스틱 자리: 화면의 조이스틱 동그라미 위치를 그대로
-    const joyZone = () => { const r = joyBase.current?.getBoundingClientRect(); return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 } : null; };
-    inp.joyZone = joyZone;
     const screen = new THREE.Vector3(), tapRay = new THREE.Raycaster();
     const drawMini = createMinimap(mini.current!);
     const mp = new Multiplayer(scene);
@@ -357,7 +354,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => joinMat(seat) });
-      items.push(...(st.sitting ? [{ label: "일어나기", run: () => actions.current!.stand() }]
+      items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? [{ label: "여기 앉기", run: () => actions.current!.sit() }]
         : [{ label: "여기선 앉을 수 없어요" }]));
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
@@ -442,12 +439,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
-      // 조이스틱: 3초 동안 안 만지면 살며시 숨김 (숨어 있어도 그 자리를 누르면 바로 잡힘)
-      if (joyBase.current) joyBase.current.style.opacity = inp.joyHeld || performance.now() - inp.lastTouch < 3000 ? "1" : "0";
-      // 조이스틱 손잡이 그리기 (잡은 손가락을 따라감)
-      if (knob.current) {
-        const z = joyZone(), k = inp.joyKnob;
-        knob.current.style.transform = z && k ? `translate(${k.x - z.x}px, ${k.y - z.y}px)` : "translate(0px, 0px)";
+      // 조이스틱: 누른 자리에 나타나고, 손을 떼면 사라짐 (손잡이는 엄지를 따라감)
+      if (joyBase.current && knob.current) {
+        const c = inp.joyCenter, k = inp.joyKnob;
+        joyBase.current.style.opacity = c ? "1" : "0";
+        if (c) { joyBase.current.style.left = `${c.x - JOY_R}px`; joyBase.current.style.top = `${c.y - JOY_R}px`; }
+        knob.current.style.transform = c && k ? `translate(${k.x - c.x}px, ${k.y - c.y}px)` : "translate(0px, 0px)";
       }
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       if (Math.hypot(forward, right) < 0.05) st.waitRelease = false; // 앉은 뒤엔 키를 한 번 뗐다 눌러야 일어남
@@ -623,7 +620,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "아래 동그라미를 밀어서 걷고 돌아요 · 화면을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
+          {touch ? "화면 아래쪽을 누른 채 밀면 걷고 돌아요 · 위쪽을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
@@ -687,7 +684,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
       {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
       {touch && (
-        <div ref={joyBase} aria-hidden className="pointer-events-none absolute bottom-8 left-1/2 grid -translate-x-1/2 transition-opacity duration-500 size-28 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
+        <div ref={joyBase} aria-hidden style={{ width: JOY_R * 2, height: JOY_R * 2, opacity: 0 }} className="pointer-events-none absolute grid transition-opacity duration-150 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
           <div ref={knob} className="size-12 rounded-full bg-cream/90 shadow-md ring-1 ring-black/5" />
         </div>
       )}
@@ -727,7 +724,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
   };
   const when = (s: string) => new Date(s).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
-    <section role="dialog" aria-label="쪽지함" className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-[min(100%,26rem)] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
+    <section role="dialog" aria-label="쪽지함" className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-auto max-w-[26rem] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
       <header className="flex items-center px-5 pt-4">
         <h2 className="text-lg">{open ? `${open.from ?? "누군가"}님의 쪽지` : "받은 쪽지"}</h2>
         {open && <button onClick={() => setOpen(null)} className="ml-3 text-sm underline opacity-70">목록</button>}
@@ -770,7 +767,7 @@ function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; s
     else alert(r?.reason === "no_sheet" ? "노트가 없어요" : "처리하지 못했어요");
   };
   return (
-    <section role="dialog" aria-label="소원 쪽지" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-[min(100%,22rem)] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+    <section role="dialog" aria-label="소원 쪽지" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[22rem] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
       <div className="flex w-full items-center">
         <h2 className="text-lg">{note.mine ? "내 소원 쪽지" : `${note.from ?? "누군가"}님의 소원`}</h2>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>

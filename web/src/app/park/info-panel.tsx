@@ -22,7 +22,7 @@ export function InfoPanel({ nickname, touch, onClose }: { nickname: string; touc
   }, []);
   return (
     <section role="dialog" aria-label="안내소"
-      className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-[min(100%,30rem)] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
+      className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-auto max-w-[30rem] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
       <header className="flex items-center gap-2 px-5 pt-4">
         <span className="text-2xl" aria-hidden>🙋‍♂️</span>
         <h2 className="text-lg">{NPC_NAME}</h2>

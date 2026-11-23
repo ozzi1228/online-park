@@ -66,7 +66,7 @@ export function NoteEditor({ title, sheets, busy, onSend, onCancel, coverOption 
   const up = () => { drawing.current = null; };
 
   return (
-    <section role="dialog" aria-label="쪽지 쓰기" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-[min(100%,24rem)] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+    <section role="dialog" aria-label="쪽지 쓰기" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[24rem] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
       <div className="flex w-full items-center">
         <h2 className="text-lg">{title}</h2>
         <span className="ml-auto text-xs opacity-60">노트 {sheets}장 남음</span>

@@ -1,21 +1,23 @@
 // 입력 (1인칭).
 // PC: ↑↓(W·S) 앞뒤로 걷기, ←→(A·D) 몸·시야 돌리기, 마우스로 끌어서 둘러보기, 클릭 = 탭, 우클릭 = 메뉴.
-// 모바일: 왼쪽 아래 조이스틱을 밀면 위아래 = 앞뒤로 걷기, 좌우 = 돌기. 그 밖에서 한 손가락으로 끌면 둘러보기, 짧게 톡 = 탭.
+// 모바일: 화면 아래쪽 어디든 누르면 그 자리에 조이스틱이 생김 — 위아래 = 앞뒤로 걷기, 좌우 = 돌기.
+//        위쪽에서 한 손가락으로 끌면 둘러보기, 짧게 톡 = 탭 (아래쪽에서 톡 해도 탭).
 const FWD = ["ArrowUp", "KeyW"], BACK = ["ArrowDown", "KeyS"], LEFT = ["ArrowLeft", "KeyA"], RIGHT = ["ArrowRight", "KeyD"];
 const ALL = new Set([...FWD, ...BACK, ...LEFT, ...RIGHT]);
 const TAP_MS = 300, TAP_PX = 10;
 
 export type Tap = { x: number; y: number; menu: boolean };
-/** 조이스틱 자리 (화면 좌표): 가운데와 반지름 */
-export type JoyZone = { x: number; y: number; r: number };
+/** 조이스틱 반지름(px)과 생기는 영역: 화면 높이의 이 비율보다 아래를 누르면 조이스틱 */
+export const JOY_R = 56, JOY_AREA = 0.5;
 
 export class Input {
   keys = new Set<string>();
   joy = { x: 0, y: 0 }; // -1~1, x는 오른쪽 +, y는 화면 아래 +
   /** 조이스틱을 잡고 있는 동안 손가락 위치 (그리기용, 안 잡으면 null) */
   joyKnob: { x: number; y: number } | null = null;
-  /** 화면이 알려주는 조이스틱 자리 (모바일에서만) */
-  joyZone: (() => JoyZone | null) | null = null;
+  /** 조이스틱 가운데 (누른 자리, 잡고 있을 때만) */
+  joyCenter: { x: number; y: number } | null = null;
+  private joyStart = { t: 0, moved: false };
   /** 마지막으로 화면을 만진 시각 (조이스틱을 잠시 숨겼다 보이게 할 때) */
   lastTouch = performance.now();
   get joyHeld() { return this.joyId !== null; }
@@ -31,20 +33,23 @@ export class Input {
     const up = (e: KeyboardEvent) => this.keys.delete(e.code);
     const blur = () => { this.keys.clear(); this.pts.clear(); this.releaseJoy(); };
     const joyMove = (x: number, y: number) => {
-      const z = this.joyZone?.(); if (!z) return;
-      let vx = (x - z.x) / z.r, vy = (y - z.y) / z.r; const l = Math.hypot(vx, vy);
+      const c = this.joyCenter; if (!c) return;
+      let vx = (x - c.x) / JOY_R, vy = (y - c.y) / JOY_R; const l = Math.hypot(vx, vy);
       if (l > 1) { vx /= l; vy /= l; }
-      const dead = (v: number) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88); // 살짝 건드린 건 무시
-      this.joy = { x: dead(vx), y: dead(vy) };
-      this.joyKnob = { x: z.x + vx * z.r, y: z.y + vy * z.r };
+      if (l * JOY_R > TAP_PX) this.joyStart.moved = true;
+      // 살짝 건드린 건 무시하고, 반지름의 55%만 밀어도 제 속도 (엄지를 조금만 움직여도 시원하게 걷게)
+      const m = Math.min(1, Math.max(0, (Math.min(l, 1) - 0.12) / 0.43)), k = l > 0 ? m / Math.min(l, 1) : 0;
+      this.joy = { x: vx * k, y: vy * k };
+      this.joyKnob = { x: c.x + vx * JOY_R, y: c.y + vy * JOY_R };
     };
     const pdown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (e.pointerType !== "mouse") this.lastTouch = performance.now();
       try { el.setPointerCapture(e.pointerId); } catch { /* 이미 뗀 포인터 */ }
-      const z = this.touchDevice && e.pointerType !== "mouse" ? this.joyZone?.() : null;
-      if (z && this.joyId === null && Math.hypot(e.clientX - z.x, e.clientY - z.y) < z.r * 1.5) { // 조이스틱 (조금 넉넉하게 잡힘)
-        this.joyId = e.pointerId; joyMove(e.clientX, e.clientY); return;
+      if (this.touchDevice && e.pointerType !== "mouse" && this.joyId === null && e.clientY > window.innerHeight * JOY_AREA) {
+        // 화면 아래쪽을 누르면 그 자리가 조이스틱 가운데
+        this.joyId = e.pointerId; this.joyCenter = { x: e.clientX, y: e.clientY }; this.joyStart = { t: performance.now(), moved: false };
+        joyMove(e.clientX, e.clientY); return;
       }
       this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
     };
@@ -57,7 +62,11 @@ export class Input {
       if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_PX) { const n = this.pts.size; this.dx += mx / n; this.dy += my / n; } // 끌기 = 둘러보기
     };
     const pup = (e: PointerEvent) => {
-      if (e.pointerId === this.joyId) { this.releaseJoy(); return; }
+      if (e.pointerId === this.joyId) {
+        // 밀지 않고 짧게 톡 = 탭 (아래쪽에 있는 벤치·사람 등도 누를 수 있게)
+        if (!this.joyStart.moved && performance.now() - this.joyStart.t < TAP_MS) this.taps.push({ x: e.clientX, y: e.clientY, menu: false });
+        this.releaseJoy(); return;
+      }
       const p = this.pts.get(e.pointerId);
       this.pts.delete(e.pointerId);
       if (p && performance.now() - p.t < TAP_MS && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < TAP_PX && this.pts.size === 0)
@@ -73,7 +82,7 @@ export class Input {
     );
   }
 
-  private releaseJoy() { this.joyId = null; this.joy = { x: 0, y: 0 }; this.joyKnob = null; }
+  private releaseJoy() { this.joyId = null; this.joy = { x: 0, y: 0 }; this.joyKnob = null; this.joyCenter = null; }
   private any(codes: string[]) { return codes.some((c) => this.keys.has(c)) ? 1 : 0; }
 
   /** forward: 앞(+)/뒤(-), right: 오른쪽으로 돌기(+) */
