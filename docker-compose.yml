@@ -2,6 +2,7 @@
 services:
   db:
     image: postgres:17
+    restart: unless-stopped   # PC·Docker를 다시 켜도 DB가 저절로 켜짐
     environment:
       POSTGRES_USER: sakura
       POSTGRES_PASSWORD: sakura
