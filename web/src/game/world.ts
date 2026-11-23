@@ -16,10 +16,14 @@ const BARK = "#7d5646", WOOD = "#cf9f73", STONE = "#e8dccb";
 // ---------- 정적 물체 합치기: 수백 개 부품을 색 정보 담은 메시 몇 개로 (그리기 호출 수 줄이기) ----------
 function bake(root: THREE.Object3D, castShadow = true) {
   root.updateMatrixWorld(true);
-  const fills: THREE.BufferGeometry[] = [], lines = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const fills: THREE.BufferGeometry[] = [], barks: THREE.BufferGeometry[] = [], lines = new Map<THREE.Material, THREE.BufferGeometry[]>();
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
     const g = o.geometry.clone();
+    if (o.userData.bark) { // 나무껍질: 무늬 텍스처를 한 장으로 같이 씀 (그리기 1번)
+      for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") g.deleteAttribute(k);
+      barks.push(g.applyMatrix4(o.matrixWorld)); return;
+    }
     for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
     g.applyMatrix4(o.matrixWorld);
     const m = o.material as THREE.MeshBasicMaterial;
@@ -34,6 +38,10 @@ function bake(root: THREE.Object3D, castShadow = true) {
     const mesh = new THREE.Mesh(mergeGeometries(fills), new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() }));
     mesh.castShadow = castShadow; mesh.receiveShadow = true; group.add(mesh);
   }
+  if (barks.length) {
+    const mesh = new THREE.Mesh(mergeGeometries(barks), new THREE.MeshToonMaterial({ map: barkTexture(), gradientMap: toonGradient() }));
+    mesh.castShadow = castShadow; mesh.receiveShadow = true; group.add(mesh);
+  }
   for (const [mat, gs] of lines) group.add(new THREE.Mesh(mergeGeometries(gs), mat));
   root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
   return group;
@@ -46,23 +54,96 @@ function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D) => 
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
-// 가운데 분홍 → 끝 흰색인 다섯 잎 꽃 여러 송이
-const blossomTexture = () => canvasTex(256, 256, (x) => {
-  for (let i = 0; i < 22; i++) {
-    const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 92;
-    const cx = 128 + Math.cos(a) * d, cy = 128 + Math.sin(a) * d, s = 16 + Math.random() * 14, rot = Math.random() * 6.28;
-    const gr = x.createRadialGradient(cx, cy, 0, cx, cy, s * 1.2);
-    gr.addColorStop(0, "#ff9fbb"); gr.addColorStop(0.45, "#ffe3eb"); gr.addColorStop(1, "#ffffff");
+// 꽃송이 덩어리: 끝이 살짝 파인 하트 꽃잎 다섯 장, 가운데로 갈수록 분홍, 실처럼 가는 꽃술.
+// 뒤쪽 송이는 살짝 어둡게 먼저 그려서 겹친 깊이감
+const blossomTexture = () => canvasTex(512, 512, (x) => {
+  x.lineCap = "round";
+  const flower = (cx: number, cy: number, s: number, rot: number, shade: number) => {
+    const tip = `rgb(${255 - shade * 8},${253 - shade * 16},${254 - shade * 12})`;
     for (let k = 0; k < 5; k++) {
-      const pa = rot + k * 1.2566;
-      x.save(); x.translate(cx + Math.cos(pa) * s * 0.55, cy + Math.sin(pa) * s * 0.55); x.rotate(pa);
-      x.fillStyle = gr; x.beginPath(); x.ellipse(0, 0, s * 0.6, s * 0.42, 0, 0, 7); x.fill();
-      x.globalCompositeOperation = "destination-out"; x.beginPath(); x.arc(s * 0.62, 0, s * 0.1, 0, 7); x.fill();
-      x.restore(); x.globalCompositeOperation = "source-over";
+      const pa = rot + k * 1.2566 + (Math.random() - 0.5) * 0.18, ps = s * (0.92 + Math.random() * 0.16);
+      x.save(); x.translate(cx, cy); x.rotate(pa);
+      const gr = x.createLinearGradient(0, 0, ps * 1.15, 0);
+      gr.addColorStop(0, "#f7aec3"); gr.addColorStop(0.3, "#fde0e8"); gr.addColorStop(0.75, tip); gr.addColorStop(1, tip);
+      x.fillStyle = gr;
+      // 하트 꽃잎: 밑동은 좁고 끝은 넓으며 가운데가 살짝 파임
+      x.beginPath(); x.moveTo(0, 0);
+      x.bezierCurveTo(ps * 0.35, -ps * 0.5, ps * 1.05, -ps * 0.55, ps * 1.12, -ps * 0.14);
+      x.quadraticCurveTo(ps * 0.98, -ps * 0.02, ps * 1.02, 0);
+      x.quadraticCurveTo(ps * 0.98, ps * 0.02, ps * 1.12, ps * 0.14);
+      x.bezierCurveTo(ps * 1.05, ps * 0.55, ps * 0.35, ps * 0.5, 0, 0);
+      x.fill();
+      x.strokeStyle = "rgba(214,120,150,0.28)"; x.lineWidth = 1.1; x.stroke(); // 꽃잎 가장자리
+      x.strokeStyle = "rgba(240,150,175,0.22)"; x.lineWidth = 0.8;           // 잎맥
+      for (const v of [-0.18, 0, 0.18]) { x.beginPath(); x.moveTo(ps * 0.2, 0); x.quadraticCurveTo(ps * 0.6, v * ps * 0.6, ps * 0.92, v * ps * 1.1); x.stroke(); }
+      x.restore();
     }
-    x.fillStyle = "#e8628a"; x.beginPath(); x.arc(cx, cy, s * 0.13, 0, 7); x.fill();
+    // 가운데 은은한 붉은 기 + 가는 꽃술 (점처럼 다닥다닥 말고 실처럼)
+    const cg = x.createRadialGradient(cx, cy, 0, cx, cy, s * 0.34);
+    cg.addColorStop(0, "rgba(226,110,145,0.5)"); cg.addColorStop(1, "rgba(247,174,195,0)");
+    x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, s * 0.34, 0, 7); x.fill();
+    const n = 9 + Math.floor(Math.random() * 5);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * 6.28 + Math.random() * 0.4, l = s * (0.3 + Math.random() * 0.18);
+      const ex = cx + Math.cos(a) * l, ey = cy + Math.sin(a) * l;
+      x.strokeStyle = "rgba(225,135,165,0.55)"; x.lineWidth = 0.8; x.beginPath(); x.moveTo(cx, cy); x.lineTo(ex, ey); x.stroke();
+      x.fillStyle = "rgba(242,206,140,0.8)"; x.beginPath(); x.arc(ex, ey, 0.9, 0, 7); x.fill(); // 꽃밥
+    }
+  };
+  // 송이(2~4송이씩 모임)를 흩뿌림: 뒤(어둡게) → 앞(밝게)
+  for (let layer = 2; layer >= 0; layer--) {
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * 6.28, d = Math.sqrt(Math.random()) * 175;
+      const gx = 256 + Math.cos(a) * d, gy = 256 + Math.sin(a) * d, m = 2 + Math.floor(Math.random() * 3);
+      for (let j = 0; j < m; j++) {
+        const s = 22 + Math.random() * 12;
+        flower(gx + (Math.random() - 0.5) * s * 1.6, gy + (Math.random() - 0.5) * s * 1.6, s, Math.random() * 6.28, layer);
+      }
+    }
   }
 });
+// 나무껍질: 갈색 바탕에 세로 결 + 벚나무 특유의 가로 숨구멍 줄무늬 + 옹이 (위아래·좌우로 이어짐)
+const barkTexture = () => {
+  const t = canvasTex(256, 512, (x) => {
+    x.fillStyle = "#7d5646"; x.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 70; i++) { // 세로 결
+      const px = Math.random() * 256, py = Math.random() * 512, w = 2 + Math.random() * 6, h = 40 + Math.random() * 140;
+      x.fillStyle = Math.random() < 0.5 ? "rgba(60,36,28,0.22)" : "rgba(160,120,100,0.16)";
+      for (const ox of [0, 256, -256]) for (const oy of [0, 512, -512]) { x.beginPath(); x.ellipse(px + ox, py + oy, w, h, 0, 0, 7); x.fill(); }
+    }
+    for (let i = 0; i < 90; i++) { // 가로 숨구멍
+      const px = Math.random() * 256, py = 4 + Math.random() * 504, w = 6 + Math.random() * 12;
+      for (const ox of [0, 256, -256]) {
+        x.fillStyle = "rgba(55,30,24,0.55)"; x.beginPath(); x.ellipse(px + ox, py, w, 1.6, 0, 0, 7); x.fill();
+        x.fillStyle = "rgba(190,150,128,0.35)"; x.beginPath(); x.ellipse(px + ox, py + 2.2, w * 0.8, 0.9, 0, 0, 7); x.fill();
+      }
+    }
+    for (let i = 0; i < 3; i++) { // 옹이
+      const px = 30 + Math.random() * 196, py = 40 + Math.random() * 432;
+      x.strokeStyle = "rgba(55,30,24,0.5)"; x.lineWidth = 2.5;
+      x.beginPath(); x.ellipse(px, py, 9, 14, 0, 0, 7); x.stroke();
+      x.fillStyle = "rgba(50,28,22,0.6)"; x.beginPath(); x.ellipse(px, py, 4, 7, 0, 0, 7); x.fill();
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+};
+/** 나무 기둥: 울퉁불퉁 + 밑동은 뿌리처럼 갈라져 퍼짐 + 살짝 휨. uv는 실제 크기(1m ≈ 텍스처 반 장)에 맞춤 */
+function trunkGeo(r0: number, r1: number, h: number, seed: number) {
+  const g = new THREE.CylinderGeometry(r0, r1, h, 18, 10);
+  const pos = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), t = y / h + 0.5, a = Math.atan2(z, x);
+    const lump = 1 + 0.07 * Math.sin(a * 3 + seed + t * 4) + 0.05 * Math.sin(a * 7 - seed * 2 + t * 9);
+    const root = t < 0.22 ? 1 + ((0.22 - t) / 0.22) ** 1.6 * (0.35 + 0.55 * Math.max(0, Math.cos(a * 5 + seed))) : 1; // 뿌리 갈래
+    const k = lump * root;
+    pos.setXYZ(i, x * k + Math.sin(t * 2.4 + seed) * 0.08 * t, y, z * k + Math.cos(t * 2.1 + seed) * 0.06 * t);
+    uv.setXY(i, uv.getX(i) * Math.max(1, Math.round((r0 + r1) * Math.PI)), uv.getY(i) * h * 0.5);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const barkPart = (geo: THREE.BufferGeometry, t = 0.03) => { const m = part(geo, BARK, t); m.userData.bark = true; return m; };
 // 초록 소원나무 잎 덩어리
 const leafTexture = () => canvasTex(256, 256, (x) => {
   for (let i = 0; i < 28; i++) {
@@ -93,12 +174,13 @@ function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: 
   let n = Math.floor(Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233)) * 2147483646) + 1;
   const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
   const FORK = 2.9;
-  g.add(at(part(new THREE.CylinderGeometry(0.34, 0.55, FORK + 0.3, 10), BARK, 0.03), 0, (FORK + 0.3) / 2, 0));
-  g.add(at(part(new THREE.CylinderGeometry(0.55, 0.8, 0.5, 10), BARK, 0.03), 0, 0.25, 0)); // 뿌리 쪽 퍼짐
+  g.add(at(barkPart(trunkGeo(0.34, 0.6, FORK + 0.3, n % 7)), 0, (FORK + 0.3) / 2, 0)); // 울퉁불퉁한 기둥 + 뿌리
   const puffs: [THREE.Vector3, number][] = [];
   const up = new THREE.Vector3(0, 1, 0), base = new THREE.Vector3(0, FORK, 0);
   const limb = (dir: THREE.Vector3, len: number, r0: number) => {
-    const b = part(new THREE.CylinderGeometry(r0 * 0.25, r0, len, 7, 1, true), BARK, 0.02);
+    const geo = new THREE.CylinderGeometry(r0 * 0.25, r0, len, 9, 3, true), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), uv.getY(i) * len * 0.5);
+    const b = barkPart(geo, 0.02);
     b.quaternion.setFromUnitVectors(up, dir); b.position.copy(base).addScaledVector(dir, len / 2); g.add(b);
   };
   for (let i = 0; i < 7; i++) { // 옆으로 뻗는 큰 가지
@@ -452,8 +534,8 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
   scene.add(bake(statics), extras);
   const btex = blossomTexture();
-  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#e597ae", "#fff6f8", sunDir, true));
-  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#e597ae", "#fff6f8", sunDir, false)); // 맵 밖 나무는 그림자 없이
+  scene.add(cards(spots.filter((s) => s.k === q.cards), btex, "#eaa6ba", "#fffafb", sunDir, true));
+  scene.add(cards(spots.filter((s) => s.k !== q.cards), btex, "#eaa6ba", "#fffafb", sunDir, false)); // 맵 밖 나무는 그림자 없이
   scene.add(cards(leafSpots, leafTexture(), "#3f7a4f", "#bfe3a0", sunDir, true));
 
   // 꽃잎이 소복이 쌓인 느낌: 나무 밑에 옅은 분홍 깔개 (값싼 반투명 원)
