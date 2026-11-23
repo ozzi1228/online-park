@@ -15,7 +15,7 @@ import { InfoPanel } from "./info-panel";
 import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
-import { makeMat, placeMat } from "@/game/mat";
+import { makeMat, matFits, placeMat } from "@/game/mat";
 import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
@@ -133,9 +133,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
     const scene = new THREE.Scene();
     // ?hour=19 처럼 주면 그 시각 하늘로 고정 (확인용)
-    const hourParam = Number(new URLSearchParams(location.search).get("hour"));
-    const skyHour = Number.isFinite(hourParam) && location.search.includes("hour=") ? hourParam % 24 : undefined;
-    const world = buildWorld(scene, q, skyHour);
+    // 시간 미리보기 (관리자 화면에서 엶): ?time=HH:MM 또는 ?hour=13.5, ?date=YYYY-MM-DD
+    const qs = new URLSearchParams(location.search);
+    const tm = /^(\d{1,2}):(\d{2})$/.exec(qs.get("time") ?? ""), hourParam = Number(qs.get("hour"));
+    const skyHour = tm ? (Number(tm[1]) + Number(tm[2]) / 60) % 24 : qs.has("hour") && Number.isFinite(hourParam) ? hourParam % 24 : undefined;
+    const dateMs = /^\d{4}-\d{2}-\d{2}$/.test(qs.get("date") ?? "") ? Date.parse(`${qs.get("date")}T12:00:00+09:00`) : NaN;
+    const world = buildWorld(scene, q, skyHour, Number.isFinite(dateMs) ? dateMs : undefined);
     const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0];
     const me = makeChar(preset);
     me.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
@@ -173,6 +176,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
+    let baseFov = 60;
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
       // 1인칭: 내 눈 높이에서 바로 (지연·흔들림 없이 = 멀미 덜함)
@@ -188,6 +192,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         look.lerp(new THREE.Vector3(at.x, at.y + 0.95 - low, at.z), f);
       }
       camPos.copy(eye); camLook.copy(look);
+      // 벤치에 앉으면 살짝 줌인 → 강물과 건너편 벚꽃이 더 크게
+      const wantFov = baseFov * (st.bench && showMe < 0.5 ? 0.78 : 1);
+      if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * 0.08; camera.updateProjectionMatrix(); }
       camera.position.copy(camPos); camera.lookAt(camLook);
     };
     placeCamera();
@@ -224,8 +231,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         st.sitting = true; st.wishUntil = 0; setSitting(true); inp.setSteer(false);
         camYaw = yaw;
         // 돗자리가 있으면 잔디밭에선 깔고 앉음 (정자 마루에선 그냥 앉음)
-        st.onMat = !!meRef.current?.items.mat && groundY(pos.x, pos.z) === 0;
+        // 돗자리는 통째로 잔디 위일 때만 (길·광장에 걸치면 그냥 앉음)
+        const hasMat = !!meRef.current?.items.mat;
+        st.onMat = hasMat && matFits(pos.x, pos.z, yaw);
         if (st.onMat) { placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
+        else if (hasMat) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요");
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
@@ -391,7 +401,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const fit = () => {
       const w = el.clientWidth, h = el.clientHeight;
       renderer.setSize(w, h); camera.aspect = w / h;
-      camera.fov = w / h < 0.8 ? 72 : 60; camera.updateProjectionMatrix();
+      baseFov = w / h < 0.8 ? 72 : 60; camera.fov = baseFov; camera.updateProjectionMatrix();
     };
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
@@ -462,7 +472,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           // 사다리 앞에서 나무 쪽으로 걸어 들어가면 쪽지 쓰기 (한 번 뜨면 1.5m 떨어졌다 와야 다시)
           const ld = Math.hypot(pos.x - LADDER_FOOT.x, pos.z - LADDER_FOOT.z);
           if (ld > 1.5) st.ladderArmed = true;
-          else if (st.ladderArmed && forward > 0 && ld < 0.55 && Math.cos(yaw) < -0.6) { st.ladderArmed = false; openTreeEditor(); }
+          else if (st.ladderArmed && forward > 0 && ld < 0.55 && Math.sin(yaw) > 0.6) { st.ladderArmed = false; openTreeEditor(); }
           if (!moved) { moved = true; setHint(false); }
         }
       }

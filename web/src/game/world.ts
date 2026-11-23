@@ -398,11 +398,12 @@ function buildProp(p: Prop, root: THREE.Group) {
           }
         }
       }
-      // 사다리: 분수 반대편(광장 바깥쪽)에 기대어 둠 → 넓은 쪽에서 다가가 오르기 쉽게
+      // 사다리: 광장으로 들어오는 서쪽에 기대어 둠 → 다가오면 바로 보임
+      const ladRoot = new THREE.Group(); ladRoot.rotation.y = -Math.PI / 2; g.add(ladRoot);
       const lad = new THREE.Group(); lad.position.set(0, 0, 1.0); lad.rotation.x = -0.25;
       for (const s of [-1, 1]) lad.add(at(part(new THREE.BoxGeometry(0.06, 3.2, 0.06), WOOD, T), s * 0.25, 1.55, 0));
       for (let i = 0; i < 8; i++) lad.add(at(part(new THREE.BoxGeometry(0.5, 0.05, 0.05), WOOD, T), 0, 0.3 + i * 0.38, 0));
-      g.add(lad);
+      ladRoot.add(lad);
       break;
     }
   }
@@ -494,7 +495,7 @@ class PetalField {
 
 // ---------- 전체 ----------
 /** hour: 하늘 시각을 고정해서 보고 싶을 때 (예: ?hour=19) */
-export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
+export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs?: number) {
   const fog = new THREE.Fog(0xf7e3ea, 30, 110);
   scene.fog = fog;
   const hemi = new THREE.HemisphereLight(0xfff4ea, 0xc3b0e0, 1.3);
@@ -504,7 +505,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 90 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
   scene.add(sun, sun.target);
-  const sky = createSky(scene, sun, hemi, fog, hour);
+  const sky = createSky(scene, sun, hemi, fog, hour, dateMs);
   const sunDir = new THREE.Vector3(16, 34, 20).normalize(); // 꽃 덩어리 밝은 쪽 (낮 기준 고정)
 
   // 땅·길·광장

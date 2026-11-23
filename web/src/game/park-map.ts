@@ -73,7 +73,7 @@ function buildProps(): Prop[] {
     const x = landSide[i] + 3.25; // 강가 나무와 길 쪽 나무 사이 → 벤치에 앉으면 강이 탁 트여 보임
     if (!free(x, -1.6)) continue;
     out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
-    if (i % 2) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: Math.PI }); // 초롱이 벤치 쪽으로
+    if (free(x + 2.4, -1.5)) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: Math.PI }); // 벤치마다 하나, 초롱이 벤치 쪽으로
   }
   return out;
 }
@@ -120,7 +120,7 @@ function buildColliders(): Collider[] {
       }
     }
     else if (p.kind === "fountain") circle(p.x, p.z, 3.1 * S);
-    else if (p.kind === "wishTree") { circle(p.x, p.z, 0.6 * S); out.push(box(p.x, p.z + 1.1 * S, 0.7 * S, 0.5 * S)); } // 줄기 + 사다리 (분수 반대편)
+    else if (p.kind === "wishTree") { circle(p.x, p.z, 0.6 * S); out.push(box(p.x - 1.1 * S, p.z, 0.5 * S, 0.7 * S)); } // 줄기 + 사다리 (광장으로 들어오는 서쪽)
     else if (p.kind === "npc") circle(p.x, p.z, 0.32);
     else if (p.kind === "gate") for (const s of [-1, 1]) out.push(box(p.x, p.z + s * 2.3 * S, 0.6 * S, 0.6 * S));
   }
@@ -162,7 +162,7 @@ export function resolve(x: number, z: number, r = PLAYER_R, colliders = COLLIDER
 // ---------- 소원나무: 쪽지를 달 수 있는 가지(잎 덩어리) 영역 ----------
 export const WISH_TREE = PROPS.find((p) => p.kind === "wishTree") as { x: number; z: number; yaw: number };
 /** 사다리 앞 서는 자리: 여기서 나무 쪽으로 걸어 들어가면 쪽지를 쓰고 사다리에 오름 */
-export const LADDER_FOOT = { x: WISH_TREE.x, z: WISH_TREE.z + 1.1 * PROP_S + 0.25 * PROP_S + PLAYER_R + 0.05 };
+export const LADDER_FOOT = { x: WISH_TREE.x - (1.1 * PROP_S + 0.25 * PROP_S + PLAYER_R + 0.05), z: WISH_TREE.z };
 export type Sphere = { x: number; y: number; z: number; r: number };
 /** 잎 덩어리 6개 (월드 좌표). world.ts가 이걸로 잎을 그리고, 쪽지 위치 검사도 이걸로 */
 export const WISH_CANOPY: Sphere[] = (() => {

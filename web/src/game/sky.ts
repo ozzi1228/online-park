@@ -74,7 +74,7 @@ void main() {
 
 const lerpHex = (a: string, b: string, t: number, out: THREE.Color) => out.set(a).lerp(new THREE.Color(b), t);
 
-export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi: THREE.HemisphereLight, fog: THREE.Fog, overrideHour?: number) {
+export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi: THREE.HemisphereLight, fog: THREE.Fog, overrideHour?: number, overrideDate?: number) {
   const u = {
     zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() },
     cloudLit: { value: new THREE.Color() }, cloudShade: { value: new THREE.Color() },
@@ -100,7 +100,7 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
     update(t: number, center: THREE.Vector3) {
       dome.position.copy(center);
       u.time.value = t;
-      const now = Date.now(), hour = overrideHour ?? kstHour(now), day = kstDay(now);
+      const now = Date.now(), hour = overrideHour ?? kstHour(now), day = kstDay(overrideDate ?? now); // 미리보기 날짜면 그날 날씨
       if (day !== lastDay) {
         lastDay = day;
         const w = dayWeather(day);
