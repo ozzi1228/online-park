@@ -70,7 +70,7 @@ function buildProps(): Prop[] {
   // 벤치·가로등: 남쪽 줄 나무 사이사이에 번갈아
   landSide.sort((a, b) => a - b);
   for (let i = 0; i < landSide.length - 1; i++) {
-    const x = (landSide[i] + landSide[i + 1]) / 2;
+    const x = landSide[i] + 3.25; // 강가 나무와 길 쪽 나무 사이 → 벤치에 앉으면 강이 탁 트여 보임
     if (!free(x, -1.6)) continue;
     out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
     if (i % 2) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: 0 });
@@ -209,3 +209,20 @@ export function move(fx: number, fz: number, tx: number, tz: number, r = PLAYER_
   }
   return { x: fx, z: fz };
 }
+
+// ---------- 벤치 자리: 벤치마다 두 자리 ----------
+/** x·y·z = 앉은 캐릭터를 놓는 곳(엉덩이가 좌판 위), fx·fz = 바로 앞 서 있는 자리(서버가 아는 위치, 충돌 밖), yaw = 벤치가 보는 쪽 */
+export type BenchSeat = { x: number; y: number; z: number; fx: number; fz: number; yaw: number };
+export const BENCH_SEATS: BenchSeat[] = PROPS.flatMap((b) => {
+  if (b.kind !== "bench") return [];
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw), front = 0.25 * PROP_S + PLAYER_R + 0.06;
+  return [-0.45, 0.45].map((lx) => {
+    const wx = lx * PROP_S, lz = 0.02 * PROP_S;
+    return {
+      x: b.x + wx * c + lz * s, z: b.z - wx * s + lz * c, y: 0.48 * PROP_S - 0.1,
+      fx: b.x + wx * c + front * s, fz: b.z - wx * s + front * c, yaw: b.yaw,
+    };
+  });
+});
+/** 서 있는 자리(fx, fz) 근처의 벤치 자리 */
+export const benchSeatAt = (x: number, z: number, within = 0.35) => BENCH_SEATS.find((s) => Math.hypot(s.fx - x, s.fz - z) < within);

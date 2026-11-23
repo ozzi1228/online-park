@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { OUTLINE, at, part, toon, toonGradient } from "./character";
 import { createSky } from "./sky";
+import { createRiver } from "./water";
 import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
@@ -336,7 +337,7 @@ class PetalField {
         const t = trees[i % trees.length], r = Math.abs(Math.random() + Math.random() + Math.random() - 1.5) * 4.2 * t.s, a = Math.random() * 6.28;
         x = t.x + Math.cos(a) * r; z = t.z + Math.sin(a) * r;
       } else { x = BOUNDS.minX + Math.random() * (BOUNDS.maxX - BOUNDS.minX); z = BOUNDS.minZ + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ); }
-      this.p.set([x, 0.016, z, Math.random() * 6.28], i * 4);
+      this.p.set([x, 0.016, Math.max(z, -7.7), Math.random() * 6.28], i * 4); // 강둑 너머로는 안 깔림
       this.write(i, 0);
       this.mesh.setColorAt(i, col.set(PINKS[i % 3]));
     }
@@ -381,7 +382,8 @@ class PetalField {
       const drag = Math.exp(-dt * 1.8);
       v[o] = v[o] * drag + (wind - 0.4) * 0.6 * dt; v[o + 2] *= drag;
       p[o] += v[o] * dt; p[o + 1] += v[o + 1] * dt; p[o + 2] += v[o + 2] * dt; p[o + 3] += v[o + 3] * dt;
-      if (p[o + 1] <= 0.016) { p[o + 1] = 0.016; this.moving[i] = 0; this.write(i, 0); }
+      const floor = p[o + 2] < -8.2 ? -0.74 : 0.016; // 강 위로 날아가면 물 위에 내려앉음
+      if (p[o + 1] <= floor) { p[o + 1] = floor; this.moving[i] = 0; this.write(i, 0); }
       else this.write(i, Math.sin(p[o + 3] * 2) * 1.2);
     }
     if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
@@ -418,7 +420,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
   // 강: 둑 → 물 → 건너편 → 도시 실루엣
   flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, -7.9);
   const bank = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
-  const water = flat(new THREE.PlaneGeometry(400, 32), "#a3d8ef", 0, -0.75, -24.2);
+  const river = createRiver(scene, sky.uniforms, { y: -0.75, z: -24.2, width: 32, bankZ: -8.2 });
   flat(new THREE.PlaneGeometry(400, 30), "#bfdea2", 0, -0.3, -55);
   {
     const city = new THREE.Group();
@@ -462,7 +464,8 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
       gr.addColorStop(0, "rgba(244,160,186,0.75)"); gr.addColorStop(0.55, "rgba(247,182,201,0.5)"); gr.addColorStop(1, "rgba(250,205,218,0)");
       x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
     });
-    const mat = new THREE.MeshToonMaterial({ map: carpet, gradientMap: toonGradient(), transparent: true, depthWrite: false });
+    const mat = new THREE.MeshToonMaterial({ map: carpet, gradientMap: toonGradient(), transparent: true, depthWrite: false,
+      clippingPlanes: [new THREE.Plane(new THREE.Vector3(0, 0, 1), 7.95)] }); // 강둑 너머(물 위)로는 안 그림
     const geo = new THREE.PlaneGeometry(1, 1);
     for (const t of inside) {
       const m = new THREE.Mesh(geo, mat);
@@ -509,7 +512,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number) {
       }
       falling.instanceMatrix.needsUpdate = true;
       field.update(dt, focus, walking, yaw, wind);
-      (water.material as THREE.MeshToonMaterial).color.setHSL(0.55, 0.62, 0.79 + Math.sin(t * 1.3) * 0.01);
+      river.update(t, fog);
       if (jet) jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
       return wind;
     },

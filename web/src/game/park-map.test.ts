@@ -1,7 +1,7 @@
 // 실행: node --test src/game/park-map.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOUNDS, SPAWN, move, overlaps, resolve } from "./park-map.ts";
+import { BENCH_SEATS, BOUNDS, SPAWN, benchSeatAt, move, overlaps, resolve } from "./park-map.ts";
 
 test("시작 위치는 비어 있음", () => assert.ok(!overlaps(SPAWN.x, SPAWN.z)));
 
@@ -46,4 +46,14 @@ test("앉기: 잔디·정자는 되고 길·광장은 안 됨", async () => {
   assert.ok(canSit(pv.x, pv.z), "정자 마루");
   assert.ok(!canSit(0, -4), "강변 산책로");
   assert.ok(!canSit(PLAZA.x + 5, PLAZA.z), "분수 광장");
+});
+
+test("벤치 자리: 앞자리는 충돌 밖, 앉는 곳은 벤치 위", () => {
+  assert.ok(BENCH_SEATS.length >= 4);
+  for (const s of BENCH_SEATS) {
+    const r = resolve(s.fx, s.fz);
+    assert.ok(Math.hypot(r.x - s.fx, r.z - s.fz) < 0.02, "앞자리에 서 있을 수 있어야 함");
+    assert.ok(overlaps(s.x, s.z, 0.05), "앉는 곳은 벤치 좌판 위");
+    assert.equal(benchSeatAt(s.fx, s.fz), s);
+  }
 });

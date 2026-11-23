@@ -95,6 +95,8 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
 
   return {
     lightDir,
+    /** 하늘 색·해 방향 (물 반사 등에서 같이 씀) */
+    uniforms: u,
     update(t: number, center: THREE.Vector3) {
       dome.position.copy(center);
       u.time.value = t;

@@ -3,7 +3,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import * as THREE from "three";
 import { animateChar, disposeChar, makeChar, type Character } from "./character";
 import { makeMat, placeMat, secondSeat } from "./mat";
-import { PLAYER_R, groundY, type Collider } from "./park-map";
+import { PLAYER_R, benchSeatAt, groundY, type Collider } from "./park-map";
 import { PRESETS } from "./presets";
 
 type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string; uid: string };
@@ -102,9 +102,11 @@ export class Multiplayer {
       o.x += (p.x - o.x) * k; o.z += (p.z - o.z) * k;
       o.yaw += Math.atan2(Math.sin(p.yaw - o.yaw), Math.cos(p.yaw - o.yaw)) * k; // 가까운 쪽으로 회전
       const y = groundY(o.x, o.z);
-      o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw;
-      o.label.position.set(o.x, y + o.char.top + 0.3, o.z);
-      const sitting = p.anim === "sit" || p.anim === "sitmat";
+      const seat = p.anim === "sitbench" && !moving ? benchSeatAt(p.x, p.z, 0.6) : undefined; // 벤치에 앉은 사람은 좌판 위에
+      if (seat) { o.char.root.position.set(seat.x, seat.y, seat.z); o.char.root.rotation.y = seat.yaw; }
+      else { o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw; }
+      o.label.position.set(seat?.x ?? o.x, (seat?.y ?? y) + o.char.top + 0.3, seat?.z ?? o.z);
+      const sitting = p.anim === "sit" || p.anim === "sitmat" || p.anim === "sitbench";
       animateChar(o.char, t, dt, p.walking || moving ? "walk" : sitting ? "sit" : p.anim === "wish" ? "wish" : "idle");
       // 돗자리 깔고 앉은 사람은 돗자리도 보임
       if (p.anim === "sitmat" && !moving) {
@@ -164,7 +166,7 @@ export class Multiplayer {
   }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
-  sendAnim(a: "idle" | "sit" | "sitmat" | "wish") { this.room?.send("anim", a); }
+  sendAnim(a: "idle" | "sit" | "sitmat" | "sitbench" | "wish") { this.room?.send("anim", a); }
 
   dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
 }
