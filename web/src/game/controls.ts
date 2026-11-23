@@ -8,7 +8,7 @@ const TAP_MS = 300, TAP_PX = 10;
 
 export type Tap = { x: number; y: number; menu: boolean };
 /** 조이스틱 반지름(px)과 생기는 영역: 화면 높이의 이 비율보다 아래를 누르면 조이스틱 */
-export const JOY_R = 56, JOY_AREA = 0.5;
+export const JOY_R = 44, JOY_AREA = 0.5;
 
 export class Input {
   keys = new Set<string>();

@@ -67,6 +67,16 @@ function buildProps(): Prop[] {
   for (let x = -50; x <= 56; x += 13) { tree(x, -6.7); if (tree(x + 6.5, -0.9)) landSide.push(out.at(-1)!.x); }
   // 북쪽 벚꽃길 양쪽
   for (let x = -44; x <= 34; x += 13) { tree(x, 20.3, 0.95); tree(x + 6.5, 27.4, 0.95); }
+  // 분수 광장 둘레: 두 겹으로 벚꽃을 둘러 광장이 꽃으로 감싸이게 (길 위는 비움)
+  const offPath = (x: number, z: number) => PATHS.every((p) => {
+    const vx = p.x2 - p.x1, vz = p.z2 - p.z1, t = Math.max(0, Math.min(1, ((x - p.x1) * vx + (z - p.z1) * vz) / (vx * vx + vz * vz)));
+    return Math.hypot(x - (p.x1 + vx * t), z - (p.z1 + vz * t)) > p.w / 2 + 1.8;
+  });
+  for (const [rr, n, s, off] of [[15.5, 12, 0.9, 0], [21.5, 14, 1.0, 0.5]] as const)
+    for (let i = 0; i < n; i++) {
+      const a = ((i + off) / n) * Math.PI * 2, x = PLAZA.x + Math.cos(a) * rr, z = PLAZA.z + Math.sin(a) * rr;
+      if (z > BOUNDS.minZ + 2.5 && offPath(x, z)) tree(x, z, s);
+    }
   // 잔디밭 한가운데 피크닉 그늘 나무
   for (const [x, z] of [[-31, 8], [-6, 12], [24, 13], [-38, 18], [4, 20]]) tree(x, z, 1.15);
   // 벤치·가로등: 남쪽 줄 나무 사이사이에 번갈아

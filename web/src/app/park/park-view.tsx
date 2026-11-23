@@ -685,7 +685,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
       {touch && (
         <div ref={joyBase} aria-hidden style={{ width: JOY_R * 2, height: JOY_R * 2, opacity: 0 }} className="pointer-events-none absolute grid transition-opacity duration-150 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">
-          <div ref={knob} className="size-12 rounded-full bg-cream/90 shadow-md ring-1 ring-black/5" />
+          <div ref={knob} className="size-10 rounded-full bg-cream/90 shadow-md ring-1 ring-black/5" />
         </div>
       )}
 
