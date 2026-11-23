@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
-import { ParkCat } from "@/game/cat";
+import { CatView } from "@/game/cat";
+import { CatBrain } from "@/game/cat-brain";
 import { Input, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -168,8 +169,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     npcLabel.position.set(NPC.x, NPC_Y + npc.char.top + 0.5, NPC.z);
     scene.add(npc.char.root, clerk.char.root, npcLabel);
     let greeted = false;
-    const cat = new ParkCat(scene); // 간간이 나타나는 고양이 (내 화면에만)
-    let catCfg: MeInfo["cat"] | undefined;
+    // 공원 고양이: 실시간 서버가 움직여 모두가 같은 고양이를 봄. 서버에 못 붙었을 땐 내 브라우저가 직접 움직임
+    const cat = new CatView(scene), soloCat = new CatBrain();
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -409,7 +410,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
@@ -506,8 +507,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
       clerk.update(t, dt, pos.x, pos.z);
-      if (meRef.current?.cat && meRef.current.cat !== catCfg) { catCfg = meRef.current.cat; cat.setConfig(catCfg); }
-      cat.update(t, dt, pos.x, pos.z);
+      let catState = mp.cat();
+      if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCat.cfg, meRef.current.cat); soloCat.update(dt, [{ x: pos.x, z: pos.z }]); catState = soloCat.s; }
+      cat.update(t, dt, catState, pos);
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);

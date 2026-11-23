@@ -1,8 +1,8 @@
-// 공원 고양이: 간간이 한 마리가 나타나 돌아다님 (내 화면에만 보임). 무늬·눈 색은 나올 때마다 랜덤.
+// 공원 고양이 그리기: 간간이 한 마리, 모두에게 같은 고양이 (움직임은 cat-brain.ts를 실시간 서버가 돌림). 무늬·눈 색은 나올 때마다 랜덤.
 // 걷다가 기지개 켜기·그루밍·앉아 쉬기·나를 빤히 보다가 유유히 떠나기·벤치에 올라가 앉기·강가 난간 위를 걷기.
 import * as THREE from "three";
 import { part, toonGradient } from "./character";
-import { BENCH_SEATS, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map";
+import type { CatState } from "./cat-brain";
 
 type Look = { name: string; base: string; stripe?: string; white: number; patch?: string; eyeL: string; eyeR: string };
 const LOOKS: Look[] = [
@@ -102,149 +102,47 @@ function buildCat(L: Look) {
 }
 const at3 = <T extends THREE.Object3D>(m: T, x: number, y: number, z: number) => (m.position.set(x, y, z), m);
 
-type Act =
-  | { k: "walk"; tx: number; tz: number; then?: Act[]; speed?: number }
-  | { k: "idle" | "sit" | "stretch" | "groom" | "look"; dur: number }
-  | { k: "jump"; tx: number; ty: number; tz: number; dur: number }
-  | { k: "leave" };
+const turn = (a: number, b: number, k: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
 
-export type CatConfig = { enabled: number; intervalMinSec: number; intervalMaxSec: number; staySec: number };
-const RAIL = { z: BOUNDS.minZ - 0.25, y: 0.94, minX: -60, maxX: 60 };
-const RAIL_STAND_Z = BOUNDS.minZ + 0.35;
-const lerpA = (a: number, b: number, k: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
-
-export class ParkCat {
-  private scene: THREE.Scene;
+/** 고양이 그리기: 두뇌(서버 또는 내 브라우저)가 정한 위치·행동을 부드럽게 따라가며 자세를 만듦 */
+export class CatView {
   private cat: ReturnType<typeof buildCat> | null = null;
-  private cfg: CatConfig = { enabled: 1, intervalMinSec: 60, intervalMaxSec: 180, staySec: 90 };
-  private nextAt = 25 + Math.random() * 40; // 처음엔 조금 기다렸다 (게임 시간 기준)
-  private leaveAt = 0;
-  private x = 0; private z = 0; private y = 0; private yaw = 0; private headYaw = 0;
-  private queue: Act[] = []; private cur: Act | null = null; private actT = 0;
-  private jumpFrom = new THREE.Vector3();
-  private onRail = false; private onBench = false;
-  private stuck = 0; private blinkAt = 1;
+  private look = -1;
+  private x = 0; private y = 0; private z = 0; private yaw = 0; private headYaw = 0; private blinkAt = 1;
   private pose = { stretch: 0, sit: 0, groom: 0, gait: 0 };
+  constructor(private scene: THREE.Scene) {}
 
-  constructor(scene: THREE.Scene) { this.scene = scene; }
-  setConfig(c: Partial<CatConfig>) { Object.assign(this.cfg, c); }
-
-  private spawn(px: number, pz: number) {
-    const L = LOOKS[Math.floor(Math.random() * LOOKS.length)];
-    for (let i = 0; i < 30; i++) { // 나와 12~20m 떨어진 잔디밭에서 나타남
-      const a = Math.random() * 6.28, r = 12 + Math.random() * 8, x = px + Math.cos(a) * r, z = pz + Math.sin(a) * r;
-      if (x < BOUNDS.minX + 2 || x > BOUNDS.maxX - 2 || z < BOUNDS.minZ + 1 || z > BOUNDS.maxZ - 1 || !canSit(x, z)) continue;
-      this.cat = buildCat(L); this.scene.add(this.cat.root);
-      this.x = x; this.z = z; this.y = groundY(x, z); this.yaw = Math.random() * 6.28;
-      this.queue = []; this.cur = null; this.onRail = this.onBench = false;
-      return;
-    }
-  }
-  private despawn(t: number) {
-    if (this.cat) { this.scene.remove(this.cat.root); this.cat.root.traverse((o) => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); } }); }
-    this.cat = null;
-    this.nextAt = t + this.cfg.intervalMinSec + Math.random() * Math.max(0, this.cfg.intervalMaxSec - this.cfg.intervalMinSec);
+  private clear() {
+    if (!this.cat) return;
+    this.scene.remove(this.cat.root);
+    this.cat.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    this.cat = null; this.look = -1;
   }
 
-  /** 다음 할 일 고르기 */
-  private plan(px: number, pz: number, t: number) {
-    const dPlayer = Math.hypot(px - this.x, pz - this.z);
-    const lawn = () => { for (let i = 0; i < 20; i++) { const a = Math.random() * 6.28, r = 3 + Math.random() * 7, x = this.x + Math.cos(a) * r, z = this.z + Math.sin(a) * r; if (canSit(x, z) && x > BOUNDS.minX + 1 && x < BOUNDS.maxX - 1 && z > BOUNDS.minZ + 0.8 && z < BOUNDS.maxZ - 1) return { x, z }; } return null; };
-    if (t > this.leaveAt) { this.queue.push({ k: "leave" }); return; }
-    if (this.onBench) { this.queue.push({ k: Math.random() < 0.5 ? "groom" : "sit", dur: 4 + Math.random() * 6 }, { k: "sit", dur: 3 + Math.random() * 5 }, this.hopDown()); return; }
-    const r = Math.random();
-    if (r < 0.22 && dPlayer < 14 && dPlayer > 3) { // 다가와서 빤히 보다가, 반쯤은 휙 떠나버림
-      const k = (dPlayer - 2.6) / dPlayer;
-      this.queue.push({ k: "walk", tx: this.x + (px - this.x) * k, tz: this.z + (pz - this.z) * k }, { k: "look", dur: 2.5 + Math.random() * 3 });
-      if (Math.random() < 0.5) this.queue.push({ k: "leave" });
-      return;
-    }
-    if (r < 0.36) { // 벤치에 올라가 앉기
-      const seat = BENCH_SEATS.filter((s) => Math.hypot(s.fx - this.x, s.fz - this.z) < 18 && Math.hypot(px - s.fx, pz - s.fz) > 1.2)
-        .sort((a, b) => Math.hypot(a.fx - this.x, a.fz - this.z) - Math.hypot(b.fx - this.x, b.fz - this.z))[0];
-      if (seat) { this.queue.push({ k: "walk", tx: seat.fx, tz: seat.fz }, { k: "jump", tx: seat.x, ty: seat.y + 0.1, tz: seat.z, dur: 0.45 }); return; }
-    }
-    if (r < 0.48 && this.z < 6) { // 강가 난간 위를 걷기
-      const x0 = THREE.MathUtils.clamp(this.x, RAIL.minX + 3, RAIL.maxX - 8), dir = Math.random() < 0.5 ? 1 : -1, x1 = THREE.MathUtils.clamp(x0 + dir * (4 + Math.random() * 5), RAIL.minX, RAIL.maxX);
-      this.queue.push({ k: "walk", tx: x0, tz: RAIL_STAND_Z }, { k: "jump", tx: x0, ty: RAIL.y, tz: RAIL.z, dur: 0.45 },
-        { k: "walk", tx: x1, tz: RAIL.z, speed: 0.5 }, { k: "sit", dur: 1.5 + Math.random() * 3 }, { k: "jump", tx: x1, ty: groundY(x1, RAIL_STAND_Z), tz: RAIL_STAND_Z, dur: 0.45 });
-      return;
-    }
-    const p = lawn();
-    if (p) this.queue.push({ k: "walk", tx: p.x, tz: p.z });
-    const pick = Math.random();
-    if (pick < 0.3) this.queue.push({ k: "stretch", dur: 2.6 });
-    else if (pick < 0.55) this.queue.push({ k: "sit", dur: 1.5 }, { k: "groom", dur: 3 + Math.random() * 3 });
-    else if (pick < 0.75) this.queue.push({ k: "sit", dur: 3 + Math.random() * 5 });
-    else this.queue.push({ k: "idle", dur: 1 + Math.random() * 2 });
-  }
-  private hopDown(): Act {
-    const f = BENCH_SEATS.find((s) => Math.hypot(s.x - this.x, s.z - this.z) < 0.3);
-    return { k: "jump", tx: f ? f.fx : this.x, ty: 0, tz: f ? f.fz : this.z + 0.8, dur: 0.45 };
-  }
-
-  update(t: number, dt: number, px: number, pz: number) {
-    if (!this.cat) {
-      if (this.cfg.enabled && t > this.nextAt) { this.spawn(px, pz); this.leaveAt = t + this.cfg.staySec * (0.7 + Math.random() * 0.6); }
-      return;
+  update(t: number, dt: number, s: CatState | null, me: { x: number; z: number }) {
+    if (!s || !s.active) { this.clear(); return; }
+    if (!this.cat || this.look !== s.look) {
+      this.clear(); this.cat = buildCat(LOOKS[s.look % LOOKS.length]); this.look = s.look; this.scene.add(this.cat.root);
+      this.x = s.x; this.y = s.y; this.z = s.z; this.yaw = s.yaw;
     }
     const c = this.cat;
-    if (!this.cur) { if (!this.queue.length) this.plan(px, pz, t); this.cur = this.queue.shift() ?? null; this.actT = 0; if (this.cur?.k === "jump") this.jumpFrom.set(this.x, this.y, this.z); }
-    const a = this.cur; this.actT += dt;
-    let walking = false, target = { stretch: 0, sit: 0, groom: 0 }, lookAt: number | null = null;
-    if (a) switch (a.k) {
-      case "walk": case "leave": {
-        let tx: number, tz: number;
-        if (a.k === "leave") { // 나와 반대쪽으로 유유히
-          const d = Math.hypot(this.x - px, this.z - pz) || 1; tx = this.x + (this.x - px) / d * 3; tz = this.z + (this.z - pz) / d * 3;
-          if (d > 26) { this.despawn(t); return; }
-        } else { tx = a.tx; tz = a.tz; }
-        const dx = tx - this.x, dz = tz - this.z, dist = Math.hypot(dx, dz);
-        if (a.k === "walk" && dist < 0.08) { this.cur = null; break; }
-        const sp = (a.k === "walk" ? a.speed : undefined) ?? (a.k === "leave" ? 0.75 : 0.9);
-        this.yaw = lerpA(this.yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * 6));
-        const step = Math.min(dist, sp * dt), nx = this.x + Math.sin(this.yaw) * step, nz = this.z + Math.cos(this.yaw) * step;
-        if (this.onRail) { this.x = nx; this.z = RAIL.z; }
-        else {
-          const r = move(this.x, this.z, nx, nz, 0.16, COLLIDERS);
-          const moved = Math.hypot(r.x - this.x, r.z - this.z);
-          this.stuck = moved < step * 0.3 ? this.stuck + dt : 0;
-          this.x = r.x; this.z = r.z; this.y = groundY(this.x, this.z);
-          if (this.stuck > 1.2 && a.k === "walk") { this.queue = []; this.cur = null; this.stuck = 0; } // 막히면 다른 걸 함
-        }
-        walking = true; break;
-      }
-      case "jump": {
-        const k = Math.min(1, this.actT / a.dur), e = k * k * (3 - 2 * k);
-        this.x = THREE.MathUtils.lerp(this.jumpFrom.x, a.tx, e); this.z = THREE.MathUtils.lerp(this.jumpFrom.z, a.tz, e);
-        this.y = THREE.MathUtils.lerp(this.jumpFrom.y, a.ty, e) + Math.sin(Math.PI * k) * 0.35;
-        this.yaw = lerpA(this.yaw, Math.atan2(a.tx - this.jumpFrom.x, a.tz - this.jumpFrom.z), 1 - Math.exp(-dt * 12));
-        target = { stretch: 0.35, sit: 0, groom: 0 };
-        if (k >= 1) {
-          this.onRail = Math.abs(a.tz - RAIL.z) < 0.05 && a.ty > 0.5;
-          this.onBench = !this.onRail && a.ty > 0.3;
-          if (this.onBench) { const s = BENCH_SEATS.find((b) => Math.hypot(b.x - a.tx, b.z - a.tz) < 0.3); if (s) this.yaw = s.yaw; }
-          this.cur = null;
-        }
-        break;
-      }
-      case "stretch": target = { stretch: this.actT < a.dur - 0.5 ? 1 : 0, sit: 0, groom: 0 }; if (this.actT > a.dur) this.cur = null; break;
-      case "groom": target = { stretch: 0, sit: 1, groom: 1 }; if (this.actT > a.dur) this.cur = null; break;
-      case "sit": target = { stretch: 0, sit: 1, groom: 0 }; if (this.actT > a.dur) this.cur = null; break;
-      case "look": target = { stretch: 0, sit: 1, groom: 0 }; lookAt = Math.atan2(px - this.x, pz - this.z); if (this.actT > a.dur) this.cur = null; break;
-      case "idle": if (this.actT > a.dur) this.cur = null; break;
-    }
-    // 가까이 오면 고개를 돌려 봄
-    const dP = Math.hypot(px - this.x, pz - this.z);
-    if (lookAt === null && dP < 4 && !walking) lookAt = Math.atan2(px - this.x, pz - this.z);
+    if (Math.hypot(s.x - this.x, s.z - this.z) > 3) { this.x = s.x; this.z = s.z; this.y = s.y; } // 순간이동이면 바로
+    const k = 1 - Math.exp(-dt * 10), px = this.x, pz = this.z;
+    this.x += (s.x - this.x) * k; this.z += (s.z - this.z) * k; this.y += (s.y - this.y) * k;
+    this.yaw = turn(this.yaw, s.yaw, k);
+    const walking = (s.act === "walk" || s.act === "leave") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
+    const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
+      : s.act === "sit" || s.act === "look" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
+    // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)
+    let lookAt: number | null = s.act === "look" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
+    if (lookAt === null && !walking && Math.hypot(me.x - this.x, me.z - this.z) < 4) lookAt = Math.atan2(me.x - this.x, me.z - this.z);
     const rel = lookAt === null ? 0 : THREE.MathUtils.clamp(Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw)), -1.1, 1.1);
-    if (lookAt !== null && Math.abs(Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw))) > 1.1 && !walking) this.yaw = lerpA(this.yaw, lookAt, 1 - Math.exp(-dt * 1.5));
 
     // 자세
-    const k = 1 - Math.exp(-dt * 6), P = this.pose;
-    P.stretch += (target.stretch - P.stretch) * k; P.sit += (target.sit - P.sit) * k; P.groom += (target.groom - P.groom) * k;
+    const pk = 1 - Math.exp(-dt * 6), P = this.pose;
+    P.stretch += (target.stretch - P.stretch) * pk; P.sit += (target.sit - P.sit) * pk; P.groom += (target.groom - P.groom) * pk;
     P.gait += walking ? dt * 9 : 0;
-    this.headYaw += (rel - this.headYaw) * k;
+    this.headYaw += (rel - this.headYaw) * pk;
     c.root.position.set(this.x, this.y, this.z); c.root.rotation.y = this.yaw;
     const sw = walking ? Math.sin(P.gait) : 0;
     // 앉으면 엉덩이를 내리고 몸을 세움, 기지개는 앞발을 뻗고 가슴을 낮춤
@@ -259,14 +157,15 @@ export class ParkCat {
       g.rotation.x = rx;
     });
     c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch, this.headYaw, 0.2 * P.groom);
-    c.tail.forEach((s, i) => { // 걸을 땐 꼬리를 세우고 살랑, 앉으면 옆으로 감음
+    c.tail.forEach((sg, i) => { // 걸을 땐 꼬리를 세우고 살랑, 앉으면 옆으로 감음
       const up = i === 0 ? (walking ? -0.35 : -1.2 + 0.6 * P.sit) : 0;
-      s.rotation.x = up + (i ? (walking ? -0.12 : 0.18 * P.sit) : 0);
-      s.rotation.z = Math.sin(t * (walking ? 3 : 1.4) - i * 0.6) * (walking ? 0.16 : 0.1) + (i ? P.sit * 0.28 : 0);
+      sg.rotation.x = up + (i ? (walking ? -0.12 : 0.18 * P.sit) : 0);
+      sg.rotation.z = Math.sin(t * (walking ? 3 : 1.4) - i * 0.6) * (walking ? 0.16 : 0.1) + (i ? P.sit * 0.28 : 0);
     });
     // 눈 깜빡임 (그루밍 중엔 지그시)
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
     const shut = P.groom > 0.5 || (t > this.blinkAt && t < this.blinkAt + 0.14);
     const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
   }
+  dispose() { this.clear(); }
 }

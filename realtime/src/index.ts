@@ -4,11 +4,20 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Room, defineRoom, defineServer, type Client } from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
 import { COLLIDERS, PLAYER_R, SPAWN, move, overlaps, type Collider } from "../../web/src/game/park-map.ts";
+import { CatBrain, type CatConfig } from "../../web/src/game/cat-brain.ts";
 
 const SECRET = process.env.REALTIME_SECRET;
 if (!SECRET) throw new Error("REALTIME_SECRET 이 필요해요 (.env 참고)");
 const PORT = Number(process.env.PORT ?? 2567);
 const MAX_SPEED = 3.2;            // m/s, 클라이언트 걷기 속도(3.0)보다 약간 여유
+const WEB_URL = process.env.WEB_URL ?? "http://localhost:3001"; // 관리자 설정(고양이 등)을 읽어 올 웹앱 주소
+
+// 관리자 화면의 고양이 설정을 1분마다 웹앱에서 받아 옴 (실패하면 기존 값 유지)
+let catConfig: Partial<CatConfig> = {};
+async function loadCatConfig() {
+  try { const r = await fetch(`${WEB_URL}/api/cat-config`); if (r.ok) catConfig = await r.json() as CatConfig; } catch { /* 다음에 다시 */ }
+}
+loadCatConfig(); setInterval(loadCatConfig, 60_000);
 
 const Player = schema({
   x: t.number(), z: t.number(), yaw: t.number(), walking: t.boolean(),
@@ -17,7 +26,12 @@ const Player = schema({
   uid: t.string(), // 쪽지 받는 사람 지정용 (웹앱 API가 다시 확인)
 }, "Player");
 type Player = SchemaType<typeof Player>;
-const ParkState = schema({ players: t.map(Player) }, "ParkState");
+// 공원 고양이: 서버가 움직이고 모두가 같은 고양이를 봄 (그리기는 각자 화면이)
+const Cat = schema({
+  active: t.boolean(), look: t.number(), x: t.number(), y: t.number(), z: t.number(), yaw: t.number(),
+  act: t.string(), lx: t.number(), lz: t.number(),
+}, "Cat");
+const ParkState = schema({ players: t.map(Player), cat: Cat }, "ParkState");
 type ParkState = SchemaType<typeof ParkState>;
 
 type Auth = { uid: string; preset: string; nickname: string; exp: number };
@@ -39,7 +53,17 @@ class ParkRoom extends Room<{ state: ParkState }> {
   private last = new Map<string, number>(); // 마지막 이동 시각 (속도 검사)
   private uids = new Map<string, string>();  // sessionId → userId
 
-  onCreate() { this.setState(new ParkState()); }
+  private cat = new CatBrain();
+
+  onCreate() {
+    const st = new ParkState(); st.cat = new Cat(); this.setState(st);
+    this.setSimulationInterval((ms) => { // 10번/초 고양이를 움직이고 결과를 모두에게
+      Object.assign(this.cat.cfg, catConfig);
+      const ps: { x: number; z: number }[] = []; this.state.players.forEach((p) => ps.push({ x: p.x, z: p.z }));
+      this.cat.update(Math.min(ms / 1000, 0.25), ps);
+      Object.assign(this.state.cat, this.cat.s);
+    }, 100);
+  }
 
   onAuth(_client: Client, options: { token?: string }) { return verify(options?.token); }
 

@@ -4,10 +4,11 @@ import * as THREE from "three";
 import { animateChar, disposeChar, makeChar, type Character } from "./character";
 import { makeMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, benchSeatAt, groundY, type Collider } from "./park-map";
+import type { CatState } from "./cat-brain";
 import { PRESETS } from "./presets";
 
 type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string; uid: string };
-type NetState = { players: Map<string, NetPlayer> & { forEach(cb: (p: NetPlayer, id: string) => void): void; size: number } };
+type NetState = { players: Map<string, NetPlayer> & { forEach(cb: (p: NetPlayer, id: string) => void): void; size: number }; cat?: CatState };
 type Other = { char: Character; label: THREE.Sprite; x: number; z: number; yaw: number; mat?: THREE.Mesh; uid: string; nickname: string };
 
 export type NetStatus = { online: boolean; count: number };
@@ -69,6 +70,9 @@ export class Multiplayer {
 
   /** 서버가 판정한 내 위치 (너무 어긋나면 화면 쪽을 맞춤) */
   mine() { return this.room ? this.room.state.players?.get(this.room.sessionId) : undefined; }
+  /** 서버가 움직이는 공원 고양이 (접속 중일 때만) */
+  cat(): CatState | null { return this.room?.state.cat ?? null; }
+  get online() { return !!this.room; }
 
   /** 내 이동 판정에 쓸 다른 사람 위치 (화면에 보이는 자리 기준) */
   colliders(): Collider[] {
