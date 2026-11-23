@@ -78,7 +78,7 @@ export function faceTexture(p: Preset, closed: boolean, grin = false) {
 }
 
 export type Character = ReturnType<typeof makeChar>;
-export type Mode = "idle" | "walk" | "wish" | "sit";
+export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish";
 
 // ---------- 조립 ----------
 export function makeChar(p: Preset) {
@@ -231,8 +231,10 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   if (mode === "walk") { legX = 0.55 * s; armX = -0.5 * s; armZ = 0.12; bodyY = Math.abs(s) * 0.045; }
   if (mode === "wish") { armX = -1.25; armZ = -0.62; headX = 0.2; closed = true; }
   if (mode === "sit") { legX = -1.45; armX = -0.35; armZ = 0.15; bodyY = -0.3; }
+  if (mode === "sitwish") { legX = -1.45; bodyY = -0.3; armX = -1.25; armZ = -0.62; headX = 0.2; closed = true; } // 앉은 채로 손 모으기
+  const seated = mode === "sit" || mode === "sitwish";
   ease(c.legs[0].rotation, "x", legX, k);
-  ease(c.legs[1].rotation, "x", mode === "sit" ? legX : -legX, k);
+  ease(c.legs[1].rotation, "x", seated ? legX : -legX, k);
   ease(c.arms[0].rotation, "x", mode === "walk" ? -armX : armX, k);
   ease(c.arms[1].rotation, "x", armX, k);
   ease(c.arms[0].rotation, "z", -armZ, k);

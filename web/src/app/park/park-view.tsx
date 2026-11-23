@@ -181,11 +181,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
       const eye = new THREE.Vector3(at.x + fx * 0.25, eyeY, at.z + fz * 0.25);
       const look = eye.clone().add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp));
-      if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습
-        const f = showMe * showMe * (3 - 2 * showMe), sx = Math.sin(yaw), sz = Math.cos(yaw);
-        const d = Math.min(2.6, cameraRoom(pos.x, pos.z, sx, sz, 2.6));
-        eye.lerp(new THREE.Vector3(pos.x + sx * d, footY + 1.35, pos.z + sz * d), f);
-        look.lerp(new THREE.Vector3(pos.x, footY + 0.95, pos.z), f);
+      if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
+        const f = showMe * showMe * (3 - 2 * showMe), fy = st.bench?.yaw ?? yaw, sx = Math.sin(fy), sz = Math.cos(fy);
+        const d = Math.min(2.6, cameraRoom(at.x, at.z, sx, sz, 2.6)), low = st.sitting ? 0.35 : 0;
+        eye.lerp(new THREE.Vector3(at.x + sx * d, at.y + 1.35 - low, at.z + sz * d), f);
+        look.lerp(new THREE.Vector3(at.x, at.y + 0.95 - low, at.z), f);
       }
       camPos.copy(eye); camLook.copy(look);
       camera.position.copy(camPos); camera.lookAt(camLook);
@@ -388,7 +388,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0;
@@ -418,8 +418,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         turnVel += (-right * turnSpeed - turnVel) * (1 - Math.exp(-dt * 10));
         camYaw += turnVel * dt;
       }
-      if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 0.8)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
-      showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 3));
+      if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 1.2)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
+      showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 5)); // 느린 PC에서도 장면이 끝나기 전에 다 돌아오게
       let walking = false;
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
@@ -457,8 +457,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const srv = mp.mine();
       if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
 
-      const mode: Mode = st.sitting ? "sit" : t < st.wishUntil ? "wish" : walking ? "walk" : "idle";
-      const anim = mode === "sit" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
+      const mode: Mode = st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil ? "wish" : walking ? "walk" : "idle";
+      const anim = mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 
