@@ -9,7 +9,7 @@ import { unreadCount } from "@/lib/notes";
 export async function GET(req: Request) {
   const s = await auth.api.getSession({ headers: req.headers });
   if (!s) return new Response(null, { status: 401 });
-  const { shop, fountain, sound, controls } = await getSettings();
+  const { shop, fountain, sound, controls, cat } = await getSettings();
   const isGuest = !!s.user.isAnonymous;
   return Response.json({
     isGuest,
@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     fountainPrice: fountain.coinPrice,
     sound,
     controls,
+    cat,
     unreadNotes: await unreadCount(s.user.id),
   }, { headers: { "cache-control": "no-store" } });
 }

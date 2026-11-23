@@ -28,6 +28,12 @@ export const DEFAULTS = {
     notesPerUserDaily: 5, // 한 사람이 하루에 달 수 있는 소원 쪽지 수
     maxVisible: 3000,     // 나무에 보이는 쪽지 최대 수 (최근 것부터)
   },
+  cat: {
+    enabled: 1,           // 공원 고양이 (1 = 나옴, 0 = 안 나옴)
+    intervalMinSec: 60,   // 떠난 뒤 다시 나타나기까지 (최소~최대 사이 랜덤, 게임 시간)
+    intervalMaxSec: 180,
+    staySec: 90,          // 한 번 나오면 머무는 시간 (대략)
+  },
   controls: {
     turnSpeed: 110,       // 좌우 키로 몸·시야가 도는 빠르기 (도/초)
   },
@@ -77,6 +83,15 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     fields: {
       notesPerUserDaily: { label: "1인당 하루 쪽지 수", unit: "장", min: 0, max: 100 },
       maxVisible: { label: "나무에 보이는 쪽지 최대 수", unit: "장", min: 50, max: 20000 },
+    },
+  },
+  cat: {
+    title: "고양이",
+    fields: {
+      enabled: { label: "나오게 하기 (1 = 켬, 0 = 끔)", unit: "", min: 0, max: 1 },
+      intervalMinSec: { label: "다시 나타나는 간격 (최소)", unit: "초", min: 10, max: 3600 },
+      intervalMaxSec: { label: "다시 나타나는 간격 (최대)", unit: "초", min: 10, max: 7200 },
+      staySec: { label: "머무는 시간", unit: "초", min: 20, max: 1800 },
     },
   },
   controls: {
