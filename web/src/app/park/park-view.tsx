@@ -372,7 +372,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
-    let moved = false;
+    let moved = false, turnVel = 0;
     renderer.setAnimationLoop(() => {
       const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
       st.now = t;
@@ -388,6 +388,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       camYaw -= drag.x * DRAG_YAW + touchTurn * TOUCH_TURN * dt;
       if (tree.pending) camYaw -= right * LOOK_YAW * dt; // 사다리 위: 좌우로 나무를 돌아보기
+      else { // 좌우 키 = 몸과 시야가 같이 그쪽으로 돎 (살살 붙었다 살살 멈춤)
+        const turnSpeed = ((meRef.current?.controls?.turnSpeed ?? 110) * Math.PI) / 180;
+        turnVel += (-right * turnSpeed - turnVel) * (1 - Math.exp(-dt * 10));
+        camYaw += turnVel * dt;
+      }
       if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 0.8)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
       showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 3));
       let walking = false;
@@ -401,12 +406,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         pitch = THREE.MathUtils.clamp(pitch + drag.y * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
         if (!st.faceCam) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도)
         // 보는 방향 기준 앞/옆으로 걸음
-        const amount = Math.min(1, Math.hypot(forward, right));
+        const amount = Math.min(1, Math.abs(forward));
         walking = amount > 0.05;
         if (walking) {
           st.wishUntil = 0; st.faceCam = false; // 걸으면 소원 동작은 멈춤
-          const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, cr = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
-          const dx = cf.x * forward + cr.x * right, dz = cf.z * forward + cr.z * right, len = Math.hypot(dx, dz);
+          const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
+          const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
           const step = WALK * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
@@ -497,7 +502,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 돌아요 · 빈 곳을 톡 누르면 메뉴" : "방향키(또는 WASD)로 걷고, 마우스로 끌어서 둘러봐요 · 우클릭하면 메뉴"}
+          {touch ? "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 돌아요 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}

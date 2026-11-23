@@ -10,7 +10,7 @@ export const INTRO = [
 ];
 
 export const HOW_TO: { title: string; pc: string; mobile: string }[] = [
-  { title: "걷기", pc: "방향키 또는 WASD", mobile: "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 그쪽으로 돌아요" },
+  { title: "걷기", pc: "↑↓(W·S)로 앞뒤로 걷고, ←→(A·D)로 몸과 시야가 함께 돌아요", mobile: "화면 위쪽을 누르고 있으면 앞으로, 옆으로 치우치면 그쪽으로 돌아요" },
   { title: "둘러보기", pc: "마우스로 화면 끌기", mobile: "두 손가락으로 화면 끌기" },
   { title: "메뉴 (앉기 등)", pc: "우클릭", mobile: "빈 곳을 톡 누르기" },
   { title: "소원꽃잎", pc: "반짝이며 떨어지는 꽃잎이 손 높이에 오면 클릭", mobile: "반짝이며 떨어지는 꽃잎이 손 높이에 오면 톡" },
