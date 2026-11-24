@@ -27,7 +27,7 @@ export type Path = { x1: number; z1: number; x2: number; z2: number; w: number }
 export const PATHS: Path[] = [
   { x1: -70, z1: -4, x2: 70, z2: -4, w: 4 },      // 강변 산책로
   { x1: -50, z1: 24, x2: 40, z2: 24, w: 3 },      // 북쪽(뒤쪽) 벚꽃길
-  { x1: -70, z1: 10, x2: -44, z2: 10, w: 3.5 },   // 입구 길
+  { x1: -200, z1: 10, x2: -44, z2: 10, w: 3.5 }, // 입구 길 (입구 밖으로 멀리까지 이어짐)
   { x1: -44, z1: -4, x2: -44, z2: 24, w: 3 },     // 서쪽 연결
   { x1: 46, z1: -4, x2: 46, z2: 1, w: 3 },        // 산책로 → 분수 광장
   { x1: 40, z1: 24, x2: 46, z2: 24, w: 3 },
@@ -108,6 +108,14 @@ export const BACKDROP_TREES: Prop[] = (() => {
       if (Math.abs(z - 10) > 4.5) t(-d, z, s0);
       t(d, z, s0);
     }
+  // 입구 밖: 길 양옆으로 멀리까지 벚꽃 가로수 (길 위로 가지가 드리우게 길가에 바짝), 그 뒤로 숲
+  for (let x = -63 - r() * 2; x > -196; x -= 6.5 + r() * 1.5) {
+    const k = Math.min(1, (-60 - x) / 100); // 멀수록 조금 크게 (원근에도 덜 작아 보이게)
+    for (const side of [-1, 1]) out.push({ kind: "tree", x: x + (r() - 0.5) * 1.2, z: 10 + side * (4 + r() * 0.6), s: 1 + k * 0.3 + r() * 0.15, inside: false });
+  }
+  for (const [off, step, s0] of [[11, 7, 1.1], [18, 7.5, 1.25], [26, 8, 1.4]] as const)
+    for (let x = -84 - r() * step; x > -196; x -= step * (0.85 + r() * 0.3))
+      for (const side of [-1, 1]) t(x, 10 + side * off, s0);
   return out;
 })();
 
