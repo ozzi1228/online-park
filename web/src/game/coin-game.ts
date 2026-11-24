@@ -36,21 +36,37 @@ export class CoinGame {
   private coin: THREE.Mesh;
   private ring: THREE.Mesh;
   private arc: THREE.Points;
+  private target: THREE.Mesh;   // 맨 위 접시 테두리에 빛나는 과녁 (조준할 때만)
+  private trail: THREE.Points;  // 날아가는 동전 꼬리
+  private trailN = 0; private trailAt = 0;
   private p = new THREE.Vector3(); private v = new THREE.Vector3(); private n = new THREE.Vector3();
-  private flying = false; private ringT = -1;
+  private flying = false; private ringT = -1; private t = 0;
+  /** 마지막으로 던진 곳·동전 위치 (카메라가 따라가게) */
+  readonly from = new THREE.Vector3();
+  get pos() { return this.p; }
   /** 떨어진 곳 (성공이면 "dish") */
   onLand?: (kind: Landing, at: THREE.Vector3) => void;
 
   constructor(private T: Targets) {
-    this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 18), new THREE.MeshBasicMaterial({ color: "#f2c94c" }));
+    // 멀리서도 보이게 크고 밝게
+    this.coin = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.03, 20), new THREE.MeshBasicMaterial({ color: "#ffd84a" }));
+    this.target = new THREE.Mesh(new THREE.RingGeometry(T.dish.r - 0.2, T.dish.r + 0.08, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: "#ffd21f", transparent: true, opacity: 0.9, depthWrite: false, depthTest: false })); // 물보라에 가려지지 않게
+    this.target.position.set(T.x, T.dish.y + 0.06, T.z); this.target.renderOrder = 4;
+    const tg = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 40 }, () => new THREE.Vector3()));
+    this.trail = new THREE.Points(tg, new THREE.PointsMaterial({ color: "#ffe680", size: 0.1, transparent: true, opacity: 0.85, depthWrite: false }));
+    this.trail.frustumCulled = false; this.target.visible = this.trail.visible = false;
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.16, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true }));
     // 조준 중 날아갈 길 미리보기 (동글동글 점)
     const geo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: PREVIEW_PTS }, () => new THREE.Vector3()));
     this.arc = new THREE.Points(geo, new THREE.PointsMaterial({ color: "#fff6c8", size: 0.13, transparent: true, opacity: 0.95, depthTest: false }));
     this.arc.frustumCulled = false; this.arc.renderOrder = 5;
     this.coin.visible = this.ring.visible = this.arc.visible = false;
-    this.group.add(this.coin, this.ring, this.arc);
+    this.group.add(this.coin, this.ring, this.arc, this.target, this.trail);
   }
+
+  /** 조준하는 동안 과녁 보이기 */
+  showTarget(on: boolean) { this.target.visible = on; }
 
   get busy() { return this.flying; }
 
@@ -72,10 +88,13 @@ export class CoinGame {
   }
 
   launch(from: THREE.Vector3, vel: THREE.Vector3) {
-    this.p.copy(from); this.v.copy(vel); this.flying = true; this.coin.visible = true; this.arc.visible = false;
+    this.p.copy(from); this.from.copy(from); this.v.copy(vel); this.flying = true; this.coin.visible = true; this.arc.visible = false;
+    this.trailN = 0; this.trail.visible = true; this.target.visible = true;
   }
 
   update(dt: number) {
+    this.t += dt;
+    if (this.target.visible) (this.target.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(this.t * 5) * 0.3; // 깜빡깜빡
     if (this.flying) {
       for (let s = 0; s < 3 && this.flying; s++) { // 빠른 동전이 접시를 뚫고 지나가지 않게 잘게 나눠서
         const h = dt / 3;
@@ -84,6 +103,7 @@ export class CoinGame {
         this.p.copy(this.n);
         if (hit) {
           this.flying = false; this.coin.visible = false;
+          setTimeout(() => { if (!this.flying) { this.trail.visible = false; this.target.visible = false; } }, 1800);
           const y = hit === "dish" ? this.T.dish.y : hit === "lower" ? this.T.lower.y : hit === "basin" ? this.T.basin.y : 0;
           this.p.y = y;
           if (hit !== "ground") { this.ring.position.set(this.p.x, y + 0.02, this.p.z); this.ring.visible = true; this.ringT = 0; }
@@ -91,6 +111,14 @@ export class CoinGame {
         }
       }
       this.coin.position.copy(this.p); this.coin.rotation.x += dt * 18;
+      // 꼬리: 지나온 자리를 점으로 남김 (어디로 날아갔는지 보이게, 떨어진 뒤에도 잠깐 남음)
+      const tp = this.trail.geometry.attributes.position as THREE.BufferAttribute;
+      if (this.t - this.trailAt >= 0.035) { // 점 간격 (프레임과 상관없이 고르게)
+        this.trailAt = this.t;
+        if (this.trailN < tp.count) { for (let i = this.trailN; i < tp.count; i++) tp.setXYZ(i, this.p.x, this.p.y, this.p.z); this.trailN++; }
+        else { for (let i = 0; i < tp.count - 1; i++) tp.setXYZ(i, tp.getX(i + 1), tp.getY(i + 1), tp.getZ(i + 1)); tp.setXYZ(tp.count - 1, this.p.x, this.p.y, this.p.z); }
+        tp.needsUpdate = true;
+      }
     }
     if (this.ringT >= 0) {
       this.ringT += dt; const k = this.ringT / 0.7;

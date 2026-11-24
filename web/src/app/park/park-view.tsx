@@ -75,6 +75,7 @@ type Actions = { sit: () => void; stand: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
+const FT = fountainTargets(FOUNTAIN, PROP_S); // 분수 동전 게임 판정 (맨 위 접시 높이·반지름)
 // 안내원: 옥색 저고리 한복에 갓을 쓴 젊은 남자. 안내소 안 단 위에 서서 창구로 얼굴을 내밂
 const NPC_LOOK: Preset = { id: "npc-guide", name: NPC_NAME, tags: [], skin: "#f3d1b6", hair: "#3a2a22", style: "short", bangs: "side", hat: "gat",
   top: "#a8d5c2", topType: "hanbok", inner: "#2f4f6f", collar: "#ffffff", tie: "#d9607e", bottom: "#efe6d2", shoes: "#4a3a30" };
@@ -170,7 +171,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     if (meRef.current?.sound) audio.levels = meRef.current.sound;
     const wake = () => audio.start();
     window.addEventListener("pointerdown", wake); window.addEventListener("keydown", wake);
-    const coin = new CoinGame(fountainTargets(FOUNTAIN, PROP_S)); scene.add(coin.group);
+    const coin = new CoinGame(FT); scene.add(coin.group);
+    // 동전 게임 카메라: 조준할 땐 내 뒤 위에서 맨 위 접시를 보고, 날아갈 땐 옆에서 동전을 따라감
+    const coinCam = { on: false, eye: new THREE.Vector3(), look: new THREE.Vector3() };
     const refreshTree = async () => {
       const r = await fetch("/api/tree", { cache: "no-store" }).catch(() => null);
       if (r?.ok) treeNotes.set(await r.json() as TreeNote[]);
@@ -198,7 +201,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       /** 돗자리 같이 앉기를 물어보고 대답을 기다리는 중 */
       asking: null as { seat: MatSeat; until: number } | null,
       /** 동전 조준 중 / 성공해서 발 동동 하는 동안 (그 뒤에 소원) */
-      aiming: false, stompUntil: 0 };
+      aiming: false, stompUntil: 0, coinViewUntil: 0 };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let baseFov = 60, firstPerson = false;
@@ -232,6 +235,19 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         eye.lerp(new THREE.Vector3(at.x + sx * d, at.y + 1.35 - low, at.z + sz * d), f);
         look.lerp(new THREE.Vector3(at.x, at.y + 0.95 - low, at.z), f);
       }
+      if (st.aiming || coin.busy || st.now < st.coinViewUntil) {
+        const dx = FT.x - pos.x, dz = FT.z - pos.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
+        const ce = new THREE.Vector3(), cl = new THREE.Vector3();
+        if (st.aiming) { ce.set(pos.x - ux * 4.2, FT.dish.y + 2.8, pos.z - uz * 4.2); cl.set(FT.x - ux * 0.8, FT.dish.y - 0.6, FT.z - uz * 0.8); } // 접시 안이 내려다보이게
+        else { // 옆에서: 던진 곳과 접시 사이가 한 화면에 (짧았는지·길었는지·옆으로 샜는지 보이게)
+          const a = coin.from, mx = (a.x + FT.x) / 2, mz = (a.z + FT.z) / 2, side = Math.max(6, d * 0.9 + 3.5);
+          ce.set(mx - uz * side, 3.4, mz + ux * side);
+          cl.set(mx, 2.4, mz).lerp(coin.pos, coin.busy ? 0.35 : 0.5);
+        }
+        if (!coinCam.on) { coinCam.eye.copy(camPos); coinCam.look.copy(camLook); coinCam.on = true; }
+        coinCam.eye.lerp(ce, 0.1); coinCam.look.lerp(cl, 0.14);
+        eye.copy(coinCam.eye); look.copy(coinCam.look); firstPerson = false;
+      } else coinCam.on = false;
       camPos.copy(eye); camLook.copy(look);
       // 벤치에 앉으면 살짝 줌인 → 강물과 건너편 벚꽃이 더 크게
       const wantFov = baseFov * (st.bench && showMe < 0.5 ? 0.78 : 1);
@@ -348,14 +364,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const a = aim.current, pull = Math.min(1, Math.max(0, (a.y - a.sy) / AIM_PULL()));
       return { pull, vel: launchVelocity(yaw, -(a.x - a.sx) * AIM_YAW, pull) }; // 새총처럼: 왼쪽으로 당기면 오른쪽으로
     };
-    const stopAim = () => { st.aiming = false; aim.current.on = false; coin.preview(null); setCoinAim(false); };
+    const stopAim = () => { st.aiming = false; aim.current.on = false; coin.preview(null); coin.showTarget(false); setCoinAim(false); };
     const tossCoin = () => {
       setMenu(null);
       if (meRef.current?.isGuest) { sayRef.current("동전 던지기는 회원 전용이에요"); return; }
       if (coin.busy) return;
       if (st.sitting) stand();
       yaw = camYaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z); pitch = -0.12; // 분수 꼭대기 접시가 보이게
-      st.aiming = true; setCoinAim(true);
+      st.aiming = true; setCoinAim(true); coin.showTarget(true);
       logClient("fountain.aim", {});
     };
     const shootCoin = async () => {
@@ -368,6 +384,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
     coin.onLand = (kind, at) => {
       logClient("fountain.result", { hit: kind === "dish" });
+      st.coinViewUntil = st.now + (kind === "dish" ? 0 : 1.8); // 빗나가면 떨어진 자리를 잠깐 보여 주고 돌아옴
       if (kind === "ground") { sayRef.current("앗, 분수 밖으로 날아갔어요"); return; }
       audio.plop();
       if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current("아깝다! 맨 위 접시를 비껴갔어요"); return; }
