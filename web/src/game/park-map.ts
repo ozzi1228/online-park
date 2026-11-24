@@ -98,8 +98,16 @@ export const BACKDROP_TREES: Prop[] = (() => {
   for (const [z0, step, s0] of [[-42.5, 6.5, 1.1], [-47, 7, 1.25], [-52, 7.5, 1.4]] as const)
     for (let x = -105 + r() * step; x <= 105; x += step * (0.85 + r() * 0.3))
       out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
-  for (let x = -90; x <= 90; x += 10) out.push({ kind: "tree", x: x + r() * 3, z: 35 + r() * 5, s: 1 + r() * 0.2, inside: false });   // 남쪽 뒤
-  for (let z = -2; z <= 30; z += 10) { out.push({ kind: "tree", x: -68 - r() * 4, z, s: 1, inside: false }); out.push({ kind: "tree", x: 68 + r() * 4, z, s: 1, inside: false }); }
+  const t = (x: number, z: number, s: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 2.5, z: z + (r() - 0.5) * 2.5, s: s + r() * 0.25, inside: false });
+  // 남쪽 뒤: 네 줄로 엇갈려 빽빽하게, 멀수록 크게 (울타리 너머가 벚꽃 숲)
+  for (const [z0, step, s0] of [[33.5, 6.5, 1], [39.5, 7, 1.1], [46, 7.5, 1.25], [53, 8, 1.4]] as const)
+    for (let x = -100 + r() * step; x <= 100; x += step * (0.85 + r() * 0.3)) t(x, z0, s0);
+  // 동·서 끝: 세 줄 (서쪽 입구 길은 비움)
+  for (const [d, step, s0] of [[65, 6.5, 1], [71.5, 7, 1.15], [78.5, 7.5, 1.3]] as const)
+    for (let z = -4 + r() * step; z <= 31; z += step * (0.85 + r() * 0.3)) {
+      if (Math.abs(z - 10) > 4.5) t(-d, z, s0);
+      t(d, z, s0);
+    }
   return out;
 })();
 
