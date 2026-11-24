@@ -35,39 +35,46 @@ function coatTexture(L: Look, head: boolean) {
         x.beginPath(); x.moveTo(u, 0); x.quadraticCurveTo(u + 10, head ? 22 : 34, u - 6, head ? 44 : 70); x.stroke();
       }
     }
-    if (L.white > 0) { // 배·턱 흰털 (아래쪽)
+    if (L.white > 0 && !head) { // 배 흰털 (몸 아래쪽만. 머리엔 칠하지 않아 얼굴에 얼룩이 지지 않게)
       const g = x.createLinearGradient(0, 128 * (1 - L.white), 0, 128 * (1 - L.white) + 18);
       g.addColorStop(0, "rgba(253,250,245,0)"); g.addColorStop(1, WHITE);
       x.fillStyle = g; x.fillRect(0, 128 * (1 - L.white), 256, 128);
     }
   });
 }
-/** 얼굴: 반짝이는 큰 눈(별빛 두 점) + 발그레한 볼 + 하트 코 + ω 입 + 수염 */
+/** 얼굴: 간단하고 귀엽게 — 동글동글한 까만 눈(반짝 점) + 은은한 볼터치 + 작은 코 + ω 입 */
 function faceTex(L: Look, closed: boolean) {
+  const c = new THREE.Color(L.base), dark = c.r * 0.3 + c.g * 0.59 + c.b * 0.11 < 0.35; // 털이 어두운지
   return canvas(256, 192, (x) => {
     x.lineCap = "round";
-    x.fillStyle = "rgba(247,140,165,0.42)"; // 볼터치
-    for (const s of [-1, 1]) { x.beginPath(); x.ellipse(128 + s * 74, 124, 20, 11, 0, 0, 7); x.fill(); }
-    for (const [s, col] of [[-1, L.eyeL], [1, L.eyeR]] as const) {
-      const ex = 128 + s * 46, ey = 94;
-      if (closed) { x.strokeStyle = "#3a2a26"; x.lineWidth = 7; x.beginPath(); x.arc(ex, ey - 8, 18, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
-      x.fillStyle = "#2b2124"; x.beginPath(); x.ellipse(ex, ey, 30, 33, 0, 0, 7); x.fill();         // 눈 테두리
-      const g = x.createLinearGradient(0, ey - 28, 0, ey + 30); g.addColorStop(0, "#1f1a1c"); g.addColorStop(0.45, col); g.addColorStop(1, col);
-      x.fillStyle = g; x.beginPath(); x.ellipse(ex, ey + 2, 25, 28, 0, 0, 7); x.fill();               // 홍채 (위는 짙게)
-      x.fillStyle = "#151012"; x.beginPath(); x.ellipse(ex, ey + 4, 12, 19, 0, 0, 7); x.fill();        // 동공
-      x.fillStyle = "#fff"; x.beginPath(); x.ellipse(ex + 9, ey - 10, 9, 8, 0, 0, 7); x.fill();         // 큰 반짝임
-      x.beginPath(); x.arc(ex - 9, ey + 12, 4, 0, 7); x.fill();                                        // 작은 반짝임
-      x.fillStyle = "rgba(255,255,255,0.35)"; x.beginPath(); x.ellipse(ex, ey + 18, 14, 6, 0, 0, 7); x.fill(); // 아래 물빛
+    for (const s of [-1, 1]) { // 볼터치: 가장자리가 번지는 동그라미
+      const g = x.createRadialGradient(128 + s * 70, 122, 0, 128 + s * 70, 122, 20);
+      g.addColorStop(0, "rgba(246,150,170,0.55)"); g.addColorStop(1, "rgba(246,150,170,0)");
+      x.fillStyle = g; x.beginPath(); x.arc(128 + s * 70, 122, 20, 0, 7); x.fill();
     }
-    // 하트 모양 코
-    x.fillStyle = "#f08ea0"; x.beginPath(); x.moveTo(128, 136); x.bezierCurveTo(116, 128, 118, 120, 124, 121); x.quadraticCurveTo(128, 122, 128, 125);
-    x.quadraticCurveTo(128, 122, 132, 121); x.bezierCurveTo(138, 120, 140, 128, 128, 136); x.fill();
-    x.strokeStyle = "#5a3a34"; x.lineWidth = 3.5;
-    x.beginPath(); x.moveTo(128, 136); x.lineTo(128, 141); x.stroke();
-    x.beginPath(); x.arc(121, 141, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
-    x.beginPath(); x.arc(135, 141, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
-    x.strokeStyle = "rgba(90,58,52,0.45)"; x.lineWidth = 2; // 수염
-    for (const s of [-1, 1]) for (const dy of [-5, 4]) { x.beginPath(); x.moveTo(128 + s * 34, 134 + dy * 0.3); x.lineTo(128 + s * 82, 128 + dy * 1.6); x.stroke(); }
+    for (const [s, col] of [[-1, L.eyeL], [1, L.eyeR]] as const) {
+      const ex = 128 + s * 52, ey = 98;
+      if (closed) { x.strokeStyle = dark ? "#f3e6d8" : "#3a2a26"; x.lineWidth = 6; x.beginPath(); x.arc(ex, ey - 4, 13, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
+      if (dark) { // 털이 까만 고양이: 눈 색이 보이게 동그란 눈동자 + 작은 까만 동공
+        x.fillStyle = col; x.beginPath(); x.ellipse(ex, ey, 18, 20, 0, 0, 7); x.fill();
+        x.fillStyle = "#1a1416"; x.beginPath(); x.ellipse(ex, ey + 2, 9, 13, 0, 0, 7); x.fill();
+      } else {
+        x.fillStyle = "#2a2023"; x.beginPath(); x.ellipse(ex, ey, 18, 20, 0, 0, 7); x.fill();          // 까만 눈
+        x.fillStyle = col; x.globalAlpha = 0.55; x.beginPath(); x.ellipse(ex, ey + 8, 10, 6, 0, 0, Math.PI); x.fill(); x.globalAlpha = 1; // 아래쪽에 눈 색 살짝
+      }
+      x.fillStyle = "#fff"; x.beginPath(); x.arc(ex + 6, ey - 7, 6.5, 0, 7); x.fill();               // 반짝
+      x.beginPath(); x.arc(ex - 5, ey + 6, 2.2, 0, 7); x.fill();
+    }
+    if (L.white > 0 || L.base === WHITE) { // 입가 흰털 (그림으로 부드럽게)
+      const m = x.createRadialGradient(128, 130, 0, 128, 130, 30); m.addColorStop(0, "rgba(253,250,245,0.95)"); m.addColorStop(0.7, "rgba(253,250,245,0.8)"); m.addColorStop(1, "rgba(253,250,245,0)");
+      x.fillStyle = m; x.beginPath(); x.ellipse(128, 130, 34, 24, 0, 0, 7); x.fill();
+    }
+    x.fillStyle = "#ef8f9f"; x.beginPath(); x.ellipse(128, 124, 6, 4.2, 0, 0, 7); x.fill();           // 작은 코
+    x.strokeStyle = "#5a3a34"; x.lineWidth = 3;
+    x.beginPath(); x.arc(122, 129, 6, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke();                    // ω 입
+    x.beginPath(); x.arc(134, 129, 6, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke();
+    x.strokeStyle = "rgba(90,58,52,0.35)"; x.lineWidth = 2; // 수염 (옅게)
+    for (const s of [-1, 1]) for (const dy of [-4, 4]) { x.beginPath(); x.moveTo(128 + s * 34, 126 + dy * 0.3); x.lineTo(128 + s * 70, 122 + dy * 1.4); x.stroke(); }
   });
 }
 
@@ -88,16 +95,13 @@ function buildCat(L: Look) {
   const head = new THREE.Group(); head.position.set(0, 0.41, 0.19); body.add(head);
   const skull = tex(part(new THREE.SphereGeometry(HR, 28, 18).scale(1.12, 0.95, 1), L.base, T), coatTexture(L, true));
   head.add(skull);
-  for (const s of [-1, 1]) { const ch = part(new THREE.SphereGeometry(0.075, 14, 10).scale(1.1, 0.85, 0.9), L.base, T); ch.position.set(s * 0.15, -0.07, 0.03); head.add(ch); } // 볼살
-  const muzzle = part(new THREE.SphereGeometry(0.07, 16, 12).scale(1.35, 0.78, 0.8), light, 0);
-  muzzle.position.set(0, -0.07, 0.115); head.add(muzzle);
   const open = faceTex(L, false), shut = faceTex(L, true);
   const faceMat = new THREE.MeshToonMaterial({ map: open, gradientMap: toonGradient(), transparent: true, depthWrite: false });
   const face = new THREE.Mesh(new THREE.SphereGeometry(HR + 0.004, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.12, 0.95, 1), faceMat);
   face.renderOrder = 2; head.add(face);
   for (const s of [-1, 1]) { // 귀: 둥글둥글한 삼각 + 분홍 속귀 + 귀끝 털
-    const ear = part(new THREE.ConeGeometry(0.068, 0.12, 10), L.patch && s > 0 ? L.patch : L.base, T); ear.position.set(s * 0.105, 0.16, -0.02); ear.rotation.z = -s * 0.36; head.add(ear);
-    const inner = part(new THREE.ConeGeometry(0.04, 0.075, 10), PINK, 0); inner.position.set(s * 0.103, 0.15, 0.012); inner.rotation.z = -s * 0.36; head.add(inner);
+    const ear = part(new THREE.ConeGeometry(0.068, 0.12, 10), L.patch && s > 0 ? L.patch : L.base, T); ear.position.set(s * 0.11, 0.2, -0.02); ear.rotation.z = -s * 0.36; head.add(ear);
+    const inner = part(new THREE.ConeGeometry(0.04, 0.075, 10), PINK, 0); inner.position.set(s * 0.108, 0.19, 0.016); inner.rotation.z = -s * 0.36; head.add(inner);
   }
   // 방울 목걸이
   const col = COLLARS[Math.floor(Math.random() * COLLARS.length)];
