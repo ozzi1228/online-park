@@ -18,7 +18,7 @@ const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.fr
 /** 비밀번호 확인 (길이가 달라도 시간 차이로 새지 않게 해시끼리 비교) */
 export function checkPassword(input: string) {
   const real = process.env.ADMIN_PASSWORD;
-  if (!real || real.length < 12) return false; // 설정 안 됐거나 너무 짧으면 로그인 불가
+  if (!real) return false; // 설정 안 됐으면 로그인 불가 (길이 제한은 없음 — IP당 시도 횟수 제한으로 막음)
   return same(sign(`pw:${input}`), sign(`pw:${real}`));
 }
 
