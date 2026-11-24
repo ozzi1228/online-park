@@ -13,8 +13,8 @@ export async function GET(req: Request) {
   const isGuest = !!s.user.isAnonymous;
   return Response.json({
     isGuest,
-    green: isGuest ? 0 : await greenBalance(s.user.id),
-    items: isGuest ? { noteSheets: 0, mat: false } : await myItems(s.user.id),
+    green: await greenBalance(s.user.id),
+    items: await myItems(s.user.id),
     shop: { notebookPrice: shop.notebookPrice, notebookSheets: shop.notebookSheets, matPrice: shop.matPrice },
     charge: await chargeOptions(),
     paymentsReady: paymentsReady(),

@@ -368,7 +368,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const openTreeEditor = () => {
       setMenu(null);
       const me = meRef.current;
-      if (!me || me.isGuest) { sayRef.current("소원 쪽지는 회원만 달 수 있어요"); return; }
+      if (!me) return;
       if ((me.items.noteSheets ?? 0) < 1) { sayRef.current("노트가 있어야 소원 쪽지를 달 수 있어요 (매점에서 살 수 있어요)"); return; }
       setPanel(null); setWriteTree(true); logClient("tree.open_editor", {});
     };
@@ -383,7 +383,6 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const stopAim = () => { st.aiming = false; aim.current.on = false; coin.preview(null); coin.showTarget(false); setCoinAim(false); };
     const tossCoin = () => {
       setMenu(null);
-      if (meRef.current?.isGuest) { sayRef.current("동전 던지기는 회원 전용이에요"); return; }
       if (coin.busy) return;
       if (st.sitting) stand();
       yaw = camYaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z); pitch = -0.12; // 분수 꼭대기 접시가 보이게
@@ -462,7 +461,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const sheets = meRef.current?.items.noteSheets ?? 0;
       const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
         : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
-        : nearTree() ? [meRef.current?.isGuest ? { label: "소원 쪽지는 회원만 달 수 있어요" } : sheets < 1 ? { label: "노트가 있어야 소원 쪽지를 달 수 있어요" }
+        : nearTree() ? [sheets < 1 ? { label: "노트가 있어야 소원 쪽지를 달 수 있어요" }
           : { label: `소원 쪽지 달기 (노트 ${sheets}장)`, run: openTreeEditor }]
         : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
@@ -524,9 +523,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         const theirSeat = !st.sitting ? mp.freeSeats().find((s) => s.ownerId === other.sessionId && Math.hypot(s.x - pos.x, s.z - pos.z) < 3) : undefined;
         setMenu({ x: tap.x, y: tap.y, items: [
           ...(theirSeat ? [{ label: "돗자리에 같이 앉기", run: () => askJoin(theirSeat) }] : []),
-          near && sheets > 0 && !meRef.current?.isGuest
+          near && sheets > 0
             ? { label: `${other.nickname}님에게 쪽지 건네기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTo(other); logClient("note.open_editor", {}); } }
-            : { label: meRef.current?.isGuest ? "쪽지는 회원만 쓸 수 있어요" : sheets <= 0 ? "노트가 없어요 (매점에서 살 수 있어요)" : "조금 더 가까이 가야 건넬 수 있어요" },
+            : { label: sheets <= 0 ? "노트가 없어요 (매점에서 살 수 있어요)" : "조금 더 가까이 가야 건넬 수 있어요" },
         ] });
         return;
       }
@@ -742,7 +741,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           </button>
           <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
             className="flex items-center gap-1.5 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
-            <GreenCoin /> {me.isGuest ? "그린" : me.green.toLocaleString("ko-KR")}
+            <GreenCoin /> {me.green.toLocaleString("ko-KR")}
           </button>
           {/* 로그아웃: 회원만 (비회원은 로그아웃하면 캐릭터를 잃으니 안 둠) */}
           {!me.isGuest && (

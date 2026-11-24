@@ -22,9 +22,9 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 function GuestNote() {
   return (
-    <p className="rounded-2xl bg-sakura/15 px-4 py-3 text-sm">
-      그린과 매점은 회원 전용이에요. {/* 새로 불러오기: 공원(3D)을 숨겨 둔 채 넘어가면 휴대폰에서 첫 화면 버튼이 먹통이 됨 */}
-      <button onClick={() => location.replace("/")} className="underline">처음 화면</button>에서 로그인하면 <b>100그린</b>을 드려요.
+    <p className="mt-4 rounded-2xl bg-sakura/15 px-4 py-3 text-sm">
+      충전은 회원만 할 수 있어요. {/* 새로 불러오기: 공원(3D)을 숨겨 둔 채 넘어가면 휴대폰에서 첫 화면 버튼이 먹통이 됨 */}
+      <button onClick={() => location.replace("/")} className="underline">처음 화면</button>에서 로그인하면 쓴 그린·산 물건은 그대로 가져가요.
     </p>
   );
 }
@@ -55,10 +55,10 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
         <h2 className="text-lg">내 지갑</h2>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
+      <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
+      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mat ? "있음" : "없음"}</p>
       {me.isGuest ? <GuestNote /> : (
         <>
-          <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
-          <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mat ? "있음" : "없음"}</p>
           <h3 className="mb-2 mt-4 text-sm opacity-70">충전하기 (1그린 = 1원)</h3>
           <div className="grid grid-cols-3 gap-2">
             {me.charge.map((c) => (
@@ -97,20 +97,18 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
     <section role="dialog" aria-label="매점" className={card}>
       <div className="mb-3 flex items-center">
         <h2 className="text-lg">매점</h2>
-        {!me.isGuest && <span className="ml-3 inline-flex items-center gap-1 text-sm tabular-nums opacity-70"><GreenCoin /> {fmt(me.green)}</span>}
+        <span className="ml-3 inline-flex items-center gap-1 text-sm tabular-nums opacity-70"><GreenCoin /> {fmt(me.green)}</span>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
-      {me.isGuest ? <GuestNote /> : (
-        <ul className="flex flex-col gap-2">
-          {items.map((it) => (
-            <li key={it.id} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3">
-              <div className="min-w-0 flex-1"><p>{it.name}</p><p className="text-xs opacity-60">{it.desc}</p></div>
-              <button disabled={busy || it.disabled} onClick={() => buy(it.id)}
-                className="shrink-0 rounded-full bg-sakura px-4 py-1.5 text-sm text-white disabled:opacity-50">{fmt(it.price)}그린</button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="flex flex-col gap-2">
+        {items.map((it) => (
+          <li key={it.id} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3">
+            <div className="min-w-0 flex-1"><p>{it.name}</p><p className="text-xs opacity-60">{it.desc}</p></div>
+            <button disabled={busy || it.disabled} onClick={() => buy(it.id)}
+              className="shrink-0 rounded-full bg-sakura px-4 py-1.5 text-sm text-white disabled:opacity-50">{fmt(it.price)}그린</button>
+          </li>
+        ))}
+      </ul>
       {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
     </section>
   );

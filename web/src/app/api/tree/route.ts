@@ -11,11 +11,10 @@ export async function GET(req: Request) {
   return Response.json(await listTree(s?.user.id ?? null), { headers: { "cache-control": "no-store" } });
 }
 
-/** 쪽지 달기 (회원 전용): { strokes, covered, x, y, z } */
+/** 쪽지 달기 : { strokes, covered, x, y, z } */
 export async function POST(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
-  if (s.user.isAnonymous) return Response.json({ ok: false, reason: "member_only" }, { status: 403 });
   const b = await req.json().catch(() => ({})) as { strokes?: unknown; covered?: unknown; x?: unknown; y?: unknown; z?: unknown };
   const strokes = cleanStrokes(b.strokes);
   if (!strokes) return Response.json({ ok: false, reason: "invalid" }, { status: 400 });

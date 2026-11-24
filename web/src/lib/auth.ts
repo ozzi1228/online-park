@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { logEvent } from "@/lib/log";
@@ -53,8 +53,7 @@ export const auth = betterAuth({
         after: async (user) => {
           const isGuest = (user as { isAnonymous?: boolean }).isAnonymous ?? false;
           await logEvent("user.created", { isGuest }, { userId: user.id, isGuest });
-          if (isGuest) return;
-          // 가입 보너스 (금액은 관리자 설정). (reason, refId) 유니크라 중복 지급 불가
+          // 기본 그린 (금액은 관리자 설정). 비회원도 받음 (충전만 회원 전용). (reason, refId) 유니크라 중복 지급 불가
           const amount = (await getSettings()).green.signupBonus;
           await db.insert(schema.greenLedger)
             .values({ userId: user.id, amount, reason: "signup_bonus", refId: user.id })
@@ -76,6 +75,16 @@ export const auth = betterAuth({
             .set({ characterPreset: guest.characterPreset, characterLockedAt: guest.characterLockedAt, nickname: guest.nickname })
             .where(eq(schema.user.id, member.id));
         }
+        // 비회원 때 쓴 그린·산 물건·쪽지를 회원 계정으로 옮김. 비회원 기본 그린만 안 옮김(회원 가입 그린을 따로 받으니)
+        await db.transaction(async (tx) => {
+          await tx.update(schema.greenLedger).set({ userId: member.id })
+            .where(and(eq(schema.greenLedger.userId, guest.id), ne(schema.greenLedger.reason, "signup_bonus")));
+          await tx.execute(sql`insert into inventory (user_id, item, qty) select ${member.id}, item, qty from inventory where user_id = ${guest.id}
+            on conflict (user_id, item) do update set qty = inventory.qty + excluded.qty`);
+          await tx.delete(schema.inventory).where(eq(schema.inventory.userId, guest.id));
+          await tx.update(schema.notes).set({ authorId: member.id }).where(eq(schema.notes.authorId, guest.id));
+          await tx.update(schema.notes).set({ recipientId: member.id }).where(eq(schema.notes.recipientId, guest.id));
+        });
         await logEvent("guest.linked", { guestId: guest.id }, { userId: member.id });
       },
     }),

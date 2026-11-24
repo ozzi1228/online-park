@@ -11,11 +11,10 @@ export async function GET(req: Request) {
   return Response.json(await inbox(s.user.id), { headers: { "cache-control": "no-store" } });
 }
 
-/** 쪽지 건네기 (회원 전용, 노트 한 장 사용) */
+/** 쪽지 건네기 (노트 한 장 사용) */
 export async function POST(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
-  if (s.user.isAnonymous) return Response.json({ ok: false, reason: "member_only" }, { status: 403 });
   const body = await req.json().catch(() => ({})) as { to?: unknown; strokes?: unknown };
   const strokes = cleanStrokes(body.strokes);
   if (!strokes || typeof body.to !== "string") return Response.json({ ok: false, reason: "invalid" }, { status: 400 });
