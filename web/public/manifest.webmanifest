@@ -1,7 +1,7 @@
 {
   "name": "랜선 벚꽃공원",
   "short_name": "벚꽃공원",
-  "description": "랜선으로 거니는 벚꽃공원, 같이 벚꽃 구경해요.",
+  "description": "랜선 벚꽃공원에서 산책하기",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fff8f3",
