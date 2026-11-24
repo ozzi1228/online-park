@@ -1,15 +1,13 @@
 // 소원나무에 달린 쪽지들(분홍 꽃잎 모양) + 달 자리 고르기 + 분수 동전 연출
 import * as THREE from "three";
-import { PROP_S, WISH_CANOPY, WISH_TREE } from "./park-map";
+import { PROP_S, WISH_BRANCHES, WISH_TREE } from "./park-map";
 
 export type TreeNote = { id: number; x: number; y: number; z: number; covered: boolean; mine: boolean; from: string | null; strokes: number[][] | null };
 
-/** 가장 가까운 잎 덩어리 중심 → 바깥쪽 방향 */
-const outward = (p: THREE.Vector3) => {
-  let best = WISH_CANOPY[0], bd = Infinity;
-  for (const c of WISH_CANOPY) { const d = Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z) - c.r; if (d < bd) { bd = d; best = c; } }
-  return new THREE.Vector3(p.x - best.x, p.y - best.y, p.z - best.z).normalize();
-};
+/** 줄기에서 바깥쪽(수평) 방향 + 살짝 위 → 쪽지 앞면이 밖을 보게 */
+const outward = (p: THREE.Vector3) => new THREE.Vector3(p.x - WISH_TREE.x, 0.35, p.z - WISH_TREE.z).normalize();
+/** 쪽지는 가지 바로 아래에 매달림 (꼭지가 가지에 닿게) */
+const HANG = 0.12;
 
 export class TreeNotes {
   group = new THREE.Group();
@@ -20,7 +18,7 @@ export class TreeNotes {
   private v = new THREE.Vector3();
 
   constructor(petalGeo: THREE.BufferGeometry, capacity = 3000) {
-    const geo = petalGeo.clone().scale(2.6, 2.6, 1);
+    const geo = petalGeo.clone().scale(3.2, 3.2, 1);
     this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), capacity);
     this.mesh.count = 0; this.mesh.frustumCulled = false;
     this.ghost = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
@@ -30,7 +28,7 @@ export class TreeNotes {
 
   private orient(o: THREE.Object3D, p: THREE.Vector3, id: number) {
     const n = outward(p);
-    o.position.copy(p).addScaledVector(n, 0.04);
+    o.position.copy(p).addScaledVector(n, 0.05); o.position.y -= HANG;
     o.lookAt(o.position.clone().add(n));
     o.rotateZ(((id * 2.399) % 6.28) - 3.14); // 쪽지마다 살짝 다른 각도
   }
@@ -61,14 +59,19 @@ export class TreeNotes {
     return best;
   }
 
-  /** 누른 곳에서 나뭇가지(잎 덩어리) 겉면의 점 */
+  /** 누른 곳에서 가장 가까운 나뭇가지 위의 점 (가지에서 멀리 누르면 null) */
   canopyPoint(camera: THREE.Camera, rect: DOMRect, x: number, y: number) {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1), camera);
-    let best: THREE.Vector3 | null = null, bt = Infinity;
-    for (const c of WISH_CANOPY) {
-      const hit = ray.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(c.x, c.y, c.z), c.r), new THREE.Vector3());
-      if (hit) { const t = hit.distanceTo(ray.ray.origin); if (t < bt) { bt = t; best = hit; } }
+    const S = PROP_S, a = new THREE.Vector3(), b = new THREE.Vector3(), onRay = new THREE.Vector3(), onSeg = new THREE.Vector3();
+    let best: THREE.Vector3 | null = null, score = Infinity;
+    for (const br of WISH_BRANCHES) {
+      a.set(WISH_TREE.x + br.a[0] * S, br.a[1] * S, WISH_TREE.z + br.a[2] * S);
+      b.set(WISH_TREE.x + br.b[0] * S, br.b[1] * S, WISH_TREE.z + br.b[2] * S);
+      const d = Math.sqrt(ray.ray.distanceSqToSegment(a, b, onRay, onSeg)), t = onRay.distanceTo(ray.ray.origin);
+      // 손가락이 닿은 범위(멀수록 넓게) 안의 가지 중, 가까우면서 화면에서 덜 벗어난 것
+      const tol = 0.15 + t * 0.04, sc = d / tol + t * 0.02;
+      if (d < tol && sc < score) { score = sc; best = onSeg.clone(); }
     }
     return best;
   }

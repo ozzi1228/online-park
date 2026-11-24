@@ -194,9 +194,47 @@ export const WISH_CANOPY: Sphere[] = (() => {
   out.push({ x: WISH_TREE.x, y: 4.1 * S, z: WISH_TREE.z, r: 1.4 * S });
   return out;
 })();
-/** 쪽지를 달 수 있는 자리인지: 잎 덩어리 겉면 근처 */
-export const onCanopy = (x: number, y: number, z: number) =>
-  WISH_CANOPY.some((c) => { const d = Math.hypot(x - c.x, y - c.y, z - c.z); return d > c.r * 0.5 && d < c.r + 0.6; });
+/** 소원나무 가지 (나무 기준 좌표, PROP_S 곱하기 전). world.ts가 이걸로 가지를 그리고, 쪽지는 이 가지 위에 달림 */
+export type Branch = { a: [number, number, number]; b: [number, number, number]; r0: number; r1: number; t: number };
+export const WISH_BRANCHES: Branch[] = (() => {
+  const S = PROP_S, out: Branch[] = [];
+  let n = 12345; const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
+  const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]); return v.map((x) => x / l); };
+  const rdir = () => norm([rnd() - 0.5, rnd() * 0.8 - 0.2, rnd() - 0.5]);
+  const add = (a: number[], b: number[], k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+  const lerp = (a: number[], b: number[], k: number) => a.map((x, i) => x + (b[i] - x) * k);
+  const seg = (a: number[], b: number[], r0: number, r1: number, t = 0.01) => out.push({ a: a as Branch["a"], b: b as Branch["b"], r0, r1, t });
+  const top = [0, 2.4, 0];
+  for (const c of WISH_CANOPY) {
+    const lc = [(c.x - WISH_TREE.x) / S, c.y / S, (c.z - WISH_TREE.z) / S], rr = c.r / S;
+    const mid = add(lerp(top, lc, 0.55), rdir(), 0.15);
+    seg(top, mid, 0.17, 0.11, 0.014);
+    for (let k = 0; k < 3; k++) {
+      const tip = add(lc, rdir(), rr * (0.55 + rnd() * 0.35));
+      seg(mid, tip, 0.1, 0.035);
+      for (let j = 0; j < 3; j++) { // 잔가지 (여기에 쪽지가 매달린 느낌)
+        const base = lerp(mid, tip, 0.45 + rnd() * 0.5);
+        const out2 = norm(add(norm(add(base, lc, -1)), rdir(), 0.8));
+        seg(base, add(base, out2, 0.45 + rnd() * 0.35), 0.03, 0.01, 0.006);
+      }
+    }
+  }
+  return out;
+})();
+/** 가지(월드 좌표)에서 점까지 가장 가까운 거리와 그 가지 위의 점 */
+export function nearestBranch(x: number, y: number, z: number) {
+  const S = PROP_S; let best = { d: Infinity, x: 0, y: 0, z: 0 };
+  for (const b of WISH_BRANCHES) {
+    const ax = WISH_TREE.x + b.a[0] * S, ay = b.a[1] * S, az = WISH_TREE.z + b.a[2] * S;
+    const vx = (b.b[0] - b.a[0]) * S, vy = (b.b[1] - b.a[1]) * S, vz = (b.b[2] - b.a[2]) * S;
+    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / (vx * vx + vy * vy + vz * vz)));
+    const px = ax + vx * t, py = ay + vy * t, pz = az + vz * t, d = Math.hypot(x - px, y - py, z - pz);
+    if (d < best.d) best = { d, x: px, y: py, z: pz };
+  }
+  return best;
+}
+/** 쪽지를 달 수 있는 자리인지: 가지에 붙어 있는지 (쪽지가 가지 아래로 살짝 매달리니 여유를 둠) */
+export const onCanopy = (x: number, y: number, z: number) => nearestBranch(x, y, z).d < 0.45;
 
 /** 그 자리의 바닥 높이 (정자 마루 위면 살짝 올라감) */
 export function groundY(x: number, z: number) {

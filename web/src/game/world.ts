@@ -6,7 +6,7 @@ import { createSky } from "./sky";
 import { createRiver } from "./water";
 import { createFountain } from "./fountain";
 import { createCity } from "./city";
-import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PAVILION_DOOR, PLAZA, PROPS, PROP_S, WISH_CANOPY, pavilionCorner, type Prop } from "./park-map";
+import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PAVILION_DOOR, PLAZA, PROPS, PROP_S, WISH_BRANCHES, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
 export const QUALITY_HIGH: Quality = { cards: 38, groundPetals: 16000, fallingPetals: 900, shadow: 2048, pixelRatio: 2 };
@@ -373,31 +373,15 @@ function buildProp(p: Prop, root: THREE.Group) {
       // 소원나무: 잎 없이 가지만. 사람들이 매단 쪽지가 잎이 되어 달수록 풍성해짐.
       // 굵은 가지는 쪽지 다는 자리(WISH_CANOPY 잎 덩어리 영역)마다 뻗고, 끝은 잔가지로 갈라짐
       g.add(at(barkPart(trunkGeo(0.3, 0.55, 2.5, 3), T), 0, 1.25, 0));
-      let n = 12345; const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
       const up = new THREE.Vector3(0, 1, 0);
-      const limb = (from: THREE.Vector3, to: THREE.Vector3, r0: number, r1: number, t = 0.01) => {
+      for (const b of WISH_BRANCHES) { // 가지 배치는 park-map.ts (쪽지도 이 가지 위에 달림)
+        const from = new THREE.Vector3(...b.a), to = new THREE.Vector3(...b.b);
         const d = to.clone().sub(from), len = d.length();
-        const geo = new THREE.CylinderGeometry(r1, r0, len, r0 > 0.06 ? 9 : 5, 2, true), uv = geo.attributes.uv;
+        const geo = new THREE.CylinderGeometry(b.r1, b.r0, len, b.r0 > 0.06 ? 9 : 5, 2, true), uv = geo.attributes.uv;
         for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), uv.getY(i) * len * 0.5);
-        const m = barkPart(geo, t);
+        const m = barkPart(geo, b.t);
         m.quaternion.setFromUnitVectors(up, d.normalize()); m.position.copy(from).add(to).multiplyScalar(0.5); g.add(m);
-        g.add(at(new THREE.Mesh(new THREE.SphereGeometry(r0 * 0.98, 8, 6), toon(BARK)), from.x, from.y, from.z)); // 이음매
-      };
-      const rdir = () => new THREE.Vector3(rnd() - 0.5, rnd() * 0.8 - 0.2, rnd() - 0.5).normalize();
-      const top = new THREE.Vector3(0, 2.4, 0);
-      for (const c of WISH_CANOPY) {
-        const lc = new THREE.Vector3((c.x - p.x) / S, c.y / S, (c.z - p.z) / S), rr = c.r / S;
-        const mid = top.clone().lerp(lc, 0.55).add(rdir().multiplyScalar(0.15));
-        limb(top, mid, 0.17, 0.11, 0.014);
-        for (let k = 0; k < 3; k++) {
-          const tip = lc.clone().add(rdir().multiplyScalar(rr * (0.55 + rnd() * 0.35)));
-          limb(mid, tip, 0.1, 0.035);
-          for (let j = 0; j < 3; j++) { // 잔가지 (여기에 쪽지가 매달린 느낌)
-            const base = mid.clone().lerp(tip, 0.45 + rnd() * 0.5);
-            const out = base.clone().sub(lc).normalize().add(rdir().multiplyScalar(0.8)).normalize();
-            limb(base, base.clone().addScaledVector(out, 0.45 + rnd() * 0.35), 0.03, 0.01, 0.006);
-          }
-        }
+        g.add(at(new THREE.Mesh(new THREE.SphereGeometry(b.r0 * 0.98, 8, 6), toon(BARK)), from.x, from.y, from.z)); // 이음매
       }
       // 사다리: 광장으로 들어오는 서쪽에 기대어 둠 → 다가오면 바로 보임
       const ladRoot = new THREE.Group(); ladRoot.rotation.y = -Math.PI / 2; g.add(ladRoot);

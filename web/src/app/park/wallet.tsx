@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 
@@ -24,7 +23,8 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 function GuestNote() {
   return (
     <p className="rounded-2xl bg-sakura/15 px-4 py-3 text-sm">
-      그린과 매점은 회원 전용이에요. <Link href="/" className="underline">처음 화면</Link>에서 로그인하면 <b>100그린</b>을 드려요.
+      그린과 매점은 회원 전용이에요. {/* 새로 불러오기: 공원(3D)을 숨겨 둔 채 넘어가면 휴대폰에서 첫 화면 버튼이 먹통이 됨 */}
+      <button onClick={() => location.replace("/")} className="underline">처음 화면</button>에서 로그인하면 <b>100그린</b>을 드려요.
     </p>
   );
 }

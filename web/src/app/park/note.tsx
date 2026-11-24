@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { PEN_COLORS, type Strokes } from "@/lib/notes-shared";
 
 // 벚꽃잎 모양 종이 (위쪽 가운데가 살짝 갈라진 꽃잎), 1000×1000 좌표
-export const PETAL_PATH = "M500 965 C190 830 80 500 215 235 C280 105 395 70 468 150 L500 215 L532 150 C605 70 720 105 785 235 C920 500 810 830 500 965 Z";
+// 쓰고 읽을 땐 통통한 하트 (나무에 달리면 3D 벚꽃잎 모양). 좌표 0~1000, 글씨 쓸 자리가 넓게
+export const PETAL_PATH = "M500 950 C290 820 40 650 40 380 C40 190 175 70 325 70 C415 70 475 120 500 185 C525 120 585 70 675 70 C825 70 960 190 960 380 C960 650 710 820 500 950 Z";
 
 const path = (s: number[]) => {
   const p = s.slice(1);
@@ -66,13 +67,13 @@ export function NoteEditor({ title, sheets, busy, onSend, onCancel, coverOption 
   const up = () => { drawing.current = null; };
 
   return (
-    <section role="dialog" aria-label="쪽지 쓰기" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[24rem] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+    <section role="dialog" aria-label="쪽지 쓰기" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[30rem] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
       <div className="flex w-full items-center">
         <h2 className="text-lg">{title}</h2>
         <span className="ml-auto text-xs opacity-60">노트 {sheets}장 남음</span>
       </div>
-      <p className="w-full text-xs opacity-60">손가락이나 마우스로 꽃잎 위에 적어 주세요</p>
-      <svg ref={svg} viewBox="0 0 1000 1000" className="aspect-square w-full max-w-[20rem] touch-none select-none"
+      <p className="w-full text-xs opacity-60">손가락이나 마우스로 하트 위에 적어 주세요</p>
+      <svg ref={svg} viewBox="0 0 1000 1000" className="aspect-square w-full max-w-[min(26rem,62dvh)] touch-none select-none"
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
         <defs><radialGradient id="paperE" cx="50%" cy="65%" r="65%"><stop offset="0" stopColor="#fff7fa" /><stop offset="1" stopColor="#ffd7e3" /></radialGradient>
           <clipPath id="petalE"><path d={PETAL_PATH} /></clipPath></defs>

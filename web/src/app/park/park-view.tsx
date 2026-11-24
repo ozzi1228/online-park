@@ -195,7 +195,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
       const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
-      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 320) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
+      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 420) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
       const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
       const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
@@ -203,8 +203,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const look = new THREE.Vector3(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       firstPerson = !shoulder;
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
-        const f = showMe * showMe * (3 - 2 * showMe), fy = st.bench?.yaw ?? yaw, sx = Math.sin(fy), sz = Math.cos(fy);
-        const d = Math.min(2.6, cameraRoom(at.x, at.z, sx, sz, 2.6)), low = st.sitting ? 0.35 : 0;
+        // 정면이 막혀 있으면(사다리·나무 앞 등) 비스듬한 쪽에서 — 너무 가까이 붙어 얼굴만 크게 나오지 않게
+        const f = showMe * showMe * (3 - 2 * showMe), base = st.bench?.yaw ?? yaw, WANT = 2.8;
+        let fy = base, d = 0;
+        for (const off of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+          const r = Math.min(WANT, cameraRoom(at.x, at.z, Math.sin(base + off), Math.cos(base + off), WANT));
+          if (r > d + 0.3) { d = r; fy = base + off; }
+          if (d >= WANT - 0.05) break;
+        }
+        const sx = Math.sin(fy), sz = Math.cos(fy), low = st.sitting ? 0.35 : 0;
         eye.lerp(new THREE.Vector3(at.x + sx * d, at.y + 1.35 - low, at.z + sz * d), f);
         look.lerp(new THREE.Vector3(at.x, at.y + 0.95 - low, at.z), f);
       }
@@ -745,7 +752,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {open ? (
           <div className="flex flex-col items-center gap-2">
-            <NoteView strokes={open.strokes} className="w-full max-w-[20rem]" />
+            <NoteView strokes={open.strokes} className="w-full max-w-[min(26rem,60dvh)]" />
             <p className="text-xs opacity-60">{when(open.createdAt)}</p>
           </div>
         ) : !rows ? <p className="text-sm opacity-60">불러오는 중…</p> : rows.length === 0 ? <p className="text-sm opacity-60">아직 받은 쪽지가 없어요</p> : (
@@ -784,7 +791,7 @@ function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; s
         <h2 className="text-lg">{note.mine ? "내 소원 쪽지" : `${note.from ?? "누군가"}님의 소원`}</h2>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
-      {note.strokes && !note.covered ? <NoteView strokes={note.strokes as Strokes} className="w-full max-w-[16rem]" /> : (
+      {note.strokes && !note.covered ? <NoteView strokes={note.strokes as Strokes} className="w-full max-w-[min(22rem,55dvh)]" /> : (
         <div className="flex aspect-square w-full max-w-[16rem] items-center justify-center rounded-full bg-[#f29bb5]/40 text-center text-sm">두 장을 겹쳐 붙여<br />가려진 쪽지예요</div>
       )}
       {note.mine && note.covered && <p className="text-center text-xs opacity-60">겹친 장을 떼야 내용을 볼 수 있어요. 떼면 모두가 볼 수 있게 돼요</p>}
