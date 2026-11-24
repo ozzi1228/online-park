@@ -162,7 +162,7 @@ export class ParkAudio {
 
   // ---------- 효과음 ----------
   private ok() { return !!this.ctx && this.ctx.state === "running"; }
-  /** 맑은 종소리 (소원꽃잎·소원) */
+  /** 맑은 종소리 (운세꽃잎·소원) */
   chime() {
     if (!this.ok()) return;
     const t = this.ctx!.currentTime;

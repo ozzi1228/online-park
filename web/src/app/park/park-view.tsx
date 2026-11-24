@@ -71,7 +71,7 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 
 type MenuItem = { label: string; run?: () => void };
 type Menu = { x: number; y: number; items: MenuItem[] };
-type Actions = { sit: () => void; stand: () => void; wish: () => void; release: () => void };
+type Actions = { sit: () => void; stand: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
@@ -96,7 +96,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [menu, setMenu] = useState<Menu | null>(null);
   const menuOpen = useRef(false);
   useEffect(() => { menuOpen.current = !!menu; }, [menu]);
-  const [caught, setCaught] = useState(false);
+  /** 잡은 운세꽃잎의 운세 문구 */
+  const [fortune, setFortune] = useState<string | null>(null);
   const [sitting, setSitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
@@ -160,9 +161,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     me.root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     scene.add(me.root);
     const petal = new CatchPetal(makePetalGeometry());
-    // 잡은 소원꽃잎: 1인칭이라 내 손이 안 보이니 눈앞 아래쪽에 두 손에 담긴 듯 띄워 둠
-    const held = petal.group.clone(true); held.visible = false;
-    scene.add(petal.group, held);
+    scene.add(petal.group);
     const mat = makeMat(); mat.visible = false; scene.add(mat);
     const treeNotes = new TreeNotes(makePetalGeometry()); scene.add(treeNotes.group);
     // 소리: 첫 터치·키 입력 때 켜짐 (브라우저 정책)
@@ -310,17 +309,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
-      wish: () => {
-        if (!st.holding) return;
-        st.holding = false; setCaught(false);
-        st.wishUntil = st.now + WISH_SEC; st.faceCam = true; // 카메라가 정면으로 돌아와 손 모은 모습을 보여줌
-        audio.chime();
-        logClient("wish.made", {});
-        setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), WISH_SEC * 1000);
-      },
-      release: () => { st.holding = false; setCaught(false); logClient("petal.released", {}); },
     };
-    // 소원꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 횟수). 5분마다 다시 확인
+    // 운세꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 하루 한 번). 5분마다 다시 확인
     const refreshWish = async () => {
       try {
         const r = await fetch("/api/petal", { cache: "no-store" });
@@ -333,10 +323,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const wishTimer = setInterval(refreshWish, 5 * 60_000);
     const claim = async (height: number) => {
       const r = await fetch("/api/petal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ height }) })
-        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; myCount?: number }>).catch(() => null);
-      if (r?.ok) { st.holding = true; setCaught(true); audio.chime(); }
-      else sayRef.current(r?.reason === "soldout" ? "아쉽게도 오늘의 소원꽃잎이 모두 떨어졌어요" : r?.reason === "limit" ? "오늘은 소원을 충분히 빌었어요" : "잠시 후 다시 해볼까요?");
-      refreshWish(); // 두 번 다 잡았거나 다 떨어졌으면 더는 안 보이게
+        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; fortune?: string }>).catch(() => null);
+      if (r?.ok && r.fortune) { setFortune(r.fortune); audio.chime(); } // 꽃잎을 펼치면 오늘의 운세
+      else sayRef.current(r?.reason === "soldout" ? "아쉽게도 오늘의 운세꽃잎이 모두 떨어졌어요" : r?.reason === "limit" ? "오늘의 운세는 이미 확인했어요. 내일 또 만나요" : "잠시 후 다시 해볼까요?");
+      refreshWish(); // 오늘 몫을 잡았거나 다 떨어졌으면 더는 안 보이게
     };
 
     const nearKiosk = () => Math.hypot(pos.x - KIOSK.x, pos.z - KIOSK.z) < 9;
@@ -473,7 +463,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       if (petal.hit(camera, rect, tap.x, tap.y)) {
         const y = petal.group.position.y;
-        if (petal.catchable && !st.holding) {
+        if (petal.catchable) {
           petal.end(st.now); setMenu(null);
           claim(y); // 서버가 확인한 뒤에 "잡았어요" (로그도 서버에서)
         } else {
@@ -526,7 +516,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
     renderer.setAnimationLoop(() => {
-      // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 소원꽃잎이 떨어지지 않게)
+      // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 운세꽃잎이 떨어지지 않게)
       const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
       st.now = t;
       if (st.aiming) { // 동전 조준: 당기는 동안 날아갈 길을 보여 주고, 놓으면 튕김
@@ -645,7 +635,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       lastCat = catState;
       cat.update(t, dt, catState, pos);
 
-      petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, st.holding || t < st.wishUntil);
+      petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);
       const wind = world.update(t, dt, focus, walking, yaw);
       audio.update({
@@ -658,12 +648,6 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         camLook.lerp(new THREE.Vector3(WISH_TREE.x, 4.2 * PROP_S * 0.6, WISH_TREE.z), k);
         camera.position.copy(camPos); camera.lookAt(camLook);
       } else placeCamera();
-      held.visible = st.holding && showMe < 0.02 && firstPerson; // 내 손이 안 보이는 1인칭일 때만 눈앞에 띄움
-      if (held.visible) { // 눈앞 아래쪽, 살랑살랑
-        camera.getWorldDirection(screen);
-        held.position.copy(camera.position).addScaledVector(screen, 0.75).add(new THREE.Vector3(0, -0.3 + Math.sin(t * 2) * 0.015, 0));
-        held.children[1].rotation.set(Math.sin(t * 1.3) * 0.3, t * 0.8, 0.2);
-      }
       me.root.visible = !!tree.pending || showMe > 0.02 || !firstPerson; // 완전 1인칭일 때만 내 몸을 숨김
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
@@ -749,14 +733,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         </ul>
       )}
 
-      {caught && (
-        <div className="absolute inset-x-4 bottom-24 mx-auto flex w-fit flex-col items-center gap-3 rounded-3xl bg-cream/95 px-6 py-4 shadow-lg">
-          <p>🌸 벚꽃잎을 잡았어요!</p>
-          <div className="flex gap-2">
-            <button onClick={() => actions.current?.wish()} className="rounded-full bg-sakura px-5 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">소원 빌기</button>
-            <button onClick={() => actions.current?.release()} className="rounded-full bg-white px-5 py-2 ring-1 ring-sakura/40">놓아주기</button>
-          </div>
-        </div>
+      {fortune && (
+        <section role="dialog" aria-label="오늘의 운세" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[22rem] -translate-y-1/2 flex-col items-center gap-4 rounded-3xl bg-cream/97 px-6 py-6 text-center shadow-xl ring-1 ring-sakura/20">
+          <svg viewBox="0 0 1000 1000" className="size-14" aria-hidden><path d="M500 965 C190 830 80 500 215 235 C280 105 395 70 468 150 L500 215 L532 150 C605 70 720 105 785 235 C920 500 810 830 500 965 Z" fill="#ffc9d8" stroke="#e9a3b8" strokeWidth="24" /></svg>
+          <p className="text-xs tracking-widest opacity-50">오늘의 운세</p>
+          <p className="text-lg leading-relaxed">{fortune}</p>
+          <button onClick={() => setFortune(null)} className="rounded-full bg-sakura px-6 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">간직할게요</button>
+        </section>
       )}
 
 

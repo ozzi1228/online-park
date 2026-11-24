@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { siteContent } from "@/db/schema";
 import { HOW_TO, INTRO, TIPS } from "@/content/guide";
+import { FORTUNES } from "@/content/fortunes";
 
 export type Guide = { intro: string[]; tips: string[]; howTo: { title: string; pc: string; mobile: string }[] };
 export const DEFAULT_GUIDE: Guide = { intro: INTRO, tips: TIPS, howTo: HOW_TO };
@@ -46,4 +47,21 @@ export function textToGuide(t: { intro: string; tips: string; howTo: string }): 
   const all = [...intro, ...lines(t.tips), ...howTo.flatMap((h) => [h.title, h.pc, h.mobile])];
   if (all.some((x) => x.length > 500)) return "한 문단(줄)은 500자까지 적을 수 있어요";
   return { intro, tips: lines(t.tips), howTo };
+}
+
+// ---------- 운세꽃잎 문구: 기본값은 src/content/fortunes.ts, 관리자가 고치면 DB(site_content "fortunes") ----------
+export async function getFortunes(): Promise<string[]> {
+  try {
+    const [row] = await db.select().from(siteContent).where(eq(siteContent.key, "fortunes"));
+    return isStrList(row?.value) && row.value.length ? row.value : FORTUNES;
+  } catch {
+    return FORTUNES;
+  }
+}
+/** 관리자 입력(한 줄에 하나) → 문구 목록, 잘못됐으면 안내 문구 */
+export function textToFortunes(t: string): string[] | string {
+  const list = t.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  if (!list.length) return "운세 문구를 한 줄 이상 적어 주세요";
+  if (list.some((x) => x.length > 200)) return "운세 문구는 한 줄에 200자까지 적을 수 있어요";
+  return list;
 }

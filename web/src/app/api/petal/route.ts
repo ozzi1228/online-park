@@ -4,7 +4,7 @@ import { claimWishPetal, wishStatus } from "@/lib/wish-petal";
 
 const session = (req: Request) => auth.api.getSession({ headers: req.headers });
 
-/** 나에게 소원꽃잎이 보여도 되는지 + 나타나는 간격 */
+/** 나에게 운세꽃잎이 보여도 되는지 + 나타나는 간격 */
 export async function GET(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({})) as { height?: unknown };
   const result = await claimWishPetal(s.user.id);
   await logEvent(result.ok ? "petal.caught" : "petal.claim_refused", {
-    ...(result.ok ? { myCount: result.myCount, left: result.left } : { reason: result.reason }),
+    ...(result.ok ? { myCount: result.myCount, left: result.left, fortune: result.fortune } : { reason: result.reason }),
     height: typeof body.height === "number" ? Math.round(body.height * 100) / 100 : null,
   }, { userId: s.user.id, isGuest: !!s.user.isAnonymous, sessionId: s.session.id, ...requestCtx(req.headers) });
   return Response.json(result);

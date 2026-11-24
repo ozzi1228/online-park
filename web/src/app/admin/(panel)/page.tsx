@@ -42,7 +42,7 @@ export default async function Dashboard() {
         <Stat label="오늘 방문자" value={fmt(vis.member + vis.guest)} sub={`회원 ${fmt(vis.member)} · 비회원 ${fmt(vis.guest)}`} />
         <Stat label="최근 10분 활동" value={fmt(n(live[0]?.c))} sub="움직임이 기록된 사람" />
         <Stat label="오늘 가입" value={fmt(sig.member)} sub={`비회원 입장 ${fmt(sig.guest)}`} />
-        <Stat label="소원꽃잎" value={`${fmt(caught)} / ${fmt(settings.wishPetal.dailyTotal)}`} sub={`남은 개수 ${fmt(Math.max(0, settings.wishPetal.dailyTotal - caught))}`} />
+        <Stat label="운세꽃잎" value={`${fmt(caught)} / ${fmt(settings.wishPetal.dailyTotal)}`} sub={`남은 개수 ${fmt(Math.max(0, settings.wishPetal.dailyTotal - caught))}`} />
         <Stat label="전체 회원" value={fmt(n(people[0]?.members))} sub={`비회원 계정 ${fmt(n(people[0]?.guests))}`} />
         <Stat label="그린 지급 합계" value={fmt(n(green[0]?.issued))} sub="가입 보너스 + 충전" />
         <Stat label="그린 사용 합계" value={fmt(n(green[0]?.spent))} />

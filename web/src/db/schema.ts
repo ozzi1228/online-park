@@ -93,7 +93,7 @@ export const gameSettings = pgTable("game_settings", {
   updatedAt: now().$onUpdate(() => new Date()),
 });
 
-// ---------- 소원꽃잎: 하루 전체 선착순 + 1인당 횟수 ----------
+// ---------- 운세꽃잎: 하루 전체 선착순 + 1인당 횟수 ----------
 export const wishPetalDays = pgTable("wish_petal_days", {
   day: text().primaryKey(),           // 한국 날짜 YYYY-MM-DD
   caught: integer().notNull().default(0),

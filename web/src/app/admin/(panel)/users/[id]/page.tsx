@@ -10,7 +10,7 @@ import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
 
-// 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 소원꽃잎, 행동 타임라인)
+// 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 운세꽃잎, 행동 타임라인)
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
 
 export default async function UserDetail({ params }: PageProps<"/admin/users/[id]">) {
@@ -66,7 +66,7 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
           </ul>
         </div>
         <div className={box}>
-          <p className="text-xs opacity-60">소원꽃잎</p>
+          <p className="text-xs opacity-60">운세꽃잎</p>
           <p className="text-2xl tabular-nums">{catches.length}<span className="text-sm opacity-60"> 번 (최근 30)</span></p>
           <ul className="mt-2 max-h-48 overflow-y-auto text-xs">
             {catches.map((c) => <li key={c.id} className="border-t border-black/5 py-1 opacity-70">{c.day} · 그날 {c.seq}번째 · {kst(c.createdAt).slice(11, 19)}</li>)}
