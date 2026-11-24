@@ -117,19 +117,20 @@ function buildProps(): Prop[] {
 
   // ---------- 강 건너 공원 ----------
   const offBridge = (x: number) => Math.abs(x - BRIDGE.x) > BRIDGE.w / 2 + 2.2;
-  const northBank: number[] = [];
+  const northInner: number[] = [];
   // 강변 산책로 양쪽 벚꽃 터널 (다리 앞은 비움)
   for (let x = -54; x <= 56; x += 13) {
-    if (offBridge(x) && tree(x, -42.2)) northBank.push(out.at(-1)!.x);
-    if (offBridge(x + 6.5)) tree(x + 6.5, -48.4);
+    if (offBridge(x)) tree(x, -42.2);
+    if (offBridge(x + 6.5) && tree(x + 6.5, -48.4)) northInner.push(out.at(-1)!.x);
   }
-  // 강을 바라보는 벤치·가로등 (강가 나무 사이)
-  northBank.sort((a, b) => a - b);
-  for (let i = 0; i < northBank.length - 1; i++) {
-    const x = northBank[i] + 6.5;
+  // 강을 바라보는 벤치·가로등: 이쪽 공원과 똑같이 강가 울타리에서 5.8m (산책로 건너편 가장자리, 안쪽 나무 사이)
+  const BENCH_FROM_RIVER = -1.7 - BOUNDS.minZ; // 이쪽 공원 벤치가 강에서 떨어진 거리
+  northInner.sort((a, b) => a - b);
+  for (let i = 0; i < northInner.length - 1; i++) {
+    const x = northInner[i] + 3.25;
     if (!offBridge(x) || !offBridge(x + 2.4)) continue;
-    out.push({ kind: "bench", x, z: -42.4, yaw: 0 });
-    out.push({ kind: "lamp", x: x + 2.4, z: -42.6, yaw: 0 });
+    out.push({ kind: "bench", x, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER, yaw: 0 });
+    out.push({ kind: "lamp", x: x + 2.4, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER - 0.2, yaw: 0 });
   }
   // 안쪽 벚꽃길 양쪽 + 잔디밭 그늘 나무
   for (let x = -46; x <= 46; x += 11) { tree(x, -57.6, 1); tree(x + 5.5, -64.6, 1.05); }
