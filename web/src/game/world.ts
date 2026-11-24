@@ -56,6 +56,73 @@ function canvasTex(w: number, h: number, draw: (x: CanvasRenderingContext2D) => 
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
+// ---------- 바닥: 짧게 깎은 잔디 + 매끈한 산책로 ----------
+/** 잔디 한 장(4m): 짧은 잎결 + 가끔 클로버 꽃. 가장자리를 넘는 점은 반대편에도 그려 이음매 없이 반복 */
+const grassTexture = () => {
+  const t = canvasTex(256, 256, (x) => {
+    x.fillStyle = "#a3dc78"; x.fillRect(0, 0, 256, 256);
+    const dot = (px: number, py: number, w: number, h: number) => { for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) x.fillRect(px + ox, py + oy, w, h); };
+    const C = ["#94cf68", "#b4e48a", "#8bc85f", "#c0ea98", "#9ed872"];
+    for (let i = 0; i < 9000; i++) { x.fillStyle = C[i % C.length]; dot(Math.random() * 256, Math.random() * 256, 1.2, 2.2 + Math.random() * 1.8); } // 짧은 잎
+    for (let i = 0; i < 14; i++) { // 클로버 꽃 무리 (하얗게 점점이)
+      const cx = Math.random() * 256, cy = Math.random() * 256;
+      for (let j = 0; j < 7; j++) { x.fillStyle = j % 3 ? "#f3f7ea" : "#e4efd6"; dot(cx + (Math.random() - 0.5) * 14, cy + (Math.random() - 0.5) * 14, 2.4, 2.4); }
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+};
+/** 잔디 재질: 땅 위치 기준으로 두 크기의 잔디 무늬를 섞고, 넓은 얼룩(볕 받아 연한 곳·짙은 곳)을 얹어 반복 무늬가 안 보이게 */
+function lawnMaterial() {
+  const m = new THREE.MeshToonMaterial({ map: grassTexture(), gradientMap: toonGradient() });
+  m.color.setScalar(1.12); // 햇살 받은 싱그러운 초록 (따뜻한 빛에 칙칙해지지 않게)
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vWXZ;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
+varying vec2 vWXZ;
+float lhash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+float lnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(lhash(i), lhash(i + vec2(1, 0)), f.x), mix(lhash(i + vec2(0, 1)), lhash(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace("#include <map_fragment>", `vec3 g = mix(texture2D(map, vWXZ / 4.0).rgb, texture2D(map, vWXZ / 10.3 + 0.37).rgb, 0.4);
+float patchy = lnoise(vWXZ * 0.05) * 0.6 + lnoise(vWXZ * 0.16) * 0.4;
+g *= 0.9 + patchy * 0.2;
+g = mix(g, g * vec3(1.06, 1.03, 0.9), smoothstep(0.55, 0.8, lnoise(vWXZ * 0.03 + 9.0)) * 0.6); // 볕에 바랜 듯 노르스름한 자리
+diffuseColor.rgb *= g;`);
+  };
+  return m;
+}
+/** 산책로(폭 전체 한 장, 길이 4m): 밝은 콘크리트 + 잔 모래알, 이음 줄 하나, 가장자리는 살짝 닳아 잔디와 부드럽게 */
+const walkTexture = () => {
+  const t = canvasTex(256, 128, (x) => {
+    x.fillStyle = "#ece2d2"; x.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? "150,135,115" : "255,252,245"},${0.08 + Math.random() * 0.12})`; x.fillRect(Math.random() * 256, Math.random() * 128, 1.5, 1.5); }
+    for (let i = 0; i < 6; i++) { // 은은한 얼룩
+      const g = x.createRadialGradient(Math.random() * 256, Math.random() * 128, 0, 128, 64, 90);
+      g.addColorStop(0, "rgba(210,195,170,0.12)"); g.addColorStop(1, "rgba(210,195,170,0)"); x.fillStyle = g; x.fillRect(0, 0, 256, 128);
+    }
+    x.fillStyle = "rgba(160,145,125,0.35)"; x.fillRect(0, 0, 2, 128); // 이음 줄
+    const edge = x.createLinearGradient(0, 0, 0, 128); // 양쪽 가장자리: 닳은 흙빛 → 잔디빛
+    edge.addColorStop(0, "rgba(150,175,110,0.55)"); edge.addColorStop(0.05, "rgba(205,190,160,0.45)"); edge.addColorStop(0.12, "rgba(205,190,160,0)");
+    edge.addColorStop(0.88, "rgba(205,190,160,0)"); edge.addColorStop(0.95, "rgba(205,190,160,0.45)"); edge.addColorStop(1, "rgba(150,175,110,0.55)");
+    x.fillStyle = edge; x.fillRect(0, 0, 256, 128);
+  });
+  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; return t;
+};
+/** 광장: 연한 사각 보도블록 (지름 d미터에 맞춰 반복) */
+const plazaTexture = (d: number) => {
+  const t = canvasTex(256, 256, (x) => {
+    const C = ["#efe4d3", "#e8dcc8", "#f3eadb", "#e4d6c0"];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+      x.fillStyle = C[(r * 3 + c * 5 + r * c) % C.length]; x.fillRect(c * 64 + (r % 2) * 32 - 32, r * 64, 64, 64); x.fillRect(c * 64 + (r % 2) * 32 + 224, r * 64, 64, 64);
+    }
+    for (let i = 0; i < 1500; i++) { x.fillStyle = `rgba(150,135,115,${0.06 + Math.random() * 0.1})`; x.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5); }
+    x.strokeStyle = "rgba(170,150,125,0.5)"; x.lineWidth = 2;
+    for (let r = 0; r <= 4; r++) { x.beginPath(); x.moveTo(0, r * 64); x.lineTo(256, r * 64); x.stroke(); }
+    for (let r = 0; r < 4; r++) for (let c = 0; c <= 4; c++) { const px = c * 64 + (r % 2) * 32; x.beginPath(); x.moveTo(px, r * 64); x.lineTo(px, r * 64 + 64); x.stroke(); }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(d / 2.6, d / 2.6); return t;
+};
+
 // 꽃송이 카드: 수채화처럼 부드러운 송이 덩어리 몇 개. 송이마다 위쪽은 밝고 아래쪽은 살짝 진한 분홍,
 // 꽃은 테두리·잎맥 없이 겹친 다섯 잎. 가운데만 아주 작게 진분홍 (멀리서 점처럼 보이지 않게)
 const blossomTexture = () => canvasTex(512, 512, (x) => {
@@ -513,24 +580,27 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   const sunDir = new THREE.Vector3(16, 34, 20).normalize(); // 꽃 덩어리 밝은 쪽 (낮 기준 고정)
 
   // 땅·길·광장
-  const flat = (geo: THREE.BufferGeometry, color: string, x: number, y: number, z: number, rotY = 0) => {
-    const m = new THREE.Mesh(geo, toon(color)); m.rotation.set(-Math.PI / 2, 0, rotY); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
+  const flat = (geo: THREE.BufferGeometry, color: string | THREE.Material, x: number, y: number, z: number, rotY = 0) => {
+    const m = new THREE.Mesh(geo, typeof color === "string" ? toon(color) : color); m.rotation.set(-Math.PI / 2, 0, rotY); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
   };
-  flat(new THREE.PlaneGeometry(400, 138), "#c6e5a9", 0, 0, 61); // 강둑(z=-8)부터 남쪽으로
-  for (const p of PATHS) {
-    const len = Math.hypot(p.x2 - p.x1, p.z2 - p.z1);
-    flat(new THREE.PlaneGeometry(len, p.w), "#f4e7d6", (p.x1 + p.x2) / 2, 0.006, (p.z1 + p.z2) / 2, -Math.atan2(p.z2 - p.z1, p.x2 - p.x1));
+  const grass = lawnMaterial();
+  flat(new THREE.PlaneGeometry(400, 138), grass, 0, 0, 61); // 강둑(z=-8)부터 남쪽으로
+  const pathTex = walkTexture();
+  for (const p of PATHS) { // 산책로: 길이 방향으로만 무늬 반복 (4m마다 이음 줄), 폭 방향은 가장자리까지 한 장
+    const len = Math.hypot(p.x2 - p.x1, p.z2 - p.z1), geo = new THREE.PlaneGeometry(len, p.w), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len / 4);
+    flat(geo, new THREE.MeshToonMaterial({ map: pathTex, gradientMap: toonGradient() }), (p.x1 + p.x2) / 2, 0.006, (p.z1 + p.z2) / 2, -Math.atan2(p.z2 - p.z1, p.x2 - p.x1));
   }
-  flat(new THREE.CircleGeometry(PLAZA.r, 48), "#efe0cc", PLAZA.x, 0.008, PLAZA.z);
-  flat(new THREE.RingGeometry(PLAZA.r - 0.25, PLAZA.r, 48), "#e2cfb6", PLAZA.x, 0.01, PLAZA.z);
+  flat(new THREE.CircleGeometry(PLAZA.r, 64), new THREE.MeshToonMaterial({ map: plazaTexture(PLAZA.r * 2), gradientMap: toonGradient() }), PLAZA.x, 0.008, PLAZA.z);
+  flat(new THREE.RingGeometry(PLAZA.r - 0.3, PLAZA.r, 64), "#d9cbb6", PLAZA.x, 0.01, PLAZA.z);
 
   // 강: 둑 → 물 → 건너편 → 도시 실루엣
   flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, -7.9);
   const bank = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
   const river = createRiver(scene, sky.uniforms, { y: -0.75, z: -24.2, width: 32, bankZ: -8.2 });
-  flat(new THREE.PlaneGeometry(520, 150), "#bfdea2", 0, -0.3, -115); // 강 건너 땅 (도시 아래까지)
+  flat(new THREE.PlaneGeometry(520, 150), grass, 0, -0.3, -115); // 강 건너 땅 (도시 아래까지)
   // 강 건너 공원: 잔디(공원과 같은 높이) + 둑
-  flat(new THREE.PlaneGeometry(400, 38), "#c6e5a9", 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
+  flat(new THREE.PlaneGeometry(400, 38), grass, 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
   flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, BOUNDS_N.maxZ + 0.4);
   { const b = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); b.position.set(0, -0.4, BOUNDS_N.maxZ + 0.7); scene.add(b); }
   // 강 건너는 돌다리: 매끈하게 솟은 아치 + 화강암 돌난간(연봉 머리 기둥·둥근 돌란대·동자) + 돌 교각

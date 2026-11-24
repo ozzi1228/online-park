@@ -106,7 +106,7 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
         lastDay = day;
         const w = dayWeather(day);
         u.coverage.value = w.coverage; u.cloudSize.value = w.size; u.seed.value.set(w.seed[0], w.seed[1]);
-        u.wind.value.set(Math.cos(w.windAngle), Math.sin(w.windAngle)).multiplyScalar(0.005); // 아주 천천히
+        u.wind.value.set(Math.cos(w.windAngle), Math.sin(w.windAngle)).multiplyScalar(0.02); // 예전과 같은 빠르기 (구름 무늬가 커진 만큼 값은 키움)
       }
       // 시각에 맞는 두 키 사이를 섞음
       let i = 0; while (i < KEYS.length - 2 && KEYS[i + 1].h <= hour) i++;
