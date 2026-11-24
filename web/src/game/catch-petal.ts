@@ -71,7 +71,8 @@ export class CatchPetal {
   setSchedule(t: number, enabled: boolean, minSec: number, maxSec: number) {
     const first = this.nextAt === Infinity;
     this.enabled = enabled; this.minSec = minSec; this.maxSec = Math.max(minSec, maxSec);
-    if (first) this.nextAt = t + this.minSec + Math.random() * (this.maxSec - this.minSec);
+    // 처음이거나, 간격이 줄어서 남은 기다림이 새 최대보다 길면 새 간격으로 다시 잡음 (관리자에서 바꾸면 곧바로 반영)
+    if (first || this.nextAt - t > this.maxSec) this.nextAt = t + this.minSec + Math.random() * (this.maxSec - this.minSec);
     if (!enabled && this.active) { this.active = false; this.group.visible = false; }
   }
 }

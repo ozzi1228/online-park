@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
@@ -10,7 +12,7 @@ import { CatBrain, type CatState } from "@/game/cat-brain";
 import { Input, JOY_R, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
-import { BENCH_SEATS, BOUNDS_N, COLLIDERS, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
+import { BENCH_SEATS, BOUNDS_N, COLLIDERS, PLAZA, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
 import { PRESETS, type Preset } from "@/game/presets";
 import { NPC_NAME } from "@/content/guide";
 import { InfoPanel } from "./info-panel";
@@ -238,10 +240,20 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (st.aiming || coin.busy || st.now < st.coinViewUntil) {
         const dx = FT.x - pos.x, dz = FT.z - pos.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
         const ce = new THREE.Vector3(), cl = new THREE.Vector3();
-        if (st.aiming) { ce.set(pos.x - ux * 4.2, FT.dish.y + 2.8, pos.z - uz * 4.2); cl.set(FT.x - ux * 0.8, FT.dish.y - 0.6, FT.z - uz * 0.8); } // 접시 안이 내려다보이게
-        else { // 옆에서: 던진 곳과 접시 사이가 한 화면에 (짧았는지·길었는지·옆으로 샜는지 보이게)
+        // 카메라는 늘 광장 안(둘레 벚나무에 가리지 않게)에 둠
+        const R = PLAZA.r - 1.2, inPlaza = (x: number, z: number) => {
+          const ox = x - FT.x, oz = z - FT.z, l = Math.hypot(ox, oz), k = l > R ? R / l : 1;
+          return { x: FT.x + ox * k, z: FT.z + oz * k, cut: l - Math.min(l, R) };
+        };
+        if (st.aiming) { // 내 뒤 위에서 접시 안이 내려다보이게 (나무 쪽에 서 있으면 광장 안쪽으로 당기고 더 높이)
+          const c = inPlaza(pos.x - ux * 4.2, pos.z - uz * 4.2);
+          ce.set(c.x, FT.dish.y + 2.8 + c.cut * 0.45, c.z); cl.set(FT.x - ux * 0.8, FT.dish.y - 0.6, FT.z - uz * 0.8);
+        } else { // 옆에서: 던진 곳과 접시 사이가 한 화면에. 양옆 중 트인 쪽(소원나무 반대쪽)에서
           const a = coin.from, mx = (a.x + FT.x) / 2, mz = (a.z + FT.z) / 2, side = Math.max(6, d * 0.9 + 3.5);
-          ce.set(mx - uz * side, 3.4, mz + ux * side);
+          const opts = [1, -1].map((sg) => inPlaza(mx - uz * side * sg, mz + ux * side * sg))
+            .map((c) => ({ ...c, score: Math.hypot(c.x - WISH_TREE.x, c.z - WISH_TREE.z) - c.cut * 2 }));
+          const c = opts[0].score >= opts[1].score ? opts[0] : opts[1];
+          ce.set(c.x, 3.6 + c.cut * 0.5, c.z);
           cl.set(mx, 2.4, mz).lerp(coin.pos, coin.busy ? 0.35 : 0.5);
         }
         if (!coinCam.on) { coinCam.eye.copy(camPos); coinCam.look.copy(camLook); coinCam.on = true; }
@@ -326,7 +338,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       },
       stand: () => { setMenu(null); stand(); },
     };
-    // 운세꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 하루 한 번). 5분마다 다시 확인
+    // 운세꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 하루 한 번, 횟수는 잡았을 때만 셈). 1분마다 다시 확인
     const refreshWish = async () => {
       try {
         const r = await fetch("/api/petal", { cache: "no-store" });
@@ -336,7 +348,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       } catch { /* 다음 확인 때 다시 */ }
     };
     refreshWish();
-    const wishTimer = setInterval(refreshWish, 5 * 60_000);
+    const wishTimer = setInterval(refreshWish, 60_000);
     const claim = async (height: number) => {
       const r = await fetch("/api/petal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ height }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; fortune?: string }>).catch(() => null);
@@ -388,7 +400,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (kind === "ground") { sayRef.current("앗, 분수 밖으로 날아갔어요"); return; }
       audio.plop();
       if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current("아깝다! 맨 위 접시를 비껴갔어요"); return; }
-      // 성공: 발 동동 → 소원
+      // 성공: 발 동동 → 소원 (과녁·궤적 점은 바로 치움)
+      coin.hideGuides();
       playGesture(me, "stomp", st.now); mp.sendGesture("stomp"); st.faceCam = true; st.wishUntil = st.now + 1.8 + WISH_SEC;
       sayRef.current("쏙! 들어갔어요 🎉");
       setTimeout(() => { audio.chime(); st.stompUntil = 0; }, 1800);
@@ -753,7 +766,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
       {fortune && (
         <section role="dialog" aria-label="오늘의 운세" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[22rem] -translate-y-1/2 flex-col items-center gap-4 rounded-3xl bg-cream/97 px-6 py-6 text-center shadow-xl ring-1 ring-sakura/20">
-          <svg viewBox="0 0 1000 1000" className="size-14" aria-hidden><path d="M500 965 C190 830 80 500 215 235 C280 105 395 70 468 150 L500 215 L532 150 C605 70 720 105 785 235 C920 500 810 830 500 965 Z" fill="#ffc9d8" stroke="#e9a3b8" strokeWidth="24" /></svg>
+          <Image src="/logo-mark.png" alt="" width={72} height={72} className="size-16" />
           <p className="text-xs tracking-widest opacity-50">오늘의 운세</p>
           <p className="text-lg leading-relaxed">{fortune}</p>
           <button onClick={() => setFortune(null)} className="rounded-full bg-sakura px-6 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">간직할게요</button>

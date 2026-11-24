@@ -65,6 +65,9 @@ export class CoinGame {
     this.group.add(this.coin, this.ring, this.arc, this.target, this.trail);
   }
 
+  /** 과녁·궤적 점 바로 숨기기 (성공 장면을 가리지 않게) */
+  hideGuides() { this.trail.visible = false; this.target.visible = false; this.arc.visible = false; }
+
   /** 조준하는 동안 과녁 보이기 */
   showTarget(on: boolean) { this.target.visible = on; }
 
