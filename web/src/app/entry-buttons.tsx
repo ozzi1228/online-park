@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { ShareButton } from "./share-button";
 
 // 로고만 있는 작은 동그라미 (각 서비스 로그인 버튼 가이드의 심볼 + 바탕색)
 const LOGOS: Record<string, { name: string; bg: string; icon: React.ReactNode }> = {
@@ -64,6 +65,7 @@ export function EntryButtons({ providers, guest = false }: { providers: string[]
           ))}
         </div>
       )}
+      <ShareButton />
       {error && <p role="alert" className="text-center text-sm text-red-600">{error}</p>}
     </div>
   );

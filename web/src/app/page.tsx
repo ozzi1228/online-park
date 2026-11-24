@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { auth, enabledProviders } from "@/lib/auth";
 import { EntryButtons } from "./entry-buttons";
+import { ShareButton } from "./share-button";
 
 export default function Home() {
   return (
@@ -25,9 +26,12 @@ async function EntryAction() {
   // 비회원으로 둘러본 사람도 여기서 로그인하면 캐릭터 그대로 회원이 됨
   if (!session || session.user.isAnonymous) return <EntryButtons providers={enabledProviders} guest={!!session} />;
   return (
-    <Link href="/park"
-      className="w-full max-w-xs rounded-full bg-sakura py-3.5 text-center text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)]">
-      공원 입장하기
-    </Link>
+    <div className="flex w-full max-w-xs flex-col gap-3">
+      <Link href="/park"
+        className="w-full rounded-full bg-sakura py-3.5 text-center text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)]">
+        공원 입장하기
+      </Link>
+      <ShareButton />
+    </div>
   );
 }
