@@ -10,6 +10,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "client.petal.caught": "운세꽃잎 잡음 (서버 판정 이전 기록)",
   "client.petal.missed": "운세꽃잎 놓침",
   "client.petal.released": "운세꽃잎 놓아줌",
+  "petal.kept": "오늘의 운세 간직",
   "client.wish.made": "소원 빌기",
   "client.sit.start": "앉기",
   "client.sit.end": "일어나기",

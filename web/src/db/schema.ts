@@ -103,6 +103,8 @@ export const petalCatches = pgTable("petal_catches", {
   userId: text().notNull(),
   day: text().notNull(),
   seq: integer().notNull(),           // 그날 몇 번째로 잡았는지 → (user, day, seq) 유니크로 초과 방지
+  fortune: text(),                    // 그때 나온 운세 문구
+  kept: boolean().notNull().default(false), // '간직할게요'를 눌러 쪽지함에 간직했는지
   createdAt: now(),
 }, (t) => [uniqueIndex().on(t.userId, t.day, t.seq), index().on(t.day)]);
 

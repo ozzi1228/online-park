@@ -771,7 +771,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           <Image src="/logo-mark.png" alt="" width={72} height={72} className="size-16" />
           <p className="text-xs tracking-widest opacity-50">오늘의 운세</p>
           <p className="text-lg leading-relaxed">{fortune}</p>
-          <button onClick={() => setFortune(null)} className="rounded-full bg-sakura px-6 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">간직할게요</button>
+          <button onClick={() => {
+            setFortune(null);
+            fetch("/api/petal", { method: "PATCH" }).then((r) => r.json() as Promise<{ ok: boolean }>)
+              .then((r) => sayRef.current(r.ok ? "쪽지함에 오늘의 운세를 간직했어요 ✉️" : "간직하지 못했어요")).catch(() => sayRef.current("간직하지 못했어요"));
+          }} className="rounded-full bg-sakura px-6 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">간직할게요</button>
         </section>
       )}
 
@@ -860,9 +864,11 @@ type InboxNote = { id: number; from: string | null; strokes: Strokes; readAt: st
 function Inbox({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<InboxNote[] | null>(null);
   const [open, setOpen] = useState<InboxNote | null>(null);
+  const [fortune, setFortune] = useState<string | null>(null); // 간직한 오늘의 운세
   useEffect(() => {
     let alive = true;
     fetch("/api/notes", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).then((x: InboxNote[]) => { if (alive) setRows(x); }).catch(() => alive && setRows([]));
+    fetch("/api/petal", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((x: { fortune?: string | null } | null) => { if (alive) setFortune(x?.fortune ?? null); }).catch(() => {});
     return () => { alive = false; };
   }, []);
   const view = (n: InboxNote) => {
@@ -886,7 +892,14 @@ function Inbox({ onClose }: { onClose: () => void }) {
             <NoteView strokes={open.strokes} className="w-full max-w-[min(26rem,60dvh)]" />
             <p className="text-xs opacity-60">{when(open.createdAt)}</p>
           </div>
-        ) : !rows ? <p className="text-sm opacity-60">불러오는 중…</p> : rows.length === 0 ? <p className="text-sm opacity-60">아직 받은 쪽지가 없어요</p> : (
+        ) : (<>
+          {fortune && ( // 간직한 오늘의 운세 (받은 쪽지 위에)
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-sakura/30">
+              <Image src="/logo-mark.png" alt="" width={40} height={40} className="size-10 shrink-0" />
+              <div className="min-w-0"><p className="text-xs tracking-widest opacity-50">오늘의 운세</p><p className="leading-snug">{fortune}</p></div>
+            </div>
+          )}
+          {!rows ? <p className="text-sm opacity-60">불러오는 중…</p> : rows.length === 0 ? <p className="text-sm opacity-60">아직 받은 쪽지가 없어요</p> : (
           <ul className="grid grid-cols-3 gap-3">
             {rows.map((n) => (
               <li key={n.id}>
@@ -899,6 +912,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
             ))}
           </ul>
         )}
+        </>)}
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 // 운세꽃잎: 하루 전체 선착순 N개 + 한 사람당 하루 M번(기본 1번). 판정·운세 뽑기는 항상 서버에서.
-import { and, count, eq, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { petalCatches, wishPetalDays } from "@/db/schema";
 import { getSettings, kstDate } from "@/lib/settings";
@@ -34,11 +34,28 @@ export async function claimWishPetal(userId: string): Promise<ClaimResult> {
         .where(and(eq(wishPetalDays.day, day), lt(wishPetalDays.caught, s.dailyTotal))).returning({ caught: wishPetalDays.caught });
       if (!row) return { ok: false, reason: "soldout" } as const;
       // 같은 사람이 동시에 두 번 눌러도 (user, day, seq) 유니크에 걸려 전체가 취소됨
-      await tx.insert(petalCatches).values({ userId, day, seq: mine + 1 });
+      await tx.insert(petalCatches).values({ userId, day, seq: mine + 1, fortune });
       return { ok: true, myCount: mine + 1, left: s.dailyTotal - row.caught, fortune } as const;
     });
   } catch (e) {
     if ((e as { code?: string })?.code === "23505" || String(e).includes("duplicate key")) return { ok: false, reason: "limit" };
     throw e;
   }
+}
+
+/** '간직할게요': 오늘 잡은 운세꽃잎(가장 최근)을 쪽지함에 간직 */
+export async function keepFortune(userId: string) {
+  const day = kstDate();
+  const [last] = await db.select({ id: petalCatches.id }).from(petalCatches)
+    .where(and(eq(petalCatches.userId, userId), eq(petalCatches.day, day))).orderBy(desc(petalCatches.id)).limit(1);
+  if (!last) return false;
+  await db.update(petalCatches).set({ kept: true }).where(eq(petalCatches.id, last.id));
+  return true;
+}
+
+/** 쪽지함 맨 위에 보여 줄 오늘의 운세 (간직한 것만) */
+export async function todaysFortune(userId: string) {
+  const [r] = await db.select({ fortune: petalCatches.fortune }).from(petalCatches)
+    .where(and(eq(petalCatches.userId, userId), eq(petalCatches.day, kstDate()), eq(petalCatches.kept, true))).orderBy(desc(petalCatches.id)).limit(1);
+  return r?.fortune ?? null;
 }
