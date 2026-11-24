@@ -23,7 +23,8 @@ export default function Home() {
 
 async function EntryAction() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return <EntryButtons providers={enabledProviders} />;
+  // 비회원으로 둘러본 사람도 여기서 로그인하면 캐릭터 그대로 회원이 됨
+  if (!session || session.user.isAnonymous) return <EntryButtons providers={enabledProviders} guest={!!session} />;
   return (
     <Link href="/park"
       className="w-full max-w-xs rounded-full bg-sakura py-3.5 text-center text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)]">

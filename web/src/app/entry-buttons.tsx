@@ -10,12 +10,13 @@ const LABELS: Record<string, { text: string; className: string }> = {
   google: { text: "구글로 시작", className: "bg-white text-[#3c4043] ring-1 ring-[#dadce0]" },
 };
 
-export function EntryButtons({ providers }: { providers: string[] }) {
+export function EntryButtons({ providers, guest = false }: { providers: string[]; guest?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const asGuest = async () => {
+    if (guest) { router.push("/park"); return; } // 이미 비회원으로 들어와 있음
     setBusy(true); setError("");
     const { error } = await authClient.signIn.anonymous();
     if (error) { setBusy(false); setError("입장하지 못했어요. 잠시 후 다시 시도해 주세요."); return; }
@@ -30,7 +31,7 @@ export function EntryButtons({ providers }: { providers: string[] }) {
     <div className="flex w-full max-w-xs flex-col gap-3">
       <button onClick={asGuest} disabled={busy}
         className="rounded-full bg-sakura py-3.5 text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)] active:translate-y-0.5 active:shadow-none disabled:opacity-60">
-        비회원으로 둘러보기
+        {guest ? "비회원으로 계속 둘러보기" : "비회원으로 둘러보기"}
       </button>
       {providers.length > 0 && <p className="mt-2 text-center text-sm opacity-70">회원은 그린으로 노트·소원 기능을 쓸 수 있어요</p>}
       {providers.map((p) => (
