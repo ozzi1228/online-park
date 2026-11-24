@@ -10,7 +10,7 @@ import { CatBrain, type CatState } from "@/game/cat-brain";
 import { Input, JOY_R, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
-import { BENCH_SEATS, COLLIDERS, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
+import { BENCH_SEATS, BOUNDS_N, COLLIDERS, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
 import { PRESETS, type Preset } from "@/game/presets";
 import { NPC_NAME } from "@/content/guide";
 import { InfoPanel } from "./info-panel";
@@ -657,7 +657,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       focus.set(pos.x, 0, pos.z);
       const wind = world.update(t, dt, focus, walking, yaw);
       audio.update({
-        wind, riverDist: pos.z > -8 ? pos.z + 8 : pos.z < -40.6 ? -40.6 - pos.z : 0, fountainDist: Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z),
+        wind, riverDist: pos.z > -8 ? pos.z + 8 : pos.z < BOUNDS_N.maxZ + 0.7 ? BOUNDS_N.maxZ + 0.7 - pos.z : 0, fountainDist: Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z),
         nearby: mp.nearCount(pos.x, pos.z, 15), hour: skyHour ?? kstHour(),
       });
       if (tree.pending) { // 나무 둘레를 도는 카메라

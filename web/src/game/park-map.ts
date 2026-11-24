@@ -4,9 +4,9 @@
 
 export const BOUNDS = { minX: -59.5, maxX: 59.5, minZ: -7.5, maxZ: 28.5 };
 /** 강을 건너는 나무 다리: 가운데 x, 폭, 남쪽·북쪽 끝 z, 가운데가 솟은 높이 */
-export const BRIDGE = { x: -4.5, w: 3.4, z0: -7.0, z1: -41.8, rise: 1.6 };
+export const BRIDGE = { x: -4.5, w: 3.4, z0: -7.0, z1: -31.3, rise: 1.4 };
 /** 강 건너 공원 (다리로 이어짐) */
-export const BOUNDS_N = { minX: -59.5, maxX: 59.5, minZ: -72, maxZ: -41.3 };
+export const BOUNDS_N = { minX: -59.5, maxX: 59.5, minZ: -61.5, maxZ: -30.8 }; // 강 폭 약 22m
 type Area = { minX: number; maxX: number; minZ: number; maxZ: number };
 /** 걸어 다닐 수 있는 곳 = 공원 + 다리 + 강 건너 공원 (겹치게 이어 붙임) */
 const AREAS: Area[] = [BOUNDS, { minX: BRIDGE.x - BRIDGE.w / 2 + 0.2, maxX: BRIDGE.x + BRIDGE.w / 2 - 0.2, minZ: BRIDGE.z1 - 0.6, maxZ: BRIDGE.z0 + 0.6 }, BOUNDS_N];
@@ -53,11 +53,11 @@ export const PATHS: Path[] = [
   { x1: 46, z1: 19, x2: 46, z2: 24, w: 3 },       // 북쪽 길 → 광장
   { x1: -4.5, z1: -7.5, x2: -4.5, z2: -4, w: 3.4 }, // 산책로 → 다리
   // 강 건너 공원
-  { x1: -4.5, z1: -41.5, x2: -4.5, z2: -45, w: 3.4 }, // 다리 → 건너편 강변길
-  { x1: -70, z1: -45, x2: 70, z2: -45, w: 4 },     // 건너편 강변 산책로
-  { x1: -48, z1: -61, x2: 48, z2: -61, w: 3 },     // 안쪽 벚꽃길
-  { x1: -30, z1: -45, x2: -30, z2: -61, w: 3 },
-  { x1: 26, z1: -45, x2: 26, z2: -61, w: 3 },
+  { x1: -4.5, z1: -31, x2: -4.5, z2: -34.5, w: 3.4 }, // 다리 → 건너편 강변길
+  { x1: -70, z1: -34.5, x2: 70, z2: -34.5, w: 4 }, // 건너편 강변 산책로
+  { x1: -48, z1: -50.5, x2: 48, z2: -50.5, w: 3 }, // 안쪽 벚꽃길
+  { x1: -30, z1: -34.5, x2: -30, z2: -50.5, w: 3 },
+  { x1: 26, z1: -34.5, x2: 26, z2: -50.5, w: 3 },
 ];
 export const PLAZA = { x: 46, z: 10, r: 11 };
 
@@ -106,6 +106,8 @@ function buildProps(): Prop[] {
     }
   // 잔디밭 한가운데 피크닉 그늘 나무
   for (const [x, z] of [[-31, 8], [-6, 12], [24, 13], [-38, 18], [4, 20]]) tree(x, z, 1.15);
+  // 매점 둘레: 뒤쪽 잔디에 그늘 나무 (매점 앞 산책로 쪽은 비움)
+  for (const [x, z] of [[3, 8.5], [20.5, 8.5], [28, 4], [15.5, 12.5], [8, 14.5], [-1, 3.5]]) tree(x, z, 1.05);
   // 벤치·가로등: 남쪽 줄 나무 사이사이에 번갈아
   landSide.sort((a, b) => a - b);
   for (let i = 0; i < landSide.length - 1; i++) {
@@ -120,8 +122,8 @@ function buildProps(): Prop[] {
   const northInner: number[] = [];
   // 강변 산책로 양쪽 벚꽃 터널 (다리 앞은 비움)
   for (let x = -54; x <= 56; x += 13) {
-    if (offBridge(x)) tree(x, -42.2);
-    if (offBridge(x + 6.5) && tree(x + 6.5, -48.4)) northInner.push(out.at(-1)!.x);
+    if (offBridge(x)) tree(x, -31.7);
+    if (offBridge(x + 6.5) && tree(x + 6.5, -37.9)) northInner.push(out.at(-1)!.x);
   }
   // 강을 바라보는 벤치·가로등: 이쪽 공원과 똑같이 강가 울타리에서 5.8m (산책로 건너편 가장자리, 안쪽 나무 사이)
   const BENCH_FROM_RIVER = -1.7 - BOUNDS.minZ; // 이쪽 공원 벤치가 강에서 떨어진 거리
@@ -133,8 +135,8 @@ function buildProps(): Prop[] {
     out.push({ kind: "lamp", x: x + 2.4, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER - 0.2, yaw: 0 });
   }
   // 안쪽 벚꽃길 양쪽 + 잔디밭 그늘 나무
-  for (let x = -46; x <= 46; x += 11) { tree(x, -57.6, 1); tree(x + 5.5, -64.6, 1.05); }
-  for (const [x, z] of [[-44, -53], [-14, -53], [12, -54], [42, -53], [-38, -68.5], [-8, -68.5], [18, -68.5], [48, -68.5]]) tree(x, z, 1.15);
+  for (let x = -46; x <= 46; x += 11) { tree(x, -47.1, 1); tree(x + 5.5, -54.1, 1.05); }
+  for (const [x, z] of [[-44, -42.5], [-14, -42.5], [12, -43.5], [42, -42.5], [-38, -58], [-8, -58], [18, -58], [48, -58]]) tree(x, z, 1.15);
   return out;
 }
 export const PROPS = buildProps();
@@ -143,16 +145,22 @@ export const PROPS = buildProps();
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
   // 강 건너 공원 뒤: 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃, 그 뒤로 도시)
-  for (const [z0, step, s0] of [[-74.5, 6.5, 1.1], [-79, 7, 1.25], [-84, 7.5, 1.4], [-90, 8, 1.5], [-96.5, 8.5, 1.6]] as const)
+  for (const [z0, step, s0] of [[-64, 6.5, 1.1], [-68.5, 7, 1.25], [-73.5, 7.5, 1.4], [-79.5, 8, 1.5], [-86, 8.5, 1.6]] as const)
     for (let x = -190 + r() * step; x <= 190; x += step * (0.85 + r() * 0.3))
       out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
-  // 강둑 따라 공원 밖까지: 양쪽 물가에 벚나무가 줄지어 멀리 이어짐 (물가 땅 위에 서 있게)
-  for (const side of [-1, 1]) for (let x = 64 + r() * 3; x < 192; x += 6.5 + r() * 1.5) {
-    const k = Math.min(1, (x - 60) / 120), xs = side * x;
-    // 강변 울타리 안쪽(땅 쪽)에만: 가지가 물 위로 나가 떠 보이지 않게 울타리에서 4m쯤 들여 심음
-    out.push({ kind: "tree", x: xs, z: -3.4 + r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });           // 이쪽 강둑
-    out.push({ kind: "tree", x: xs + side * 3, z: -45 - r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });    // 건너편 강둑
-    for (const z of [-49, -56, -63.5, -70]) out.push({ kind: "tree", x: xs + (r() - 0.5) * 4, z: z - r() * 2, s: 1.15 + k * 0.3 + r() * 0.2, inside: false }); // 건너편 숲
+  // 강둑 따라 공원 밖까지: 공원 안 강변 벚꽃길과 똑같은 자리·간격으로 이어 심어 경계가 티 나지 않게
+  //  (이쪽: 울타리 바로 안쪽 z -6.7 + 길 건너 -0.9 / 건너편: -31.7 + -37.9, 13m 간격·6.5m 엇갈림)
+  const tw = (x: number, z: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 1.2, z: z + (r() - 0.5) * 0.4, s: 0.95 + r() * 0.2, inside: false });
+  for (const dir of [-1, 1]) for (let i = 1; i <= 11; i++) {
+    const base = dir < 0 ? -50 - 13 * i : 56 + 13 * (i - 1) + 13; // 공원 안 강변 줄(x = -50 + 13k)을 그대로 이어감
+    tw(base, -6.7); tw(base + 6.5, -0.9);
+    tw(base + (dir < 0 ? -4 : 4), -31.7); tw(base + 6.5 + (dir < 0 ? -4 : 4), -37.9);
+    for (const z of [-44, -50, -56]) tw(base + (r() - 0.5) * 6, z);                 // 건너편 그 뒤 숲
+  }
+  // 더 멀리는 강가 줄만 안개 속까지 (줄이 뚝 끝나는 자리가 보이지 않게)
+  for (const dir of [-1, 1]) for (let i = 12; i <= 24; i++) {
+    const base = dir < 0 ? -50 - 13 * i : 56 + 13 * i;
+    tw(base, -6.7); tw(base + (dir < 0 ? -4 : 4), -31.7);
   }
   const t = (x: number, z: number, s: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 2.5, z: z + (r() - 0.5) * 2.5, s: s + r() * 0.25, inside: false });
   // 남쪽 뒤: 네 줄로 엇갈려 빽빽하게, 멀수록 크게 (울타리 너머가 벚꽃 숲)

@@ -117,7 +117,7 @@ export function createCity(scene: THREE.Scene, sky: SkyUniforms, fog: THREE.Fog)
     vertexShader: VERT, fragmentShader: FRAG,
   });
   // 강 건너 공원이 생겨서 도시는 그 뒤로 (다리는 강에 그대로)
-  const far = new THREE.Group(); far.position.z = -18; scene.add(far);
+  const far = new THREE.Group(); far.position.z = -7.5; scene.add(far);
   far.add(new THREE.Mesh(mergeGeometries(geos), mat));
 
   // 멀리 산 (뿌연 실루엣) + 봉우리 전망탑
@@ -138,7 +138,7 @@ export function createCity(scene: THREE.Scene, sky: SkyUniforms, fog: THREE.Fog)
   // 동쪽 다리: 강을 가로지르는 아치 다리 (밤엔 가로등이 줄지어 켜짐)
   const bridge = new THREE.Group();
   const bMat = new THREE.MeshLambertMaterial({ color: "#c9c3b8" }), archMat = new THREE.MeshLambertMaterial({ color: "#6c8f84" });
-  const BX = 82, Z0 = -7, Z1 = -44;
+  const BX = 82, Z0 = -7, Z1 = -33.5;
   bridge.add(new THREE.Mesh(new THREE.BoxGeometry(7, 0.8, Z0 - Z1), bMat).translateX(BX).translateY(3.2).translateZ((Z0 + Z1) / 2));
   const lampPts: THREE.Vector3[] = [];
   for (let z = Z0 - 3; z > Z1 + 1; z -= 7.5) {

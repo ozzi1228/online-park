@@ -361,17 +361,60 @@ function buildProp(p: Prop, root: THREE.Group) {
     for (let i = 1; i < 3; i++) box(w, 0.035, 0.03, PILLAR, x, y - h / 2 + (h * i) / 3, z + 0.03, 0);
   };
   switch (p.kind) {
-    case "bench":
-      box(1.5, 0.08, 0.42, WOOD, 0, 0.44, 0); box(1.5, 0.3, 0.06, WOOD, 0, 0.72, -0.2);
-      for (const sx of [-0.65, 0.65]) for (const sz of [-0.15, 0.15]) box(0.07, 0.44, 0.07, BARK, sx, 0.22, sz);
+    case "bench": { // 공원 벤치: 따뜻한 원목 살 + 검은 무쇠 옆판(구름무늬로 말린 팔걸이) + 등받이 가운데 놋쇠 매화 장식
+      const IRON = "#2c2a2b", TEAK = "#d9873a", TEAK_D = "#c47630", BRASS = "#c9a25a";
+      for (let i = 0; i < 5; i++) box(1.5, 0.035, 0.07, i % 2 ? TEAK_D : TEAK, 0, 0.45, -0.17 + i * 0.085, 0.008);       // 앉는 판 5줄
+      for (const [y, z] of [[0.6, -0.215], [0.71, -0.235], [0.82, -0.255]]) {                                           // 살짝 뒤로 누운 등받이 3줄
+        const m = box(1.5, 0.075, 0.032, TEAK, 0, y, z, 0.008); m.rotation.x = -0.18;
+      }
+      for (const sx of [-0.7, 0.7]) {
+        box(0.05, 0.47, 0.05, IRON, sx, 0.235, 0.15, 0.006);                    // 앞다리
+        const back = box(0.05, 0.92, 0.05, IRON, sx, 0.46, -0.22, 0.006); back.rotation.x = -0.12; // 등받이까지 이어진 뒷다리
+        box(0.05, 0.04, 0.42, IRON, sx, 0.42, -0.03, 0.006);                    // 앉는 판 받침
+        // 팔걸이: 등받이에서 앞으로 둥글게 내려와 끝이 구름무늬처럼 말림
+        const arm = new THREE.CatmullRomCurve3([[0, 0.66, -0.21], [0, 0.69, -0.05], [0, 0.66, 0.12], [0, 0.6, 0.18], [0, 0.55, 0.15], [0, 0.56, 0.11], [0, 0.6, 0.12]].map(([x, y, z]) => new THREE.Vector3(x, y, z)));
+        add(new THREE.TubeGeometry(arm, 40, 0.018, 6), IRON, sx, 0, 0, 0);
+        add(new THREE.SphereGeometry(0.04, 10, 8), IRON, sx, 0.03, 0.15, 0.006); // 발
+        add(new THREE.SphereGeometry(0.04, 10, 8), IRON, sx, 0.03, -0.27, 0.006);
+      }
+      box(1.38, 0.025, 0.025, IRON, 0, 0.12, -0.04, 0.004);                     // 아래 가로대
+      // 등받이 가운데 매화 장식 (놋쇠 꽃잎 다섯 + 꽃술)
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; add(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 10).rotateX(Math.PI / 2), BRASS, Math.sin(a) * 0.028, 0.71 + Math.cos(a) * 0.028, -0.212, 0); }
+      add(new THREE.CylinderGeometry(0.014, 0.014, 0.014, 8).rotateX(Math.PI / 2), "#a87e3c", 0, 0.71, -0.21, 0);
       break;
-    case "lamp": // 청사초롱 느낌 가로등
-      box(0.09, 2.6, 0.09, "#5a3f36", 0, 1.3, 0);
-      box(0.5, 0.06, 0.06, "#5a3f36", 0.22, 2.55, 0);
-      box(0.3, 0.4, 0.3, PAPER, 0.42, 2.25, 0);
-      box(0.32, 0.06, 0.32, DAN_RED, 0.42, 2.05, 0); box(0.32, 0.06, 0.32, DAN_RED, 0.42, 2.45, 0);
-      add(hanokRoof(4, 0.5, 0.5, 0.18), GIWA, 0.42, 2.48, 0);
+    }
+    case "lamp": { // 가로등: 검은 무쇠 기둥 + 덩굴무늬 팔 + 문살 격자 초롱 (초롱 가운데가 2.25 높이 = 밤 불빛 자리)
+      const IRON = "#2d2826", BRONZE = "#6b5236";
+      cyl(0.12, 0.15, 0.12, IRON, 0, 0.06, 0, 16); cyl(0.085, 0.11, 0.18, IRON, 0, 0.21, 0, 16);       // 받침
+      cyl(0.045, 0.06, 2.45, IRON, 0, 1.5, 0, 12);                                                     // 기둥
+      for (const y of [0.42, 1.6, 2.62]) cyl(0.065, 0.065, 0.05, BRONZE, 0, y, 0, 12);                 // 마디 고리
+      add(new THREE.SphereGeometry(0.06, 12, 10).scale(1, 1.3, 1), BRONZE, 0, 2.78, 0, 0.006);         // 꼭대기 연봉
+      add(new THREE.ConeGeometry(0.025, 0.06, 8), BRONZE, 0, 2.89, 0, 0.004);
+      box(0.5, 0.035, 0.035, IRON, 0.24, 2.6, 0, 0.005);                                                // 팔
+      add(new THREE.SphereGeometry(0.025, 8, 6), BRONZE, 0.5, 2.6, 0, 0);
+      // 팔 아래 덩굴무늬 받침 (안쪽으로 말린 소용돌이)
+      const scroll = new THREE.CatmullRomCurve3(Array.from({ length: 22 }, (_, i) => {
+        const k = i / 21, r = 0.13 * (1 - k * 0.75), a = Math.PI * (0.5 + k * 2.2);
+        return new THREE.Vector3(0.16 + Math.cos(a) * r * 1.1 - 0.02, 2.47 + Math.sin(a) * r, 0);
+      }));
+      add(new THREE.TubeGeometry(scroll, 48, 0.012, 5), IRON, 0, 0, 0, 0);
+      box(0.012, 0.12, 0.012, IRON, 0.42, 2.53, 0, 0);                                                  // 초롱 고리
+      // 초롱: 위 지붕 + 문살(격자) 창 네 면 + 아래 받침
+      const L = 0.28, H = 0.34, ly = 2.25;
+      box(L, H, L, "#fff0d2", 0.42, ly, 0, 0.006);
+      for (const [dx, dz, ry] of [[0, L / 2 + 0.004, 0], [0, -L / 2 - 0.004, 0], [L / 2 + 0.004, 0, Math.PI / 2], [-L / 2 - 0.004, 0, Math.PI / 2]]) {
+        const f = new THREE.Group(); f.position.set(0.42 + dx, ly, dz); f.rotation.y = ry; g.add(f);
+        const bar = (w: number, h: number, x: number, y: number) => f.add(at(part(new THREE.BoxGeometry(w, h, 0.008), IRON, 0), x, y, 0));
+        bar(L, 0.018, 0, H / 2 - 0.009); bar(L, 0.018, 0, -H / 2 + 0.009); bar(0.016, H, -L / 2 + 0.008, 0); bar(0.016, H, L / 2 - 0.008, 0);
+        for (const x of [-L / 6, L / 6]) bar(0.008, H - 0.03, x, 0);                                  // 세로 살
+        for (const y of [-H / 6, H / 6]) bar(L - 0.03, 0.008, 0, y);                                  // 가로 살
+        bar(0.05, 0.05, 0, 0).rotation.z = Math.PI / 4;                                                // 가운데 마름모 (문살 무늬)
+      }
+      box(L + 0.06, 0.035, L + 0.06, IRON, 0.42, ly - H / 2 - 0.02, 0, 0.004);
+      add(new THREE.SphereGeometry(0.022, 8, 6), BRONZE, 0.42, ly - H / 2 - 0.06, 0, 0);
+      add(hanokRoof(4, L + 0.16, L + 0.16, 0.1), IRON, 0.42, ly + H / 2 + 0.005, 0, 0.004);
       break;
+    }
     case "gate": // 일주문 느낌: 둥근 기둥 두 개 + 기와지붕 + 현판
       for (const s of [-1, 1]) { cyl(0.26, 0.3, 0.3, STONE, 0, 0.15, s * 2.3, 12); cyl(0.2, 0.22, 3.1, PILLAR, 0, 1.85, s * 2.3, 14); }
       box(0.34, 0.3, 5.6, DAN_GREEN, 0, 3.2, 0); box(0.3, 0.16, 5.4, DAN_RED, 0, 2.98, 0);
@@ -584,7 +627,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
     const m = new THREE.Mesh(geo, typeof color === "string" ? toon(color) : color); m.rotation.set(-Math.PI / 2, 0, rotY); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
   };
   const grass = lawnMaterial();
-  flat(new THREE.PlaneGeometry(400, 138), grass, 0, 0, 61); // 강둑(z=-8)부터 남쪽으로
+  flat(new THREE.PlaneGeometry(1400, 138), grass, 0, 0, 61); // 강둑(z=-8)부터 남쪽으로 (옆으로는 안개 너머까지)
   const pathTex = walkTexture();
   for (const p of PATHS) { // 산책로: 길이 방향으로만 무늬 반복 (4m마다 이음 줄), 폭 방향은 가장자리까지 한 장
     const len = Math.hypot(p.x2 - p.x1, p.z2 - p.z1), geo = new THREE.PlaneGeometry(len, p.w), uv = geo.attributes.uv;
@@ -595,14 +638,14 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   flat(new THREE.RingGeometry(PLAZA.r - 0.3, PLAZA.r, 64), "#d9cbb6", PLAZA.x, 0.01, PLAZA.z);
 
   // 강: 둑 → 물 → 건너편 → 도시 실루엣
-  flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, -7.9);
-  const bank = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
-  const river = createRiver(scene, sky.uniforms, { y: -0.75, z: -24.2, width: 32, bankZ: -8.2 });
-  flat(new THREE.PlaneGeometry(520, 150), grass, 0, -0.3, -115); // 강 건너 땅 (도시 아래까지)
+  flat(new THREE.PlaneGeometry(1400, 0.6), "#e9dccb", 0, 0.012, -7.9);
+  const bank = new THREE.Mesh(new THREE.PlaneGeometry(1400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
+  const river = createRiver(scene, sky.uniforms, { y: -0.75, z: (-8.2 + BOUNDS_N.maxZ + 0.7) / 2, width: -8.2 - (BOUNDS_N.maxZ + 0.7), bankZ: -8.2 }); // 양쪽 둑 사이 (약 22m)
+  flat(new THREE.PlaneGeometry(1400, 150), grass, 0, -0.3, -105); // 강 건너 땅 (도시 아래까지)
   // 강 건너 공원: 잔디(공원과 같은 높이) + 둑
-  flat(new THREE.PlaneGeometry(400, 38), grass, 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
-  flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, BOUNDS_N.maxZ + 0.4);
-  { const b = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); b.position.set(0, -0.4, BOUNDS_N.maxZ + 0.7); scene.add(b); }
+  flat(new THREE.PlaneGeometry(1400, 38), grass, 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
+  flat(new THREE.PlaneGeometry(1400, 0.6), "#e9dccb", 0, 0.012, BOUNDS_N.maxZ + 0.4);
+  { const b = new THREE.Mesh(new THREE.PlaneGeometry(1400, 0.8), toon("#d8c8b4")); b.position.set(0, -0.4, BOUNDS_N.maxZ + 0.7); scene.add(b); }
   // 강 건너는 돌다리: 매끈하게 솟은 아치 + 화강암 돌난간(연봉 머리 기둥·둥근 돌란대·동자) + 돌 교각
   {
     const g = new THREE.Group(), { x: bx, w, z0, z1 } = BRIDGE, hw = w / 2, N = 80;
@@ -680,12 +723,12 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   const statics = new THREE.Group(), extras = new THREE.Group();
   let fountain: ReturnType<typeof createFountain> | null = null;
   // 맵 밖 배경 나무: 걸어 다니는 곳에서 멀수록 잎 카드를 줄임 (멀어서 덜 그려도 풍성해 보임), 그림자도 안 드리움
-  const away = (x: number, z: number) => Math.max(0, Math.abs(x) - 60, -72 - z, z - 29);
+  const away = (x: number, z: number) => Math.max(0, Math.abs(x) - 60, BOUNDS_N.minZ - z, z - 29);
   const far = new THREE.Group();
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
     if (p.kind === "tree") {
       if (p.inside) statics.add(cherryTree(p, spots, q.cards));
-      else { const d = away(p.x, p.z); far.add(cherryTree(p, spots, q.cards * (d < 12 ? 0.45 : d < 45 ? 0.3 : 0.2))); }
+      else { const d = away(p.x, p.z); far.add(cherryTree(p, spots, q.cards * (d < 70 ? 0.6 : 0.4))); } // 멀어도 꽃은 풍성하게
     }
     else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
     else buildProp(p, statics);

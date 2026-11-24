@@ -78,7 +78,7 @@ export function createRiver(scene: THREE.Scene, sky: SkyUniforms, opts: { y: num
     deep: { value: new THREE.Color("#3d78a8") }, shallow: { value: new THREE.Color("#7fc0dc") },
     fogColor: { value: new THREE.Color() }, fogNear: { value: 50 }, fogFar: { value: 200 },
   };
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(400, opts.width), new THREE.ShaderMaterial({ uniforms: u, vertexShader: vert, fragmentShader: frag }));
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1400, opts.width), new THREE.ShaderMaterial({ uniforms: u, vertexShader: vert, fragmentShader: frag }));
   mesh.rotation.x = -Math.PI / 2; mesh.position.set(0, opts.y, opts.z);
   scene.add(mesh);
   return {
