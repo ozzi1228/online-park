@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { logEvent, requestCtx } from "@/lib/log";
 import { cleanStrokes } from "@/lib/notes-shared";
-import { attachToTree, listTree, peel, recover } from "@/lib/tree";
+import { attachToTree, listTree, peel, recover, removeNote } from "@/lib/tree";
 
 const session = (req: Request) => auth.api.getSession({ headers: req.headers });
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   return Response.json(r);
 }
 
-/** 내 쪽지: { id, action: "peel"(겹친 장 떼기) | "cover"(다시 가리기, 노트 1장) } */
+/** 내 쪽지: { id, action: "peel"(겹친 장 떼기) | "cover"(가리기, 노트 1장) | "remove"(떼어 내기) } */
 export async function PATCH(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
@@ -34,6 +34,11 @@ export async function PATCH(req: Request) {
   if (action === "peel") {
     const ok = await peel(s.user.id, id as number);
     await logEvent("tree.peeled", { noteId: id, ok }, { userId: s.user.id, sessionId: s.session.id });
+    return Response.json({ ok });
+  }
+  if (action === "remove") {
+    const ok = await removeNote(s.user.id, id as number);
+    await logEvent("tree.removed", { noteId: id, ok }, { userId: s.user.id, sessionId: s.session.id });
     return Response.json({ ok });
   }
   if (action === "cover") {

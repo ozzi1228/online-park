@@ -55,7 +55,13 @@ export async function peel(userId: string, id: number) {
   return r.length > 0;
 }
 
-/** 다시 가리기: 새 노트 한 장을 덮어 붙임 */
+/** 내 쪽지 떼어 내기 (나무에서 없어짐, 노트는 돌려받지 않음) */
+export async function removeNote(userId: string, id: number) {
+  const r = await db.delete(notes).where(and(eq(notes.id, id), eq(notes.authorId, userId), eq(notes.kind, "tree"))).returning({ id: notes.id });
+  return r.length > 0;
+}
+
+/** 가리기: 새 노트 한 장을 덮어 붙임 */
 export async function recover(userId: string, id: number) {
   return db.transaction(async (tx) => {
     const [n] = await tx.select({ id: notes.id }).from(notes)

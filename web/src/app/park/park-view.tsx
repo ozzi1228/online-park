@@ -773,16 +773,17 @@ function Inbox({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** 소원나무 쪽지 보기 (내 쪽지면 떼기·다시 가리기) */
+/** 소원나무 쪽지 보기 (내 쪽지면 가리기·겹친 장 떼기·떼어 내기) */
 function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; sheets: number; onClose: () => void; onChanged: (msg: string) => void }) {
   const [busy, setBusy] = useState(false);
-  const act = async (action: "peel" | "cover") => {
+  const act = async (action: "peel" | "cover" | "remove") => {
     if (action === "peel" && !confirm("겹친 장을 떼면 덮개 한 장이 찢어지고, 쪽지는 모두가 볼 수 있게 돼요. 뗄까요?")) return;
+    if (action === "remove" && !confirm("이 쪽지를 나무에서 떼어 낼까요? 떼어 낸 쪽지와 쓴 노트는 돌아오지 않아요.")) return;
     setBusy(true);
     const r = await fetch("/api/tree", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: note.id, action }) })
       .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
     setBusy(false);
-    if (r?.ok) onChanged(action === "peel" ? "겹친 장을 뗐어요" : "새 노트 한 장으로 다시 가렸어요");
+    if (r?.ok) onChanged(action === "peel" ? "겹친 장을 뗐어요" : action === "remove" ? "쪽지를 나무에서 떼어 냈어요" : "노트 한 장을 덮어 가렸어요");
     else alert(r?.reason === "no_sheet" ? "노트가 없어요" : "처리하지 못했어요");
   };
   return (
@@ -798,8 +799,9 @@ function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; s
       {note.mine && (
         note.covered
           ? <button disabled={busy} onClick={() => act("peel")} className="rounded-full bg-white px-5 py-2 text-sm ring-1 ring-sakura/40">겹친 장 떼서 보기</button>
-          : <button disabled={busy || sheets < 1} onClick={() => act("cover")} className="rounded-full bg-sakura px-5 py-2 text-sm text-white disabled:opacity-50">다시 가리기 (노트 1장)</button>
+          : <button disabled={busy || sheets < 1} onClick={() => act("cover")} className="rounded-full bg-sakura px-5 py-2 text-sm text-white disabled:opacity-50">한 장 덮어 가리기 (노트 1장)</button>
       )}
+      {note.mine && <button disabled={busy} onClick={() => act("remove")} className="text-sm underline opacity-60">나무에서 떼어 내기</button>}
     </section>
   );
 }
