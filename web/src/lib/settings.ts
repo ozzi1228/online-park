@@ -29,10 +29,8 @@ export const DEFAULTS = {
     maxVisible: 3000,     // 나무에 보이는 쪽지 최대 수 (최근 것부터)
   },
   cat: {
-    enabled: 1,           // 공원 고양이 (1 = 나옴, 0 = 안 나옴)
-    intervalMinSec: 60,   // 떠난 뒤 다시 나타나기까지 (최소~최대 사이 랜덤, 게임 시간)
-    intervalMaxSec: 180,
-    staySec: 90,          // 한 번 나오면 머무는 시간 (대략)
+    enabled: 1,           // 공원 고양이 (1 = 있음, 0 = 없음). 있으면 늘 공원 어딘가를 돌아다님
+    count: 2,             // 몇 마리 (서로 다른 무늬로)
   },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
@@ -91,10 +89,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
   cat: {
     title: "고양이",
     fields: {
-      enabled: { label: "나오게 하기 (1 = 켬, 0 = 끔)", unit: "", min: 0, max: 1 },
-      intervalMinSec: { label: "다시 나타나는 간격 (최소)", unit: "초", min: 10, max: 3600 },
-      intervalMaxSec: { label: "다시 나타나는 간격 (최대)", unit: "초", min: 10, max: 7200 },
-      staySec: { label: "머무는 시간", unit: "초", min: 20, max: 1800 },
+      enabled: { label: "고양이 있음 (1 = 켬, 0 = 끔)", unit: "", min: 0, max: 1 },
+      count: { label: "마리 수 (서로 다른 무늬)", unit: "마리", min: 0, max: 6 },
     },
   },
   controls: {

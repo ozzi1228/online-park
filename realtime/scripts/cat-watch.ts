@@ -9,7 +9,7 @@ const token = `${body}.${createHmac("sha256", process.env.REALTIME_SECRET!).upda
 const room = await new Client(`ws://localhost:${process.env.PORT ?? 2567}`).joinOrCreate("park", { token });
 room.send("move", { x: -50, z: 8, yaw: 0, walking: false });
 const timer = setInterval(() => {
-  const c = (room.state as { cat?: { active: boolean; look: number; x: number; z: number; act: string } }).cat;
-  console.log(new Date().toISOString().slice(11, 19), c ? `active=${c.active} look=${c.look} x=${c.x.toFixed(2)} z=${c.z.toFixed(2)} act=${c.act}` : "no cat");
+  const cats = Array.from((room.state as { cats?: Iterable<{ active: boolean; look: number; x: number; z: number; act: string }> }).cats ?? []);
+  console.log(new Date().toISOString().slice(11, 19), cats.length ? cats.map((c) => `[look=${c.look} x=${c.x.toFixed(1)} z=${c.z.toFixed(1)} ${c.act}]`).join(" ") : "no cat");
 }, 5000);
 setTimeout(() => { clearInterval(timer); room.leave(); process.exit(0); }, secs * 1000);

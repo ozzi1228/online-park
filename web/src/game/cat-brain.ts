@@ -4,7 +4,7 @@ import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump";
-export type CatConfig = { enabled: number; intervalMinSec: number; intervalMaxSec: number; staySec: number };
+export type CatConfig = { enabled: number; count: number };
 /** 화면이 그리는 데 필요한 것 (서버가 모두에게 보내는 값) */
 export type CatState = { active: boolean; look: number; x: number; y: number; z: number; yaw: number; act: CatAct; lx: number; lz: number };
 type P = { x: number; z: number };
@@ -26,30 +26,25 @@ const turn = (a: number, b: number, k: number) => a + Math.atan2(Math.sin(b - a)
 const near = (ps: P[], x: number, z: number) => ps.reduce<P | null>((m, p) => (!m || Math.hypot(p.x - x, p.z - z) < Math.hypot(m.x - x, m.z - z) ? p : m), null);
 
 export class CatBrain {
-  cfg: CatConfig = { enabled: 1, intervalMinSec: 60, intervalMaxSec: 180, staySec: 90 };
   s: CatState = { active: false, look: 0, x: 0, y: 0, z: 0, yaw: 0, act: "idle", lx: 0, lz: 0 };
   private t = 0;
-  private nextAt = 25 + Math.random() * 40;
-  private leaveAt = 0;
+  /** 다른 고양이 위치 (벤치 자리 겹치지 않게) */
+  others: P[] = [];
   private queue: Act[] = []; private cur: Act | null = null; private actT = 0;
   private from = { x: 0, y: 0, z: 0 };
   private onRail = false; private onBench = false; private stuck = 0;
 
-  private spawn(ps: P[]) {
-    const p = ps[Math.floor(Math.random() * ps.length)];
-    for (let i = 0; i < 30; i++) { // 누군가에게서 12~20m 떨어진 잔디밭에서 나타남
-      const a = Math.random() * 6.28, r = 12 + Math.random() * 8, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-      if (x < BOUNDS.minX + 2 || x > BOUNDS.maxX - 2 || z < BOUNDS.minZ + 1 || z > BOUNDS.maxZ - 1 || !canSit(x, z)) continue;
-      Object.assign(this.s, { active: true, look: Math.floor(Math.random() * CAT_LOOKS), x, z, y: groundY(x, z), yaw: Math.random() * 6.28, act: "idle" as CatAct });
+  /** 공원 잔디 어딘가에 나타남 (늘 공원 안에서 지내다 찾을 수 있게). look = 무늬 */
+  spawn(look: number) {
+    for (let i = 0; i < 60; i++) {
+      const x = BOUNDS.minX + 3 + Math.random() * (BOUNDS.maxX - BOUNDS.minX - 6), z = BOUNDS.minZ + 2 + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ - 4);
+      if (!canSit(x, z)) continue;
+      Object.assign(this.s, { active: true, look, x, z, y: groundY(x, z), yaw: Math.random() * 6.28, act: "idle" as CatAct });
       this.queue = []; this.cur = null; this.onRail = this.onBench = false;
-      this.leaveAt = this.t + this.cfg.staySec * (0.7 + Math.random() * 0.6);
       return;
     }
   }
-  private despawn() {
-    this.s.active = false;
-    this.nextAt = this.t + this.cfg.intervalMinSec + Math.random() * Math.max(0, this.cfg.intervalMaxSec - this.cfg.intervalMinSec);
-  }
+  hide() { this.s.active = false; }
   private hopDown(): Act {
     const f = BENCH_SEATS.find((b) => Math.hypot(b.x - this.s.x, b.z - this.s.z) < 0.4);
     return { k: "jump", tx: f ? f.fx : this.s.x, ty: 0, tz: f ? f.fz : this.s.z + 0.8, dur: 0.45 };
@@ -58,18 +53,17 @@ export class CatBrain {
   /** 다음 할 일 고르기 */
   private plan(ps: P[]) {
     const s = this.s;
-    if (this.t > this.leaveAt) { this.queue.push({ k: "leave" }); return; }
     if (this.onBench) { this.queue.push({ k: Math.random() < 0.5 ? "groom" : "sit", dur: 4 + Math.random() * 6 }, { k: "sit", dur: 3 + Math.random() * 5 }, this.hopDown()); return; }
     const r = Math.random();
-    const who = ps[Math.floor(Math.random() * ps.length)], dWho = Math.hypot(who.x - s.x, who.z - s.z);
-    if (r < 0.22 && dWho < 14 && dWho > 3) { // 누군가에게 다가와 빤히 보다가, 반쯤은 휙 떠나버림
+    const who = ps[Math.floor(Math.random() * ps.length)], dWho = who ? Math.hypot(who.x - s.x, who.z - s.z) : Infinity;
+    if (who && r < 0.22 && dWho < 14 && dWho > 3) { // 누군가에게 다가와 빤히 보다가, 반쯤은 휙 떠나버림
       const k = (dWho - 2.6) / dWho;
       this.queue.push({ k: "walk", tx: s.x + (who.x - s.x) * k, tz: s.z + (who.z - s.z) * k }, { k: "look", dur: 2.5 + Math.random() * 3, who });
-      if (Math.random() < 0.5) this.queue.push({ k: "leave" });
+      if (Math.random() < 0.5) this.queue.push({ k: "leave" }); // 휙 돌아서 멀찍이 걸어감 (사라지진 않음)
       return;
     }
     if (r < 0.36) { // 비어 있는 벤치에 올라가 앉기
-      const seat = BENCH_SEATS.filter((b) => Math.hypot(b.fx - s.x, b.fz - s.z) < 18 && ps.every((p) => Math.hypot(p.x - b.fx, p.z - b.fz) > 1.2))
+      const seat = BENCH_SEATS.filter((b) => Math.hypot(b.fx - s.x, b.fz - s.z) < 18 && [...ps, ...this.others].every((p) => Math.hypot(p.x - b.fx, p.z - b.fz) > 1.2))
         .sort((a, b) => Math.hypot(a.fx - s.x, a.fz - s.z) - Math.hypot(b.fx - s.x, b.fz - s.z))[0];
       if (seat) { const sp = benchSpot(seat); this.queue.push({ k: "walk", tx: seat.fx, tz: seat.fz }, { k: "jump", tx: sp.x, ty: BENCH_TOP, tz: sp.z, dur: 0.45 }); return; }
     }
@@ -90,12 +84,11 @@ export class CatBrain {
     else this.queue.push({ k: "idle", dur: 1 + Math.random() * 2 });
   }
 
-  /** ps = 공원에 있는 사람들 위치 */
+  /** ps = 공원에 있는 사람들 위치 (아무도 없어도 고양이는 공원에서 지냄) */
   update(dt: number, ps: P[]) {
     this.t += dt;
     const s = this.s;
-    if (!s.active) { if (this.cfg.enabled && ps.length && this.t > this.nextAt) this.spawn(ps); return; }
-    if (!ps.length || !this.cfg.enabled) { this.despawn(); return; }
+    if (!s.active) return;
     if (!this.cur) { if (!this.queue.length) this.plan(ps); this.cur = this.queue.shift() ?? null; this.actT = 0; this.from = { x: s.x, y: s.y, z: s.z }; }
     const a = this.cur; this.actT += dt;
     if (!a) return;
@@ -103,9 +96,10 @@ export class CatBrain {
     switch (a.k) {
       case "walk": case "leave": {
         let tx: number, tz: number;
-        if (a.k === "leave") { // 가장 가까운 사람과 반대쪽으로 유유히, 충분히 멀어지면 사라짐
-          const n = near(ps, s.x, s.z)!, d = Math.hypot(s.x - n.x, s.z - n.z) || 1;
-          if (ps.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > 26)) { this.despawn(); return; }
+        if (a.k === "leave") { // 가장 가까운 사람과 반대쪽으로 유유히, 충분히 멀어지면 다시 어슬렁
+          const n = near(ps, s.x, s.z);
+          if (!n || this.actT > 12 || ps.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > 14)) { this.cur = null; break; }
+          const d = Math.hypot(s.x - n.x, s.z - n.z) || 1;
           tx = s.x + (s.x - n.x) / d * 3; tz = s.z + (s.z - n.z) / d * 3;
         } else { tx = a.tx; tz = a.tz; }
         const dx = tx - s.x, dz = tz - s.z, dist = Math.hypot(dx, dz);
@@ -118,7 +112,7 @@ export class CatBrain {
           const r = move(s.x, s.z, nx, nz, CAT_R, COLLIDERS);
           this.stuck = Math.hypot(r.x - s.x, r.z - s.z) < step * 0.3 ? this.stuck + dt : 0;
           s.x = r.x; s.z = r.z; s.y = groundY(s.x, s.z);
-          if (this.stuck > 1.2 && a.k === "walk") { this.queue = []; this.cur = null; this.stuck = 0; } // 막히면 다른 걸 함
+          if (this.stuck > 1.2) { this.queue = []; this.cur = null; this.stuck = 0; } // 막히면 다른 걸 함
         }
         break;
       }
@@ -139,4 +133,20 @@ export class CatBrain {
       default: if (this.actT > a.dur) this.cur = null;
     }
   }
+}
+
+/** 공원 고양이들: 늘 공원에 있고(사라지지 않음), 서로 다른 무늬로 count마리 */
+export class CatColony {
+  cfg: CatConfig = { enabled: 1, count: 2 };
+  brains: CatBrain[] = [];
+  update(dt: number, ps: P[]) {
+    const n = this.cfg.enabled ? Math.max(0, Math.min(CAT_LOOKS, Math.round(this.cfg.count))) : 0;
+    while (this.brains.length > n) this.brains.pop();
+    while (this.brains.length < n) { // 이미 있는 고양이와 다른 무늬로
+      const used = this.brains.map((b) => b.s.look), free = Array.from({ length: CAT_LOOKS }, (_, i) => i).filter((i) => !used.includes(i));
+      const b = new CatBrain(); b.spawn(free[Math.floor(Math.random() * free.length)]); this.brains.push(b);
+    }
+    for (const b of this.brains) { b.others = this.brains.filter((o) => o !== b).map((o) => ({ x: o.s.x, z: o.s.z })); b.update(dt, ps); }
+  }
+  get states(): CatState[] { return this.brains.map((b) => b.s); }
 }

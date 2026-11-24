@@ -8,7 +8,7 @@ import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, playGesture, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
-import { CatBrain, type CatState } from "@/game/cat-brain";
+import { CatColony, type CatState } from "@/game/cat-brain";
 import { Input, JOY_R, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -188,9 +188,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     scene.add(npc.char.root, clerk.char.root, npcLabel);
     let greeted = false;
     // 공원 고양이: 실시간 서버가 움직여 모두가 같은 고양이를 봄. 서버에 못 붙었을 땐 내 브라우저가 직접 움직임
-    const cat = new CatView(scene), soloCat = new CatBrain();
-    let lastCat: CatState | null = null;
-    const catOn = (s: { x: number; z: number }) => !!lastCat?.active && lastCat.y > 0.4 && Math.hypot(lastCat.x - s.x, lastCat.z - s.z) < 0.4;
+    // 공원 고양이들 (늘 공원 어딘가에, 서로 다른 무늬). 접속 중이면 서버가, 혼자면 내 브라우저가 움직임
+    const catViews: CatView[] = [], soloCats = new CatColony();
+    let lastCats: CatState[] = [];
+    const catOn = (s: { x: number; z: number }) => lastCats.some((c) => c.active && c.y > 0.4 && Math.hypot(c.x - s.x, c.z - s.z) < 0.4);
 
     const pos = { x: SPAWN.x, z: SPAWN.z };
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
@@ -541,7 +542,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, me, playGesture, coin, launchVelocity, THREE, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, catViews, soloCats, me, playGesture, coin, launchVelocity, THREE, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
@@ -661,10 +662,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           if (w.t > 0.9) { w.armed = false; w.t = 0; w.open(); }
         } else w.t = 0;
       }
-      let catState = mp.cat(); lastCat = catState;
-      if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCat.cfg, meRef.current.cat); soloCat.update(dt, [{ x: pos.x, z: pos.z }]); catState = soloCat.s; }
-      lastCat = catState;
-      cat.update(t, dt, catState, pos);
+      let cats = mp.cats();
+      if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCats.cfg, meRef.current.cat); soloCats.update(dt, [{ x: pos.x, z: pos.z }]); cats = soloCats.states; }
+      lastCats = cats;
+      while (catViews.length < cats.length) catViews.push(new CatView(scene));
+      catViews.forEach((v, i) => v.update(t, dt, cats[i] ?? null, pos));
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);

@@ -14,7 +14,7 @@ export type MeInfo = {
   fountainPrice: number;
   sound: { wind: number; water: number; crowd: number; nature: number; sfx: number };
   controls: { walkSpeedCm: number; turnSpeed: number; cameraBackCm: number; cameraSideCm: number };
-  cat: { enabled: number; intervalMinSec: number; intervalMaxSec: number; staySec: number };
+  cat: { enabled: number; count: number };
 };
 
 const card = "absolute inset-x-4 bottom-24 z-20 mx-auto max-h-[calc(100dvh-7rem)] w-auto max-w-[24rem] overflow-y-auto rounded-3xl bg-cream/95 p-5 shadow-xl ring-1 ring-sakura/20";

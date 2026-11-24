@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Room, defineRoom, defineServer, type Client } from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
 import { COLLIDERS, PLAYER_R, SPAWN, move, overlaps, type Collider } from "../../web/src/game/park-map.ts";
-import { CatBrain, type CatConfig } from "../../web/src/game/cat-brain.ts";
+import { CatColony, type CatConfig } from "../../web/src/game/cat-brain.ts";
 
 const SECRET = process.env.REALTIME_SECRET;
 if (!SECRET) throw new Error("REALTIME_SECRET 이 필요해요 (.env 참고)");
@@ -31,7 +31,7 @@ const Cat = schema({
   active: t.boolean(), look: t.number(), x: t.number(), y: t.number(), z: t.number(), yaw: t.number(),
   act: t.string(), lx: t.number(), lz: t.number(),
 }, "Cat");
-const ParkState = schema({ players: t.map(Player), cat: Cat }, "ParkState");
+const ParkState = schema({ players: t.map(Player), cats: t.array(Cat) }, "ParkState");
 type ParkState = SchemaType<typeof ParkState>;
 
 type Auth = { uid: string; preset: string; nickname: string; exp: number };
@@ -53,15 +53,18 @@ class ParkRoom extends Room<{ state: ParkState }> {
   private last = new Map<string, number>(); // 마지막 이동 시각 (속도 검사)
   private uids = new Map<string, string>();  // sessionId → userId
 
-  private cat = new CatBrain();
+  private cats = new CatColony(); // 늘 공원에 있는 고양이들 (서로 다른 무늬)
 
   onCreate() {
-    const st = new ParkState(); st.cat = new Cat(); this.setState(st);
-    this.setSimulationInterval((ms) => { // 10번/초 고양이를 움직이고 결과를 모두에게
-      Object.assign(this.cat.cfg, catConfig);
+    const st = new ParkState(); this.setState(st);
+    this.setSimulationInterval((ms) => { // 10번/초 고양이들을 움직이고 결과를 모두에게
+      Object.assign(this.cats.cfg, catConfig);
       const ps: { x: number; z: number }[] = []; this.state.players.forEach((p) => ps.push({ x: p.x, z: p.z }));
-      this.cat.update(Math.min(ms / 1000, 0.25), ps);
-      Object.assign(this.state.cat, this.cat.s);
+      this.cats.update(Math.min(ms / 1000, 0.25), ps);
+      const list = this.cats.states, arr = this.state.cats;
+      while (arr.length > list.length) arr.pop();
+      while (arr.length < list.length) arr.push(new Cat());
+      list.forEach((c, i) => Object.assign(arr[i], c));
     }, 100);
   }
 
