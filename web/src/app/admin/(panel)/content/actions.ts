@@ -29,16 +29,16 @@ export async function resetGuide() {
 export async function saveFortunes(form: FormData) {
   await requireAdmin();
   const list = textToFortunes(String(form.get("fortunes") ?? ""));
-  if (typeof list === "string") redirect(`/admin/fortunes?${new URLSearchParams({ error: list })}`);
+  if (typeof list === "string") redirect(`/admin/content?${new URLSearchParams({ error: list })}#fortunes`);
   await db.insert(siteContent).values({ key: "fortunes", value: list })
     .onConflictDoUpdate({ target: siteContent.key, set: { value: list, updatedAt: new Date() } });
   await logEvent("admin.content.updated", { key: "fortunes", count: list.length }, requestCtx(await headers()));
-  redirect("/admin/fortunes?saved=1");
+  redirect("/admin/content?saved=1#fortunes");
 }
 
 export async function resetFortunes() {
   await requireAdmin();
   await db.delete(siteContent).where(eq(siteContent.key, "fortunes"));
   await logEvent("admin.content.updated", { key: "fortunes", reset: true }, requestCtx(await headers()));
-  redirect("/admin/fortunes?saved=1");
+  redirect("/admin/content?saved=1#fortunes");
 }

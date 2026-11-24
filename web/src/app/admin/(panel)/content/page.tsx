@@ -2,9 +2,9 @@ import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { siteContent } from "@/db/schema";
-import { getGuide, guideToText } from "@/lib/content";
+import { getFortunes, getGuide, guideToText } from "@/lib/content";
 import { kst } from "@/lib/format";
-import { resetGuide, saveGuide } from "./actions";
+import { resetFortunes, resetGuide, saveFortunes, saveGuide } from "./actions";
 import { SaveButton } from "../../save-button";
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
@@ -14,7 +14,10 @@ export const instant = false; // 관리자 화면은 항상 요청 때 최신 �
 export default async function ContentPage({ searchParams }: PageProps<"/admin/content">) {
   await connection();
   const q = await searchParams, saved = one(q.saved), error = one(q.error);
-  const [guide, [row]] = await Promise.all([getGuide(), db.select({ updatedAt: siteContent.updatedAt }).from(siteContent).where(eq(siteContent.key, "guide"))]);
+  const [guide, [row], fortunes, [frow]] = await Promise.all([
+    getGuide(), db.select({ updatedAt: siteContent.updatedAt }).from(siteContent).where(eq(siteContent.key, "guide")),
+    getFortunes(), db.select({ updatedAt: siteContent.updatedAt }).from(siteContent).where(eq(siteContent.key, "fortunes")),
+  ]);
   const t = guideToText(guide);
   const area = "w-full rounded-xl bg-cream px-3 py-2 text-sm leading-relaxed ring-1 ring-black/10";
 
@@ -42,6 +45,15 @@ export default async function ContentPage({ searchParams }: PageProps<"/admin/co
         </label>
         <div className="flex justify-end gap-2">
           {row && <button formAction={resetGuide} className="rounded-full px-4 py-2 text-sm ring-1 ring-black/10">기본 문구로</button>}
+          <SaveButton className="px-6 py-2" />
+        </div>
+      </form>
+      <form id="fortunes" action={saveFortunes} className="flex flex-col gap-2 rounded-2xl bg-white p-4 ring-1 ring-black/5">
+        <span className="font-bold">운세꽃잎 문구 <span className="text-sm font-normal opacity-60">({fortunes.length}개{frow ? `, 마지막 수정 ${kst(frow.updatedAt)}` : ", 지금은 기본 문구"})</span></span>
+        <span className="text-xs opacity-60">한 줄에 하나씩. 꽃잎을 잡으면 이 중 하나가 무작위로 나와요</span>
+        <textarea name="fortunes" defaultValue={fortunes.join("\n")} rows={14} className={area} />
+        <div className="flex justify-end gap-2">
+          {frow && <button formAction={resetFortunes} className="rounded-full px-4 py-2 text-sm ring-1 ring-black/10">기본 문구로</button>}
           <SaveButton className="px-6 py-2" />
         </div>
       </form>
