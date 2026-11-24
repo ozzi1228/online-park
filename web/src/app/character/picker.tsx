@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Mode } from "@/game/character";
 import { NICK_MAX, TAGS, visiblePresets, type Tag } from "@/game/presets";
@@ -11,7 +10,6 @@ const PRESETS = visiblePresets();
 const MODES: [Mode, string][] = [["idle", "서 있기"], ["walk", "걷기"], ["wish", "소원 빌기"], ["sit", "앉기"]];
 
 export function Picker() {
-  const router = useRouter();
   const [selected, setSelected] = useState(PRESETS[0]);
   const [tag, setTag] = useState<Tag | null>(null);
   const [mode, setMode] = useState<Mode>("idle");
@@ -33,7 +31,7 @@ export function Picker() {
     startTransition(async () => {
       const res = await confirmCharacter(selected.id, nickname, viewed.current.size);
       if (res.error) setError(res.error);
-      else router.replace("/park");
+      else window.location.replace(new URL("/park", window.location.href)); // 새로 불러와서 (예전 이동 기록 말고 정한 캐릭터로)
     });
   };
 

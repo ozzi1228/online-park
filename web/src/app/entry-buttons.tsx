@@ -1,7 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 // 로고만 있는 작은 동그라미 (각 서비스 로그인 버튼 가이드의 심볼 + 바탕색)
@@ -24,20 +23,28 @@ const LOGOS: Record<string, { name: string; bg: string; icon: React.ReactNode }>
 };
 
 export function EntryButtons({ providers, guest = false }: { providers: string[]; guest?: boolean }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // 소셜 로그인 화면에서 '뒤로'로 돌아오면 브라우저가 누른 상태 그대로 화면을 되살림 → 다시 누를 수 있게
+  useEffect(() => {
+    const reset = (e: PageTransitionEvent) => { if (e.persisted) setBusy(false); };
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
+  // 로그인 직후엔 새로 불러와서 들어감: 로그인 전에 받아 둔 '/park → 처음 화면' 이동 기록을 쓰면 제자리에 멈춤
+  const enter = () => window.location.assign(new URL("/park", window.location.href));
   const [error, setError] = useState("");
 
   const asGuest = async () => {
-    if (guest) { router.push("/park"); return; } // 이미 비회원으로 들어와 있음
+    if (guest) { enter(); return; } // 이미 비회원으로 들어와 있음
     setBusy(true); setError("");
     const { error } = await authClient.signIn.anonymous();
     if (error) { setBusy(false); setError("입장하지 못했어요. 잠시 후 다시 시도해 주세요."); return; }
-    router.push("/park");
+    enter();
   };
-  const social = (provider: string) => {
-    setBusy(true);
-    authClient.signIn.social({ provider, callbackURL: "/park" });
+  const social = async (provider: string) => {
+    setBusy(true); setError("");
+    const { error } = await authClient.signIn.social({ provider, callbackURL: "/park" });
+    if (error) { setBusy(false); setError("로그인 화면을 열지 못했어요. 잠시 후 다시 시도해 주세요."); }
   };
 
   return (
