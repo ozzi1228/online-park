@@ -12,6 +12,7 @@ const NAV = [
   ["/admin/payments", "결제"],
   ["/admin/settings", "운영 설정"],
   ["/admin/content", "안내 문구"],
+  ["/admin/fortunes", "운세 문구"],
   ["/admin/preview", "시간 미리보기"],
 ] as const;
 
