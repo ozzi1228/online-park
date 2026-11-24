@@ -597,9 +597,10 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
     const r = new THREE.Group();
     // 양쪽 강가 난간 (다리 들어가는 자리는 비움)
     const gap0 = BRIDGE.x - BRIDGE.w / 2 - 0.1, gap1 = BRIDGE.x + BRIDGE.w / 2 + 0.1;
+    // 맵 밖으로도 강을 따라 멀리까지 이어짐
     for (const rz of [BOUNDS.minZ - 0.25, BOUNDS_N.maxZ + 0.25]) {
-      for (let x = -64; x <= 64; x += 2.5) if (x < gap0 - 0.2 || x > gap1 + 0.2) r.add(at(part(new THREE.BoxGeometry(0.08, 0.9, 0.08), "#9c8070", 0.012), x, 0.45, rz));
-      for (const [a, b] of [[-64, gap0], [gap1, 64]]) r.add(at(part(new THREE.BoxGeometry(b - a, 0.07, 0.07), "#9c8070", 0.012), (a + b) / 2, 0.9, rz));
+      for (let x = -195; x <= 195; x += 2.5) if (x < gap0 - 0.2 || x > gap1 + 0.2) r.add(at(part(new THREE.BoxGeometry(0.08, 0.9, 0.08), "#9c8070", Math.abs(x) < 70 ? 0.012 : 0), x, 0.45, rz));
+      for (const [a, b] of [[-195, gap0], [gap1, 195]]) r.add(at(part(new THREE.BoxGeometry(b - a, 0.07, 0.07), "#9c8070", 0.012), (a + b) / 2, 0.9, rz));
     }
     scene.add(bake(r));
   }

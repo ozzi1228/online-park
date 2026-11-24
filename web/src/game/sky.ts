@@ -1,5 +1,5 @@
 // 하늘: 실제 한국 시간에 따라 새벽·낮·노을·밤 빛깔이 바뀌고, 구름이 흘러감.
-// 날짜마다 구름 양·모양(뭉게구름/새털구름)·바람 방향이 달라짐. 햇빛·안개 색도 함께 바꿈.
+// 날짜마다 구름 양·크기·배치·바람 방향이 달라지는 몽실몽실한 뭉게구름이 천천히 흘러감. 햇빛·안개 색도 함께 바꿈.
 import * as THREE from "three";
 
 type Key = { h: number; zenith: string; horizon: string; cloud: string; shade: string; sun: string; sunI: number; hemi: number; night: number };
@@ -21,10 +21,10 @@ export const kstHour = (now = Date.now()) => ((now / 3_600_000 + 9) % 24 + 24) %
 /** 한국 날짜 기준 그날의 고유 번호 */
 const kstDay = (now = Date.now()) => Math.floor((now + 9 * 3_600_000) / 86_400_000);
 
-/** 그날의 하늘 성격: 구름 양, 새털구름 여부, 바람 방향 */
+/** 그날의 하늘 성격: 구름 양·크기·배치(씨앗)·바람 방향 */
 function dayWeather(day: number) {
   const r = (k: number) => { const v = Math.sin(day * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
-  return { coverage: 0.4 + r(1) * 0.22, cirrus: r(2) < 0.25 ? 1 : 0, windAngle: r(3) * Math.PI * 2 };
+  return { coverage: 0.3 + r(1) * 0.28, size: 0.75 + r(2) * 0.6, seed: [r(4) * 500, r(5) * 500] as const, windAngle: r(3) * Math.PI * 2 };
 }
 
 const vert = /* glsl */ `
@@ -36,8 +36,8 @@ void main() {
 }`;
 const frag = /* glsl */ `
 uniform vec3 zenith, horizon, cloudLit, cloudShade, sunDir, sunColor;
-uniform float time, coverage, cirrus, night;
-uniform vec2 wind;
+uniform float time, coverage, cloudSize, night;
+uniform vec2 wind, seed;
 varying vec3 vDir;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -58,16 +58,17 @@ void main() {
     float st = step(0.996, hash(g)) * (0.6 + 0.4 * sin(time * 2.0 + hash(g + 3.0) * 30.0));
     col += vec3(st) * night * smoothstep(0.05, 0.3, h);
   }
-  // 구름: 하늘을 평면에 투영해 흐르게
+  // 구름: 하늘을 평면에 투영해 천천히 흐르게. 둥글게 비튼 노이즈로 몽실몽실한 뭉게구름 (날카로운 결 없이)
   if (h > 0.0) {
-    vec2 uv = d.xz / (h + 0.18) * 1.6 + wind * time;
-    vec2 cuv = mix(uv, vec2(uv.x * 0.25, uv.y * 2.2), cirrus);       // 새털구름은 길게 늘림
-    float n = clamp((fbm(cuv * 1.5) - 0.5) * 2.4 + 0.5, 0.0, 1.0);  // 몽실한 덩어리 (값 분포를 넓혀 또렷하게)
+    vec2 uv = (d.xz / (h + 0.25)) * (0.9 / cloudSize) + seed + wind * time;
+    vec2 q = vec2(fbm(uv * 0.6), fbm(uv * 0.6 + vec2(5.2, 1.3)));    // 모양을 둥글게 휘게 만드는 비틀기
+    float n = fbm(uv * 0.9 + q * 1.4);
+    n = clamp((n - 0.5) * 2.0 + 0.5, 0.0, 1.0);
     float th = 1.0 - coverage;
-    float c = smoothstep(th, th + mix(0.14, 0.3, cirrus), n) * mix(1.0, 0.8, cirrus);
-    float light = clamp((fbm(cuv * 1.5) - fbm(cuv * 1.5 + vec2(0.04, 0.07))) * 7.0 + 0.65, 0.0, 1.0); // 해 쪽은 밝게, 아래는 그늘
+    float c = smoothstep(th, th + 0.22, n);                            // 가장자리는 솜처럼 부드럽게
+    float light = clamp((n - fbm(uv * 0.9 + q * 1.4 + vec2(0.06, 0.09))) * 5.0 + 0.7, 0.0, 1.0); // 위쪽은 밝게, 아래쪽은 은은한 그늘
     vec3 cc = mix(cloudShade, cloudLit, light);
-    col = mix(col, cc, c * smoothstep(0.0, 0.18, h));
+    col = mix(col, cc, c * 0.95 * smoothstep(0.02, 0.22, h));
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -79,8 +80,8 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
     zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() },
     cloudLit: { value: new THREE.Color() }, cloudShade: { value: new THREE.Color() },
     sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunColor: { value: new THREE.Color() },
-    time: { value: 0 }, coverage: { value: 0.4 }, cirrus: { value: 0 }, night: { value: 0 },
-    wind: { value: new THREE.Vector2(0.01, 0.004) },
+    time: { value: 0 }, coverage: { value: 0.4 }, cloudSize: { value: 1 }, night: { value: 0 },
+    wind: { value: new THREE.Vector2(0.01, 0.004) }, seed: { value: new THREE.Vector2() },
   };
   const dome = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24),
     new THREE.ShaderMaterial({ uniforms: u, vertexShader: vert, fragmentShader: frag, side: THREE.BackSide, depthWrite: false, fog: false }));
@@ -104,8 +105,8 @@ export function createSky(scene: THREE.Scene, sun: THREE.DirectionalLight, hemi:
       if (day !== lastDay) {
         lastDay = day;
         const w = dayWeather(day);
-        u.coverage.value = w.coverage; u.cirrus.value = w.cirrus;
-        u.wind.value.set(Math.cos(w.windAngle), Math.sin(w.windAngle)).multiplyScalar(0.012);
+        u.coverage.value = w.coverage; u.cloudSize.value = w.size; u.seed.value.set(w.seed[0], w.seed[1]);
+        u.wind.value.set(Math.cos(w.windAngle), Math.sin(w.windAngle)).multiplyScalar(0.005); // 아주 천천히
       }
       // 시각에 맞는 두 키 사이를 섞음
       let i = 0; while (i < KEYS.length - 2 && KEYS[i + 1].h <= hour) i++;

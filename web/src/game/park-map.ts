@@ -148,8 +148,9 @@ export const BACKDROP_TREES: Prop[] = (() => {
   // 강둑 따라 공원 밖까지: 양쪽 물가에 벚나무가 줄지어 멀리 이어짐 (물가 땅 위에 서 있게)
   for (const side of [-1, 1]) for (let x = 64 + r() * 3; x < 192; x += 6.5 + r() * 1.5) {
     const k = Math.min(1, (x - 60) / 120), xs = side * x;
-    out.push({ kind: "tree", x: xs, z: -5.6 + r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });           // 이쪽 강둑
-    out.push({ kind: "tree", x: xs + side * 3, z: -42.6 - r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });  // 건너편 강둑
+    // 강변 울타리 안쪽(땅 쪽)에만: 가지가 물 위로 나가 떠 보이지 않게 울타리에서 4m쯤 들여 심음
+    out.push({ kind: "tree", x: xs, z: -3.4 + r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });           // 이쪽 강둑
+    out.push({ kind: "tree", x: xs + side * 3, z: -45 - r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });    // 건너편 강둑
     for (const z of [-49, -56, -63.5, -70]) out.push({ kind: "tree", x: xs + (r() - 0.5) * 4, z: z - r() * 2, s: 1.15 + k * 0.3 + r() * 0.2, inside: false }); // 건너편 숲
   }
   const t = (x: number, z: number, s: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 2.5, z: z + (r() - 0.5) * 2.5, s: s + r() * 0.25, inside: false });

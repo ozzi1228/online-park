@@ -26,6 +26,8 @@ export class Input {
   seated = false;
   private joyId: number | null = null;
   private dx = 0; private dy = 0;
+  /** 풍경 확대/축소 (곱하는 값, 1 = 그대로). 휠·두 손가락 벌리기/오므리기 */
+  private zoom = 1; private pinch = 0;
   private pts = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
   private taps: Tap[] = [];
   private off: (() => void)[] = [];
@@ -62,6 +64,11 @@ export class Input {
       if (!p) return;
       const mx = e.clientX - p.x, my = e.clientY - p.y;
       p.x = e.clientX; p.y = e.clientY;
+      if (this.pts.size === 2) { // 두 손가락: 벌리면 확대, 오므리면 축소 (둘러보기는 안 함)
+        const [a, b] = [...this.pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (this.pinch > 0 && d > 0) this.zoom *= this.pinch / d;
+        this.pinch = d; return;
+      }
       if (Math.hypot(p.x - p.sx, p.y - p.sy) > TAP_PX) { const n = this.pts.size; this.dx += mx / n; this.dy += my / n; } // 끌기 = 둘러보기
     };
     const pup = (e: PointerEvent) => {
@@ -71,15 +78,17 @@ export class Input {
         this.releaseJoy(); return;
       }
       const p = this.pts.get(e.pointerId);
-      this.pts.delete(e.pointerId);
+      this.pts.delete(e.pointerId); this.pinch = 0;
       if (p && performance.now() - p.t < TAP_MS && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < TAP_PX && this.pts.size === 0)
         this.taps.push({ x: e.clientX, y: e.clientY, menu: false });
     };
     const context = (e: MouseEvent) => { e.preventDefault(); this.taps.push({ x: e.clientX, y: e.clientY, menu: true }); };
+    const wheel = (e: WheelEvent) => { e.preventDefault(); this.zoom *= Math.exp(e.deltaY * 0.0012); };
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", blur);
     el.addEventListener("pointerdown", pdown); el.addEventListener("pointermove", pmove);
     el.addEventListener("pointerup", pup); el.addEventListener("pointercancel", pup); el.addEventListener("contextmenu", context);
-    this.off.push(
+    el.addEventListener("wheel", wheel, { passive: false });
+    this.off.push(() => el.removeEventListener("wheel", wheel),
       () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); },
       () => { el.removeEventListener("pointerdown", pdown); el.removeEventListener("pointermove", pmove); el.removeEventListener("pointerup", pup); el.removeEventListener("pointercancel", pup); el.removeEventListener("contextmenu", context); },
     );
@@ -99,6 +108,9 @@ export class Input {
 
   /** 지난 프레임 이후 끌어서 둘러본 픽셀 */
   takeDrag() { const d = { x: this.dx, y: this.dy }; this.dx = this.dy = 0; return d; }
+
+  /** 지난 프레임 이후 확대/축소 배율 (1보다 작으면 확대) */
+  takeZoom() { const z = this.zoom; this.zoom = 1; return z; }
 
   /** 지난 프레임 이후의 탭·우클릭 */
   takeTaps() { const t = this.taps; this.taps = []; return t; }

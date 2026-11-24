@@ -204,7 +204,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       aiming: false, stompUntil: 0, coinViewUntil: 0 };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
-    let baseFov = 60, firstPerson = false;
+    let baseFov = 60, firstPerson = false, zoomK = 1; // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
       // 뒤에서 보는 시점: 내 머리 뒤 조금 위에서, 내가 보는 쪽을 봄 → 화면 가운데 아래에 내 캐릭터가 살짝 보임
@@ -250,8 +250,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       } else coinCam.on = false;
       camPos.copy(eye); camLook.copy(look);
       // 벤치에 앉으면 살짝 줌인 → 강물과 건너편 벚꽃이 더 크게
-      const wantFov = baseFov * (st.bench && showMe < 0.5 ? 0.78 : 1);
-      if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * 0.08; camera.updateProjectionMatrix(); }
+      const wantFov = baseFov * zoomK * (st.bench && showMe < 0.5 ? 0.78 : 1);
+      if (Math.abs(camera.fov - wantFov) > 0.05) { camera.fov += (wantFov - camera.fov) * 0.15; camera.updateProjectionMatrix(); }
       camera.position.copy(camPos); camera.lookAt(camLook);
     };
     placeCamera();
@@ -555,6 +555,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         knob.current.style.transform = c && k ? `translate(${k.x - c.x}px, ${k.y - c.y}px)` : "translate(0px, 0px)";
       }
       inp.seated = coarse && st.sitting;
+      zoomK = THREE.MathUtils.clamp(zoomK * inp.takeZoom(), 0.45, 1.35);
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
       if (Math.hypot(forward, right) < 0.05) st.waitRelease = false; // 앉은 뒤엔 키를 한 번 뗐다 눌러야 일어남
       if (st.camTurn !== null) { // 벤치에 앉으면 시야가 벤치 앞쪽으로 천천히 돎
