@@ -21,6 +21,7 @@ import { makeMat, matFits, placeMat } from "@/game/mat";
 import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
+import { authClient } from "@/lib/auth-client";
 import { GreenCoin, ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
@@ -609,16 +610,25 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         )}
       </div>
       {me && (
-        <button onClick={() => setPanel(panel === "inbox" ? null : "inbox")} aria-label={`쪽지함${me.unreadNotes ? ` (안 읽은 쪽지 ${me.unreadNotes}개)` : ""}`}
-          className="absolute right-28 top-4 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm max-sm:right-24">
-          ✉️{me.unreadNotes > 0 && <span className="ml-1 rounded-full bg-sakura px-1.5 text-xs text-white">{me.unreadNotes}</span>}
-        </button>
-      )}
-      {me && (
-        <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
-          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
-          <GreenCoin /> {me.isGuest ? "그린" : me.green.toLocaleString("ko-KR")}
-        </button>
+        <div className="absolute right-4 top-4 flex items-center gap-2">
+          <button onClick={() => setPanel(panel === "inbox" ? null : "inbox")} aria-label={`쪽지함${me.unreadNotes ? ` (안 읽은 쪽지 ${me.unreadNotes}개)` : ""}`}
+            className="rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm">
+            ✉️{me.unreadNotes > 0 && <span className="ml-1 rounded-full bg-sakura px-1.5 text-xs text-white">{me.unreadNotes}</span>}
+          </button>
+          <button onClick={() => setPanel(panel === "wallet" ? null : "wallet")} aria-label="내 지갑"
+            className="flex items-center gap-1.5 rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm tabular-nums">
+            <GreenCoin /> {me.isGuest ? "그린" : me.green.toLocaleString("ko-KR")}
+          </button>
+          {/* 로그아웃: 회원만 (비회원은 로그아웃하면 캐릭터를 잃으니 안 둠) */}
+          {!me.isGuest && (
+            <button onClick={async () => { await authClient.signOut(); location.replace("/"); }} aria-label="로그아웃" title="로그아웃"
+              className="grid size-7 place-items-center rounded-full bg-cream/90 shadow-sm">
+              <svg viewBox="0 0 24 24" className="size-4 opacity-70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M9 8l-4 4 4 4" /><path d="M5 12h10" />
+              </svg>
+            </button>
+          )}
+        </div>
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">

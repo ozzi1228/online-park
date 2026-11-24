@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
-import { authClient } from "@/lib/auth-client";
 
 export type MeInfo = {
   isGuest: boolean;
@@ -72,8 +71,6 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
           {!me.paymentsReady && <p className="mt-2 text-xs opacity-60">결제 설정 전이에요 (토스페이먼츠 키 필요)</p>}
           {busy && <p className="mt-2 text-xs opacity-60">결제창을 여는 중…</p>}
           {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
-          <button onClick={async () => { await authClient.signOut(); location.replace("/"); }} // 3D·실시간 연결까지 깨끗이 정리되게 새로 불러옴
-            className="mt-5 block w-full text-center text-sm underline opacity-50">로그아웃</button>
         </>
       )}
     </section>
