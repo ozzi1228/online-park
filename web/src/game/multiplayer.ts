@@ -122,7 +122,7 @@ export class Multiplayer {
       else { o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw; }
       o.label.position.set(seat?.x ?? o.x, (seat?.y ?? y) + o.char.top + 0.3, seat?.z ?? o.z);
       const sitting = p.anim === "sit" || p.anim === "sitmat" || p.anim === "sitbench";
-      animateChar(o.char, t, dt, p.walking || moving ? "walk" : sitting ? "sit" : p.anim === "wish" ? "wish" : "idle");
+      animateChar(o.char, t, dt, p.walking || moving ? "walk" : p.anim === "lie" ? "lie" : sitting ? "sit" : p.anim === "wish" ? "wish" : "idle");
       // 돗자리 깔고 앉은 사람은 돗자리도 보임
       if (p.anim === "sitmat" && !moving) {
         if (!o.mat) { o.mat = makeMat(); this.scene.add(o.mat); }
@@ -185,7 +185,7 @@ export class Multiplayer {
   sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
-  sendAnim(a: "idle" | "sit" | "sitmat" | "sitbench" | "wish") { this.room?.send("anim", a); }
+  sendAnim(a: "idle" | "sit" | "sitmat" | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }
 
   dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
 }

@@ -314,7 +314,7 @@ export function onPath(x: number, z: number, margin = 0) {
 export function canSit(x: number, z: number) {
   if (onBridge(x, z)) return false; // 다리 위는 지나가는 길
   if (groundY(x, z) > 0) return true;
-  return !onPath(x, z);
+  return !onPath(x, z, 0.4); // 산책로·광장과 그 가장자리엔 앉지 않음 (지나가는 사람 길 막지 않게)
 }
 
 export const overlaps = (x: number, z: number, r = PLAYER_R, colliders = COLLIDERS) =>

@@ -80,7 +80,7 @@ export function faceTexture(p: Preset, closed: boolean, grin = false, stern = fa
 }
 
 export type Character = ReturnType<typeof makeChar>;
-export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish";
+export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish" | "lie";
 /** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동 */
 export type Gesture = "wave" | "shake" | "stomp";
 const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8 };
@@ -244,6 +244,12 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   if (mode === "sit") { legX = -1.45; armX = -0.35; armZ = 0.15; bodyY = -0.3; }
   if (mode === "sitwish") { legX = -1.45; bodyY = -0.3; armX = -1.25; armZ = -0.62; headX = 0.2; closed = true; } // 앉은 채로 손 모으기
   const seated = mode === "sit" || mode === "sitwish";
+  // 드러눕기: 등을 대고 대자로 (머리는 보던 쪽 반대, 발끝이 보던 쪽)
+  const lie = mode === "lie";
+  ease(c.body.rotation, "x", lie ? -Math.PI / 2 : 0, k * 0.6);
+  ease(c.body.position, "z", lie ? 0.75 : 0, k * 0.6);
+  for (const [i, s] of [[0, -1], [1, 1]] as const) ease(c.legs[i].rotation, "z", lie ? s * 0.32 : 0, k);
+  if (lie) { legX = 0; armX = 0; armZ = 1.35; bodyY = 0.2; headX = 0; }
   let arm0X = mode === "walk" ? -armX : armX, arm0Z = -armZ, arm1Z = armZ, leg1X = seated ? legX : -legX, headY = 0;
   let face: "grin" | "stern" | null = null;
   const g = c.gesture, gt = g ? t - g.t0 : 0;

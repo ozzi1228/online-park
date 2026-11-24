@@ -192,7 +192,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
-    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish", now: 0, faceCam: false,
+    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
+      /** 정자에 드러누움 (누운 몸 방향) */
+      lying: false, lieYaw: 0,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
       /** 돗자리 같이 앉기를 물어보고 대답을 기다리는 중 */
       asking: null as { seat: MatSeat; until: number } | null,
@@ -208,13 +210,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // (지연·흔들림 없이 바로 따라감 = 멀미 덜함. 관리자에서 뒤 거리를 0으로 하면 완전 1인칭)
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
-      const eyeY = at.y + (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1);
+      const eyeY = at.y + (st.lying ? 0.32 : (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1));
       const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 420) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
       const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
       const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
       const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + (shoulder ? 0.5 : 0), at.z - fz * dBack + rz * sd);
-      const look = new THREE.Vector3(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
+      if (st.lying) eye.set(at.x - Math.sin(st.lieYaw) * 0.8, eyeY, at.z - Math.cos(st.lieYaw) * 0.8); // 누우면 눈은 머리 자리 (발 반대쪽)
+      const look = eye.clone().setY(eyeY).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
+      if (!st.lying) look.set(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       firstPerson = !shoulder;
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
         // 정면이 막혀 있으면(사다리·나무 앞 등) 비스듬한 쪽에서 — 너무 가까이 붙어 얼굴만 크게 나오지 않게
@@ -274,6 +278,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // ---------- 행동 ----------
     const stand = () => {
       if (!st.sitting) return;
+      if (st.lying) { st.lying = false; pitch = 0; }
       st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false); setMatAsk(null);
       if (st.bench) { st.bench = null; st.stoodAt = st.now; }
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
@@ -291,6 +296,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (!canSit(pos.x, pos.z)) { sayRef.current("여기선 앉을 수 없어요. 잔디밭이나 정자로 가 볼까요?"); return; }
         st.sitting = true; st.wishUntil = 0; setSitting(true);
         camYaw = yaw;
+        if (groundY(pos.x, pos.z) > 0) { // 정자 마루에선 대자로 드러누워 천장(서까래)을 올려다봄
+          st.lying = true; st.lieYaw = yaw; st.onMat = false; pitch = -1.12;
+          logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: true, lie: true });
+          return;
+        }
         // 돗자리가 있으면 잔디밭에선 깔고 앉음 (정자 마루에선 그냥 앉음)
         // 돗자리는 통째로 잔디 위일 때만 (길·광장에 걸치면 그냥 앉음)
         const hasMat = !!meRef.current?.items.mat;
@@ -435,7 +445,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
-        : canSit(pos.x, pos.z) ? [{ label: "여기 앉기", run: () => actions.current!.sit() }]
+        : canSit(pos.x, pos.z) ? [{ label: groundY(pos.x, pos.z) > 0 ? "드러눕기" : "여기 앉기", run: () => actions.current!.sit() }]
         : [{ label: "여기선 앉을 수 없어요" }]));
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
       setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== "여기선 앉을 수 없어요") : items });
@@ -560,8 +570,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
       } else if (st.sitting && (Math.hypot(forward, right) < 0.05 || st.waitRelease)) {
-        // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게)
-        pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
+        // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게). 누워 있으면 천장까지 올려다봄
+        pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, st.lying ? -1.5 : PITCH_UP, st.lying ? 0.2 : PITCH_DOWN);
       } else {
         if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
         pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
@@ -600,8 +610,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const srv = mp.mine();
       if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
 
-      const mode: Mode = st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
-      const anim = mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
+      const mode: Mode = st.lying ? "lie" : st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
+      const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 

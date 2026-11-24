@@ -364,6 +364,25 @@ function buildProp(p: Prop, root: THREE.Group) {
         for (let i = 1; i < 5; i++) box(0.04, 0.33, 0.04, WOOD, x0 + ((x1 - x0) * i) / 5, fy + 0.28, z0 + ((z1 - z0) * i) / 5, 0.008);
       }
       add(hanokRoof(8, 7.6, 7.6, 1.6), GIWA, 0, top, 0, 0.022);
+      { // 천장 (누우면 보이는 곳): 살짝 오목한 팔각 천장 + 가운데로 모이는 단청 서까래 + 연꽃 무늬
+        // 지붕 그늘에 묻혀 새까맣게 보이지 않도록: 합치지 않고(keep) 그림자 안 받고 은은하게 스스로 밝힘
+        const R = postR + 0.02, H = 0.3, base = top - 0.34, mat = (c: string) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonGradient(), side: THREE.DoubleSide, emissive: new THREE.Color(c).multiplyScalar(0.32) });
+        // 안쪽(아래)에서 보이도록 면을 뒤집음 (bake가 양면 설정을 지우므로 기하로 처리)
+        const cg = new THREE.ConeGeometry(R, H, 8, 1, true).rotateY(Math.PI / 8).scale(-1, 1, 1); cg.computeVertexNormals();
+        const ceil = new THREE.Mesh(cg, mat("#e3c7a0"));
+        ceil.position.set(0, base + H / 2, 0); g.add(ceil); // 지붕 밑면(평평)보다 아래에
+        const slope = Math.atan2(H, R), len = Math.hypot(R, H);
+        for (let i = 0; i < 32; i++) {
+          const a = (i / 32) * Math.PI * 2, rf = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, len * 0.9), mat(i % 2 ? DAN_GREEN : "#3c7568"));
+          const pivot = new THREE.Group(); pivot.rotation.y = a; pivot.position.y = base; g.add(pivot);
+          rf.position.set(0, H * 0.45 - 0.04, R * 0.55); rf.rotation.x = slope; pivot.add(rf);
+          const tip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.12), mat(DAN_RED)); tip.position.set(0, 0.0, R * 0.98); pivot.add(tip);
+        }
+        for (const [r, c, dy] of [[0.5, DAN_RED, 0.0], [0.34, "#f4d06f", 0.01], [0.16, DAN_GREEN, 0.02]] as const) {
+          const lotus = new THREE.Mesh(new THREE.CircleGeometry(r, 16).rotateX(Math.PI / 2), mat(c)); lotus.position.y = base + H - 0.03 - dy; g.add(lotus);
+        }
+        g.traverse((o) => { if (o instanceof THREE.Mesh && (o.material as THREE.MeshToonMaterial).emissive?.getHex()) { o.userData.keep = true; o.receiveShadow = false; } });
+      }
       cyl(0.06, 0.12, 0.35, "#3f434a", 0, top + 1.6, 0, 8); add(new THREE.SphereGeometry(0.12, 10, 8), "#3f434a", 0, top + 1.85, 0);
       box(1.3, floorH * 0.5, 0.5, STONE, 0, floorH * 0.25, -(postR * Math.cos(Math.PI / 8) + 0.3)); // 디딤돌 (입구 앞, 북쪽)
       break;
@@ -571,7 +590,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로
   const keep: THREE.Object3D[] = [];
-  statics.traverse((o) => { if (o instanceof THREE.Mesh && (o.material as THREE.MeshToonMaterial).map) keep.push(o); });
+  statics.traverse((o) => { if (o instanceof THREE.Mesh && ((o.material as THREE.MeshToonMaterial).map || o.userData.keep)) keep.push(o); });
   for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
   scene.add(bake(statics), extras);
 
