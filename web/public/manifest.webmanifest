@@ -1,0 +1,13 @@
+{
+  "name": "온라인 벚꽃놀이",
+  "short_name": "벚꽃놀이",
+  "description": "사람 많은 데 가지 말고, 온라인으로 벚꽃 구경해요.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff8f3",
+  "theme_color": "#f7a8be",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
