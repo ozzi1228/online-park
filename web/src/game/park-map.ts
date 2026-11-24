@@ -368,5 +368,7 @@ export const BENCH_SEATS: BenchSeat[] = PROPS.flatMap((b) => {
     };
   });
 });
+/** 벤치 앉는 판 윗면 높이 (world.ts 벤치 모델과 맞춤) */
+export const BENCH_TOP = 0.468 * PROP_S;
 /** 서 있는 자리(fx, fz) 근처의 벤치 자리 */
 export const benchSeatAt = (x: number, z: number, within = 0.35) => BENCH_SEATS.find((s) => Math.hypot(s.fx - x, s.fz - z) < within);

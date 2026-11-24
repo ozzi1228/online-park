@@ -42,61 +42,83 @@ function coatTexture(L: Look, head: boolean) {
     }
   });
 }
-/** 얼굴: 반짝이는 큰 눈 + 분홍 코 + ω 입 */
+/** 얼굴: 반짝이는 큰 눈(별빛 두 점) + 발그레한 볼 + 하트 코 + ω 입 + 수염 */
 function faceTex(L: Look, closed: boolean) {
   return canvas(256, 192, (x) => {
     x.lineCap = "round";
+    x.fillStyle = "rgba(247,140,165,0.42)"; // 볼터치
+    for (const s of [-1, 1]) { x.beginPath(); x.ellipse(128 + s * 74, 124, 20, 11, 0, 0, 7); x.fill(); }
     for (const [s, col] of [[-1, L.eyeL], [1, L.eyeR]] as const) {
-      const ex = 128 + s * 50, ey = 92;
-      if (closed) { x.strokeStyle = "#3a2a26"; x.lineWidth = 6; x.beginPath(); x.arc(ex, ey - 6, 16, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
-      x.fillStyle = "#2b2124"; x.beginPath(); x.ellipse(ex, ey, 26, 28, 0, 0, 7); x.fill();
-      x.fillStyle = col; x.beginPath(); x.ellipse(ex, ey + 2, 21, 23, 0, 0, 7); x.fill();
-      x.fillStyle = "#1c1517"; x.beginPath(); x.ellipse(ex, ey + 3, 11, 16, 0, 0, 7); x.fill();
-      x.fillStyle = "#fff"; x.beginPath(); x.arc(ex + 7, ey - 9, 7, 0, 7); x.fill();
-      x.beginPath(); x.arc(ex - 7, ey + 9, 2.6, 0, 7); x.fill();
+      const ex = 128 + s * 46, ey = 94;
+      if (closed) { x.strokeStyle = "#3a2a26"; x.lineWidth = 7; x.beginPath(); x.arc(ex, ey - 8, 18, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
+      x.fillStyle = "#2b2124"; x.beginPath(); x.ellipse(ex, ey, 30, 33, 0, 0, 7); x.fill();         // 눈 테두리
+      const g = x.createLinearGradient(0, ey - 28, 0, ey + 30); g.addColorStop(0, "#1f1a1c"); g.addColorStop(0.45, col); g.addColorStop(1, col);
+      x.fillStyle = g; x.beginPath(); x.ellipse(ex, ey + 2, 25, 28, 0, 0, 7); x.fill();               // 홍채 (위는 짙게)
+      x.fillStyle = "#151012"; x.beginPath(); x.ellipse(ex, ey + 4, 12, 19, 0, 0, 7); x.fill();        // 동공
+      x.fillStyle = "#fff"; x.beginPath(); x.ellipse(ex + 9, ey - 10, 9, 8, 0, 0, 7); x.fill();         // 큰 반짝임
+      x.beginPath(); x.arc(ex - 9, ey + 12, 4, 0, 7); x.fill();                                        // 작은 반짝임
+      x.fillStyle = "rgba(255,255,255,0.35)"; x.beginPath(); x.ellipse(ex, ey + 18, 14, 6, 0, 0, 7); x.fill(); // 아래 물빛
     }
-    x.fillStyle = "#ef8f9f"; x.beginPath(); x.moveTo(120, 124); x.lineTo(136, 124); x.lineTo(128, 133); x.closePath(); x.fill();
+    // 하트 모양 코
+    x.fillStyle = "#f08ea0"; x.beginPath(); x.moveTo(128, 136); x.bezierCurveTo(116, 128, 118, 120, 124, 121); x.quadraticCurveTo(128, 122, 128, 125);
+    x.quadraticCurveTo(128, 122, 132, 121); x.bezierCurveTo(138, 120, 140, 128, 128, 136); x.fill();
     x.strokeStyle = "#5a3a34"; x.lineWidth = 3.5;
-    x.beginPath(); x.moveTo(128, 133); x.lineTo(128, 139); x.stroke();
-    x.beginPath(); x.arc(121, 139, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
-    x.beginPath(); x.arc(135, 139, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
-    x.strokeStyle = "rgba(90,58,52,0.55)"; x.lineWidth = 2; // 수염
-    for (const s of [-1, 1]) for (const dy of [-5, 4]) { x.beginPath(); x.moveTo(128 + s * 30, 132 + dy * 0.3); x.lineTo(128 + s * 78, 126 + dy * 1.6); x.stroke(); }
+    x.beginPath(); x.moveTo(128, 136); x.lineTo(128, 141); x.stroke();
+    x.beginPath(); x.arc(121, 141, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
+    x.beginPath(); x.arc(135, 141, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
+    x.strokeStyle = "rgba(90,58,52,0.45)"; x.lineWidth = 2; // 수염
+    for (const s of [-1, 1]) for (const dy of [-5, 4]) { x.beginPath(); x.moveTo(128 + s * 34, 134 + dy * 0.3); x.lineTo(128 + s * 82, 128 + dy * 1.6); x.stroke(); }
   });
 }
+
+/** 방울 목걸이 색 (나올 때마다 하나) */
+const COLLARS = ["#e8697f", "#6aa0e0", "#f2a541", "#8bc77a", "#b48ce0"];
 
 function buildCat(L: Look) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   const T = 0.008;
   const tex = (m: THREE.Mesh, map: THREE.Texture) => { m.material = new THREE.MeshToonMaterial({ map, gradientMap: toonGradient() }); return m; };
-  const torso = tex(part(new THREE.SphereGeometry(0.15, 24, 16).scale(1, 0.95, 1.65), L.base, T), coatTexture(L, false));
-  torso.position.y = 0.25; body.add(torso);
-  const head = new THREE.Group(); head.position.set(0, 0.4, 0.22); body.add(head);
-  const skull = tex(part(new THREE.SphereGeometry(0.155, 24, 16).scale(1.08, 0.95, 1), L.base, T), coatTexture(L, true));
+  const light = L.white > 0 || L.patch || L.base === WHITE ? WHITE : L.base; // 주둥이·발·가슴 털빛
+  // 몸: 짧고 통통하게
+  const torso = tex(part(new THREE.SphereGeometry(0.15, 24, 16).scale(1.05, 0.98, 1.38), L.base, T), coatTexture(L, false));
+  torso.position.y = 0.23; body.add(torso);
+  const bib = part(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.1, 0.7), light, 0); bib.position.set(0, 0.25, 0.13); body.add(bib); // 가슴 털
+  // 머리: 크고 동그랗게 (아기 고양이 비율)
+  const HR = 0.19;
+  const head = new THREE.Group(); head.position.set(0, 0.41, 0.19); body.add(head);
+  const skull = tex(part(new THREE.SphereGeometry(HR, 28, 18).scale(1.12, 0.95, 1), L.base, T), coatTexture(L, true));
   head.add(skull);
-  const muzzle = part(new THREE.SphereGeometry(0.07, 16, 12).scale(1.3, 0.8, 0.8), L.white > 0 || L.patch || L.base === WHITE ? WHITE : L.base, 0);
-  muzzle.position.set(0, -0.05, 0.085); head.add(muzzle); // 얼굴 그림(코·입)이 위로 보이게 살짝 안쪽
+  for (const s of [-1, 1]) { const ch = part(new THREE.SphereGeometry(0.075, 14, 10).scale(1.1, 0.85, 0.9), L.base, T); ch.position.set(s * 0.15, -0.07, 0.03); head.add(ch); } // 볼살
+  const muzzle = part(new THREE.SphereGeometry(0.07, 16, 12).scale(1.35, 0.78, 0.8), light, 0);
+  muzzle.position.set(0, -0.07, 0.115); head.add(muzzle);
   const open = faceTex(L, false), shut = faceTex(L, true);
   const faceMat = new THREE.MeshToonMaterial({ map: open, gradientMap: toonGradient(), transparent: true, depthWrite: false });
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.158, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.08, 0.95, 1), faceMat);
+  const face = new THREE.Mesh(new THREE.SphereGeometry(HR + 0.004, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.12, 0.95, 1), faceMat);
   face.renderOrder = 2; head.add(face);
-  for (const s of [-1, 1]) { // 귀
-    const ear = part(new THREE.ConeGeometry(0.06, 0.11, 4), L.patch && s > 0 ? L.patch : L.base, T); ear.position.set(s * 0.085, 0.13, -0.01); ear.rotation.z = -s * 0.32; head.add(ear);
-    const inner = part(new THREE.ConeGeometry(0.035, 0.07, 4), PINK, 0); inner.position.set(s * 0.083, 0.12, 0.02); inner.rotation.z = -s * 0.32; head.add(inner);
+  for (const s of [-1, 1]) { // 귀: 둥글둥글한 삼각 + 분홍 속귀 + 귀끝 털
+    const ear = part(new THREE.ConeGeometry(0.068, 0.12, 10), L.patch && s > 0 ? L.patch : L.base, T); ear.position.set(s * 0.105, 0.16, -0.02); ear.rotation.z = -s * 0.36; head.add(ear);
+    const inner = part(new THREE.ConeGeometry(0.04, 0.075, 10), PINK, 0); inner.position.set(s * 0.103, 0.15, 0.012); inner.rotation.z = -s * 0.36; head.add(inner);
   }
+  // 방울 목걸이
+  const col = COLLARS[Math.floor(Math.random() * COLLARS.length)];
+  const collar = part(new THREE.TorusGeometry(0.105, 0.016, 8, 24).rotateX(Math.PI / 2).rotateX(-0.5), col, 0); collar.position.set(0, 0.33, 0.13); body.add(collar);
+  const bell = part(new THREE.SphereGeometry(0.026, 12, 10), "#f3c94e", 0.004); bell.position.set(0, 0.29, 0.22); body.add(bell);
+  // 짧고 통통한 다리 + 동그란 발
   const legs = [[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([sx, sz]) => {
-    const g = new THREE.Group(); g.position.set(sx * 0.075, 0.16, sz * 0.15); body.add(g);
-    g.add(at3(part(new THREE.CapsuleGeometry(0.04, 0.09, 4, 10), sz > 0 && L.white > 0.5 ? WHITE : L.base, T), 0, -0.08, 0));
-    g.add(at3(part(new THREE.SphereGeometry(0.045, 12, 8).scale(1, 0.7, 1.25), L.white > 0 || L.base === WHITE ? WHITE : L.base, T), 0, -0.14, 0.01));
+    const g = new THREE.Group(); g.position.set(sx * 0.08, 0.15, sz * 0.13); body.add(g);
+    g.add(at3(part(new THREE.CapsuleGeometry(0.045, 0.06, 4, 10), sz > 0 && L.white > 0.5 ? WHITE : L.base, T), 0, -0.07, 0));
+    g.add(at3(part(new THREE.SphereGeometry(0.05, 12, 8).scale(1, 0.72, 1.2), light, T), 0, -0.125, 0.012));
     return g;
   });
+  // 꼬리: 굵고 복슬하게, 끝은 동그랗게
   const tail: THREE.Object3D[] = []; let parent: THREE.Object3D = body;
-  const tail0 = new THREE.Group(); tail0.position.set(0, 0.3, -0.22); body.add(tail0); parent = tail0;
-  for (let i = 0; i < 6; i++) { // 꼬리 마디 (끝으로 갈수록 가늘게)
-    const seg = new THREE.Group(); if (i) seg.position.y = 0.06; parent.add(seg);
-    seg.add(at3(part(new THREE.CapsuleGeometry(0.03 - i * 0.002, 0.04, 4, 8), L.stripe && i % 2 ? L.stripe : L.base, T), 0, 0.03, 0));
+  const tail0 = new THREE.Group(); tail0.position.set(0, 0.28, -0.19); body.add(tail0); parent = tail0;
+  for (let i = 0; i < 6; i++) {
+    const seg = new THREE.Group(); if (i) seg.position.y = 0.055; parent.add(seg);
+    seg.add(at3(part(new THREE.CapsuleGeometry(0.038 - i * 0.002, 0.035, 4, 8), L.stripe && i % 2 ? L.stripe : L.base, T), 0, 0.028, 0));
     tail.push(seg); parent = seg;
   }
+  parent.add(at3(part(new THREE.SphereGeometry(0.036, 10, 8), L.white > 0.5 ? WHITE : L.base, T), 0, 0.07, 0));
   root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
   return { root, body, head, legs, tail, faceMat, open, shut };
 }
@@ -147,7 +169,7 @@ export class CatView {
     const sw = walking ? Math.sin(P.gait) : 0;
     // 앉으면 엉덩이를 내리고 몸을 세움, 기지개는 앞발을 뻗고 가슴을 낮춤
     c.body.rotation.x = -0.55 * P.sit + 0.32 * P.stretch;
-    c.body.position.y = -0.06 * P.sit + (walking ? Math.abs(sw) * 0.012 : 0);
+    c.body.position.y = 0.03 * P.sit + (walking ? Math.abs(sw) * 0.012 : 0); // 앉아도 엉덩이가 바닥(벤치 판)을 뚫지 않게
     c.body.position.z = -0.06 * P.sit;
     c.legs.forEach((g, i) => {
       const front = i < 2, side = i % 2 ? 1 : -1, diag = (i === 0 || i === 3) ? 1 : -1;

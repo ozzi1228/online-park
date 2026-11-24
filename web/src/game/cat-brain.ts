@@ -1,6 +1,6 @@
 // 고양이 두뇌: 어디로 가서 무엇을 할지 정함. 화면과 상관없는 순수 계산이라
 // 실시간 서버가 이걸 돌려 모두에게 같은 고양이를 보여줌 (서버 없이 혼자 놀 땐 브라우저가 직접 돌림).
-import { BENCH_SEATS, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map";
+import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map";
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump";
@@ -16,6 +16,10 @@ type Act =
   | { k: "leave" };
 
 const RAIL = { z: BOUNDS.minZ - 0.25, y: 0.94, minX: -60, maxX: 60 };
+/** 고양이 몸 반 길이: 이만큼 떨어져서 지나가야 머리·꼬리가 나무·벤치·가로등에 박히지 않음 */
+const CAT_R = 0.32;
+/** 벤치 위 고양이 자리: 등받이에 엉덩이가 박히지 않게 판 가운데보다 살짝 앞으로 */
+const benchSpot = (b: { x: number; z: number; yaw: number }) => ({ x: b.x + Math.sin(b.yaw) * 0.14, z: b.z + Math.cos(b.yaw) * 0.14 });
 const RAIL_STAND_Z = BOUNDS.minZ + 0.35;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const turn = (a: number, b: number, k: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
@@ -47,7 +51,7 @@ export class CatBrain {
     this.nextAt = this.t + this.cfg.intervalMinSec + Math.random() * Math.max(0, this.cfg.intervalMaxSec - this.cfg.intervalMinSec);
   }
   private hopDown(): Act {
-    const f = BENCH_SEATS.find((b) => Math.hypot(b.x - this.s.x, b.z - this.s.z) < 0.3);
+    const f = BENCH_SEATS.find((b) => Math.hypot(b.x - this.s.x, b.z - this.s.z) < 0.4);
     return { k: "jump", tx: f ? f.fx : this.s.x, ty: 0, tz: f ? f.fz : this.s.z + 0.8, dur: 0.45 };
   }
 
@@ -67,7 +71,7 @@ export class CatBrain {
     if (r < 0.36) { // 비어 있는 벤치에 올라가 앉기
       const seat = BENCH_SEATS.filter((b) => Math.hypot(b.fx - s.x, b.fz - s.z) < 18 && ps.every((p) => Math.hypot(p.x - b.fx, p.z - b.fz) > 1.2))
         .sort((a, b) => Math.hypot(a.fx - s.x, a.fz - s.z) - Math.hypot(b.fx - s.x, b.fz - s.z))[0];
-      if (seat) { this.queue.push({ k: "walk", tx: seat.fx, tz: seat.fz }, { k: "jump", tx: seat.x, ty: seat.y + 0.1, tz: seat.z, dur: 0.45 }); return; }
+      if (seat) { const sp = benchSpot(seat); this.queue.push({ k: "walk", tx: seat.fx, tz: seat.fz }, { k: "jump", tx: sp.x, ty: BENCH_TOP, tz: sp.z, dur: 0.45 }); return; }
     }
     if (r < 0.48 && s.z < 6) { // 강가 난간 위를 걷기
       const x0 = clamp(s.x, RAIL.minX + 3, RAIL.maxX - 8), dir = Math.random() < 0.5 ? 1 : -1, x1 = clamp(x0 + dir * (4 + Math.random() * 5), RAIL.minX, RAIL.maxX);
@@ -111,7 +115,7 @@ export class CatBrain {
         const step = Math.min(dist, sp * dt), nx = s.x + Math.sin(s.yaw) * step, nz = s.z + Math.cos(s.yaw) * step;
         if (this.onRail) { s.x = nx; s.z = RAIL.z; }
         else {
-          const r = move(s.x, s.z, nx, nz, 0.16, COLLIDERS);
+          const r = move(s.x, s.z, nx, nz, CAT_R, COLLIDERS);
           this.stuck = Math.hypot(r.x - s.x, r.z - s.z) < step * 0.3 ? this.stuck + dt : 0;
           s.x = r.x; s.z = r.z; s.y = groundY(s.x, s.z);
           if (this.stuck > 1.2 && a.k === "walk") { this.queue = []; this.cur = null; this.stuck = 0; } // 막히면 다른 걸 함
@@ -126,7 +130,7 @@ export class CatBrain {
         if (k >= 1) {
           this.onRail = Math.abs(a.tz - RAIL.z) < 0.05 && a.ty > 0.5;
           this.onBench = !this.onRail && a.ty > 0.3;
-          if (this.onBench) { const b = BENCH_SEATS.find((q) => Math.hypot(q.x - a.tx, q.z - a.tz) < 0.3); if (b) s.yaw = b.yaw; }
+          if (this.onBench) { const b = BENCH_SEATS.find((q) => Math.hypot(q.x - a.tx, q.z - a.tz) < 0.4); if (b) s.yaw = b.yaw; }
           this.cur = null;
         }
         break;
