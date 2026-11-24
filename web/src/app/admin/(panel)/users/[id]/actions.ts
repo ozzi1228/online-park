@@ -1,6 +1,6 @@
 "use server";
 
-import { inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -31,4 +31,20 @@ export async function deleteUser(form: FormData) {
   // 관리자 기록에는 누구를 지웠는지만 (지운 사람의 내용은 남기지 않음)
   await logEvent("admin.user.deleted", { userId: id, ...counts }, requestCtx(await headers()));
   redirect(`/admin/users?deleted=${encodeURIComponent(id.slice(0, 8))}`);
+}
+
+/** 소원나무 쪽지 하나만 삭제: 나무에서 떼고, 단 사람에게 노트 1장을 돌려줌 */
+export async function deleteTreeNote(form: FormData) {
+  await requireAdmin();
+  const id = Number(form.get("noteId")), back = String(form.get("back") ?? "/admin/users");
+  if (!Number.isInteger(id)) redirect(back);
+  const removed = await db.transaction(async (tx) => {
+    const [n] = await tx.delete(notes).where(and(eq(notes.id, id), eq(notes.kind, "tree"))).returning({ authorId: notes.authorId });
+    if (!n) return null;
+    await tx.insert(inventory).values({ userId: n.authorId, item: "note_sheet", qty: 1 })
+      .onConflictDoUpdate({ target: [inventory.userId, inventory.item], set: { qty: sql`${inventory.qty} + 1` } });
+    return n;
+  });
+  if (removed) await logEvent("admin.tree.note_deleted", { noteId: id, userId: removed.authorId, sheetsReturned: 1 }, requestCtx(await headers()));
+  redirect(`${back}${back.includes("?") ? "&" : "?"}treeDeleted=1`);
 }

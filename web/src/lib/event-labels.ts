@@ -37,6 +37,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "client.tree.view": "소원 쪽지 보기",
   "admin.login": "관리자 로그인",
   "admin.user.deleted": "유저 삭제 (모든 데이터)",
+  "admin.tree.note_deleted": "소원 쪽지 삭제 (노트 1장 돌려줌)",
   "admin.login_failed": "관리자 로그인 실패",
   "admin.settings.updated": "운영 설정 변경",
 };

@@ -9,14 +9,14 @@ import type { Strokes } from "@/lib/notes-shared";
 import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
-import { DeleteUserButton } from "./delete-button";
+import { DeleteTreeNoteButton, DeleteUserButton } from "./delete-button";
 
 // 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 운세꽃잎, 행동 타임라인)
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
 
-export default async function UserDetail({ params }: PageProps<"/admin/users/[id]">) {
+export default async function UserDetail({ params, searchParams }: PageProps<"/admin/users/[id]">) {
   await connection();
-  const { id } = await params;
+  const { id } = await params, treeDeleted = !!(await searchParams).treeDeleted;
   const [u] = await db.select().from(user).where(eq(user.id, id));
   if (!u) notFound();
   // 비회원 시절 ID도 같이 (회원 전환 기록으로 연결)
@@ -38,6 +38,7 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
   return (
     <div className="flex flex-col gap-4">
       <Link href="/admin/users" className="text-sm opacity-60 hover:underline">← 유저 목록</Link>
+      {treeDeleted && <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">소원 쪽지를 삭제하고 노트 1장을 돌려줬어요</p>}
       <h1 className="flex flex-wrap items-center gap-2 text-2xl">
         {u.nickname ?? "(캐릭터 미정)"}
         <span className={`rounded px-2 text-sm ${u.isAnonymous ? "bg-black/5" : "bg-sakura/20"}`}>{u.isAnonymous ? "비회원" : "회원"}</span>
@@ -79,12 +80,13 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
 
       {treeRows.length > 0 && (
         <section className={box}>
-          <h2 className="mb-2 font-bold">소원나무에 단 쪽지 <span className="text-sm font-normal opacity-60">최근 {treeRows.length}장</span></h2>
+          <h2 className="mb-2 font-bold">소원나무에 단 쪽지 <span className="text-sm font-normal opacity-60">최근 {treeRows.length}장 · 삭제하면 노트 1장을 돌려줘요</span></h2>
           <ul className="grid grid-cols-3 gap-3 md:grid-cols-6">
             {treeRows.map((nt) => (
               <li key={nt.id} className="flex flex-col items-center gap-1 text-xs">
                 <NoteView strokes={nt.strokes as Strokes} className="w-full" />
                 <span className="opacity-70">{nt.covered ? "가림 · " : ""}{kst(nt.createdAt).slice(5, 16)}</span>
+                <DeleteTreeNoteButton noteId={nt.id} back={`/admin/users/${id}`} />
               </li>
             ))}
           </ul>
