@@ -1,7 +1,7 @@
 {
-  "name": "온라인 벚꽃놀이",
-  "short_name": "벚꽃놀이",
-  "description": "사람 많은 데 가지 말고, 온라인으로 벚꽃 구경해요.",
+  "name": "랜선 벚꽃공원",
+  "short_name": "벚꽃공원",
+  "description": "랜선으로 거니는 벚꽃공원, 같이 벚꽃 구경해요.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fff8f3",
