@@ -52,6 +52,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
   maxClients = 80;
   private last = new Map<string, number>(); // 마지막 이동 시각 (속도 검사)
   private uids = new Map<string, string>();  // sessionId → userId
+  private budget = new Map<string, number>(); // 움직여도 되는 남은 거리 (속도 검사)
 
   private cats = new CatColony(); // 늘 공원에 있는 고양이들 (서로 다른 무늬)
 
@@ -101,10 +102,13 @@ class ParkRoom extends Room<{ state: ParkState }> {
       if (!p || typeof m?.x !== "number" || typeof m.z !== "number" || typeof m.yaw !== "number" || !Number.isFinite(m.x + m.z + m.yaw)) return;
       const now = Date.now(), dt = Math.min((now - (this.last.get(client.sessionId) ?? now)) / 1000, 0.5);
       this.last.set(client.sessionId, now);
-      // 너무 멀리 한 번에 가면 허용 거리만큼만
+      // 너무 멀리 가면 허용 거리만큼만. 허용량은 시간 따라 쌓였다가 쓰는 방식이라
+      // 신호가 몰려서(망 지연) 짧은 간격으로 두 번 와도 정상 걸음은 잘리지 않음 (1.5초 걸음까지 저장)
+      const budget = Math.min((this.budget.get(client.sessionId) ?? 1) + MAX_SPEED * 1.3 * dt, MAX_SPEED * 1.5 + 0.5);
       let tx = m.x, tz = m.z;
-      const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), max = MAX_SPEED * dt * 1.5 + 0.25;
-      if (d > max) { tx = p.x + (dx / d) * max; tz = p.z + (dz / d) * max; }
+      const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+      if (d > budget) { tx = p.x + (dx / d) * budget; tz = p.z + (dz / d) * budget; }
+      this.budget.set(client.sessionId, Math.max(0, budget - Math.min(d, budget)));
       const r = move(p.x, p.z, tx, tz, PLAYER_R, this.others(client.sessionId));
       p.x = r.x; p.z = r.z; p.yaw = m.yaw; p.walking = m.walking === true;
       if (p.walking) p.anim = "idle"; // 걸으면 앉기·소원은 풀림
@@ -140,7 +144,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.last.delete(client.sessionId); this.uids.delete(client.sessionId);
+    this.last.delete(client.sessionId); this.uids.delete(client.sessionId); this.budget.delete(client.sessionId);
     console.log(`[leave] ${p?.nickname} (${this.state.players.size}명)`);
   }
 }

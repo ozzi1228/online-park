@@ -207,7 +207,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       aiming: false, stompUntil: 0, coinViewUntil: 0 };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
-    let baseFov = 60, firstPerson = false, zoomK = 1; // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
+    let baseFov = 60, firstPerson = false, zoomK = 1, camBack = 0; // camBack: 지금 카메라가 내 뒤로 떨어진 거리(부드럽게 따라감) // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
       // 뒤에서 보는 시점: 내 머리 뒤 조금 위에서, 내가 보는 쪽을 봄 → 화면 가운데 아래에 내 캐릭터가 살짝 보임
@@ -219,12 +219,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 420) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
       const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
-      const dBack = shoulder ? room : -0.25, sd = shoulder ? side : 0;
-      const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + (shoulder ? 0.5 : 0), at.z - fz * dBack + rz * sd);
+      // 뒤 거리는 부드럽게: 나무에 막히면 빨리 당기고(묻히지 않게), 트이면 천천히 물러남 (카메라가 툭툭 튀지 않게)
+      const wantBack = shoulder ? room : -0.25;
+      camBack += (wantBack - camBack) * (wantBack < camBack ? 0.45 : 0.06);
+      const dBack = camBack, up = THREE.MathUtils.clamp((camBack + 0.25) / 1.2, 0, 1) * 0.5, sd = shoulder ? side : 0;
+      const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + up, at.z - fz * dBack + rz * sd);
       if (st.lying) eye.set(at.x - Math.sin(st.lieYaw) * 0.8, eyeY, at.z - Math.cos(st.lieYaw) * 0.8); // 누우면 눈은 머리 자리 (발 반대쪽)
       const look = eye.clone().setY(eyeY).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       if (!st.lying) look.set(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
-      firstPerson = !shoulder;
+      firstPerson = camBack < 0.35;
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
         // 정면이 막혀 있으면(사다리·나무 앞 등) 비스듬한 쪽에서 — 너무 가까이 붙어 얼굴만 크게 나오지 않게
         const f = showMe * showMe * (3 - 2 * showMe), base = st.bench?.yaw ?? yaw, WANT = 2.8;
@@ -628,9 +631,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           if (!moved) { moved = true; setHint(false); }
         }
       }
-      // 서버 판정과 1m 넘게 어긋나면(처음 입장 위치 포함) 서버 쪽으로 맞춤
+      // 서버 판정과 많이 어긋나면 서버 쪽으로 맞춤. 처음 입장은 바로, 걷는 중엔 망 지연만큼 여유를 두고 부드럽게 당김 (화면이 튀지 않게)
       const srv = mp.mine();
-      if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
+      if (srv) {
+        const off = Math.hypot(srv.x - pos.x, srv.z - pos.z), walkV = (meRef.current?.controls?.walkSpeedCm ?? 300) / 100;
+        if (!synced) { pos.x = srv.x; pos.z = srv.z; yaw = camYaw = srv.yaw; synced = true; }
+        else if (off > 6) { pos.x = srv.x; pos.z = srv.z; }                                   // 크게 어긋나면(벽 너머 등) 바로
+        else if (off > 1.2 + walkV * 0.5 && !walking) { const k = 1 - Math.exp(-dt * 4); pos.x += (srv.x - pos.x) * k; pos.z += (srv.z - pos.z) * k; }
+      }
 
       const mode: Mode = st.lying ? "lie" : st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
       const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
