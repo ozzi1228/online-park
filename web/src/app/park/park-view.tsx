@@ -20,7 +20,9 @@ import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game
 import { makeMat, matFits, placeMat } from "@/game/mat";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
-import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
+import { LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
+import { CoinGame, launchVelocity } from "@/game/coin-game";
+import { fountainTargets } from "@/game/fountain";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
 import { authClient } from "@/lib/auth-client";
@@ -109,6 +111,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [sending, setSending] = useState(false);
   const [writeTree, setWriteTree] = useState(false);          // 소원 쪽지 쓰는 중
   const [treeMode, setTreeMode] = useState<"pick" | "ready" | null>(null); // 사다리 위에서 달 자리 고르는 중
+  /** 동전 게임 조준 중 (화면을 당겼다 놓으면 튕김) */
+  const [coinAim, setCoinAim] = useState(false);
+  const aim = useRef({ on: false, sx: 0, sy: 0, x: 0, y: 0, shoot: false, cancel: false });
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
   const treeApi = useRef<{ start: (strokes: Strokes, covered: boolean) => void; confirm: () => void; cancel: () => void; refresh: () => void } | null>(null);
   const mpRef = useRef<Multiplayer | null>(null);
@@ -166,7 +171,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     if (meRef.current?.sound) audio.levels = meRef.current.sound;
     const wake = () => audio.start();
     window.addEventListener("pointerdown", wake); window.addEventListener("keydown", wake);
-    const coin = new CoinToss(); scene.add(coin.group);
+    const coin = new CoinGame(fountainTargets(FOUNTAIN, PROP_S)); scene.add(coin.group);
     const refreshTree = async () => {
       const r = await fetch("/api/tree", { cache: "no-store" }).catch(() => null);
       if (r?.ok) treeNotes.set(await r.json() as TreeNote[]);
@@ -190,7 +195,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish", now: 0, faceCam: false,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
       /** 돗자리 같이 앉기를 물어보고 대답을 기다리는 중 */
-      asking: null as { seat: MatSeat; until: number } | null };
+      asking: null as { seat: MatSeat; until: number } | null,
+      /** 동전 조준 중 / 성공해서 발 동동 하는 동안 (그 뒤에 소원) */
+      aiming: false, stompUntil: 0 };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let baseFov = 60, firstPerson = false;
@@ -333,17 +340,44 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if ((me.items.noteSheets ?? 0) < 1) { sayRef.current("노트가 있어야 소원 쪽지를 달 수 있어요 (매점에서 살 수 있어요)"); return; }
       setPanel(null); setWriteTree(true); logClient("tree.open_editor", {});
     };
-    // 분수에 동전: 서버에서 그린 차감 → 동전이 물에 퐁당 → 정면 보고 소원
-    const tossCoin = async () => {
+    // 분수 동전 게임: 분수를 바라보고 조준 → 당겼다 놓으면 그린 차감 후 동전이 날아감
+    //  맨 위 작은 접시에 들어가면 발 동동 기뻐하고 소원, 빗나가면 아래 물에 떨어져 흔적으로 남음
+    const AIM_YAW = 0.0025, AIM_PULL = () => window.innerHeight * 0.35;
+    const hand = () => new THREE.Vector3(pos.x + Math.sin(yaw) * 0.3, footY + 1.25, pos.z + Math.cos(yaw) * 0.3);
+    const aimShot = () => {
+      const a = aim.current, pull = Math.min(1, Math.max(0, (a.y - a.sy) / AIM_PULL()));
+      return { pull, vel: launchVelocity(yaw, -(a.x - a.sx) * AIM_YAW, pull) }; // 새총처럼: 왼쪽으로 당기면 오른쪽으로
+    };
+    const stopAim = () => { st.aiming = false; aim.current.on = false; coin.preview(null); setCoinAim(false); };
+    const tossCoin = () => {
       setMenu(null);
       if (meRef.current?.isGuest) { sayRef.current("동전 던지기는 회원 전용이에요"); return; }
+      if (coin.busy) return;
+      if (st.sitting) stand();
+      yaw = camYaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z); pitch = -0.12; // 분수 꼭대기 접시가 보이게
+      st.aiming = true; setCoinAim(true);
+      logClient("fountain.aim", {});
+    };
+    const shootCoin = async () => {
+      const { pull, vel } = aimShot();
+      if (pull < 0.08) { coin.preview(null); return; } // 살짝 건드린 건 다시 조준
+      const from = hand(); stopAim();
       const r = await fetch("/api/fountain", { method: "POST" }).then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
       if (!r?.ok) { sayRef.current(r?.reason === "insufficient" ? "그린이 모자라요" : "동전을 던지지 못했어요"); return; }
-      yaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z);
-      coin.throw(new THREE.Vector3(pos.x, footY + 1.1, pos.z), FOUNTAIN); audio.jingle();
-      refreshMe.current();
+      coin.launch(from, vel); audio.jingle(); refreshMe.current();
     };
-    coin.onSplash = (at) => { world.addCoin(at.x, at.z); audio.plop(); setTimeout(() => audio.chime(), 400); st.wishUntil = st.now + WISH_SEC; st.faceCam = true; setTimeout(() => sayRef.current("퐁당! 소원을 빌었어요 🌸"), WISH_SEC * 1000); };
+    coin.onLand = (kind, at) => {
+      logClient("fountain.result", { hit: kind === "dish" });
+      if (kind === "ground") { sayRef.current("앗, 분수 밖으로 날아갔어요"); return; }
+      audio.plop();
+      if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current("아깝다! 맨 위 접시를 비껴갔어요"); return; }
+      // 성공: 발 동동 → 소원
+      playGesture(me, "stomp", st.now); mp.sendGesture("stomp"); st.faceCam = true; st.wishUntil = st.now + 1.8 + WISH_SEC;
+      sayRef.current("쏙! 들어갔어요 🎉");
+      setTimeout(() => { audio.chime(); st.stompUntil = 0; }, 1800);
+      setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), (1.8 + WISH_SEC) * 1000);
+      st.stompUntil = st.now + 1.8;
+    };
     // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
     treeApi.current = {
       start: (strokes, covered) => {
@@ -477,7 +511,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, me, playGesture, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, me, playGesture, coin, launchVelocity, THREE, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
@@ -485,6 +519,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 소원꽃잎이 떨어지지 않게)
       const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
       st.now = t;
+      if (st.aiming) { // 동전 조준: 당기는 동안 날아갈 길을 보여 주고, 놓으면 튕김
+        const a = aim.current;
+        if (a.cancel) { a.cancel = false; stopAim(); }
+        else if (a.shoot) { a.shoot = false; void shootCoin(); }
+        else if (a.on) coin.preview(hand(), aimShot().vel);
+        else coin.preview(null);
+      }
       if (st.asking && t > st.asking.until) { sayRef.current(`${st.asking.seat.owner}님이 대답하지 않았어요`); st.asking = null; }
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
@@ -530,6 +571,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         walking = amount > 0.05;
         if (walking) {
           st.wishUntil = 0; st.faceCam = false; // 걸으면 소원 동작은 멈춤
+          if (st.aiming) stopAim();
           const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
           const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
           if (dragY === 0 && drag.x === 0) pitch += (0 - pitch) * (1 - Math.exp(-dt * 1.2)); // 걸으면 시선이 천천히 앞으로 돌아옴
@@ -558,7 +600,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const srv = mp.mine();
       if (srv && (!synced || Math.hypot(srv.x - pos.x, srv.z - pos.z) > 1)) { pos.x = srv.x; pos.z = srv.z; if (!synced) yaw = camYaw = srv.yaw; synced = true; }
 
-      const mode: Mode = st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil ? "wish" : walking ? "walk" : "idle";
+      const mode: Mode = st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
       const anim = mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
@@ -723,6 +765,19 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {(panel || treeDetail) && ( // 창 바깥: 누르면 닫힘 (모바일은 바깥 터치, PC는 바깥 클릭)
         <div aria-hidden className="absolute inset-0 z-10 bg-black/10" onPointerDown={(e) => { e.preventDefault(); closePanels(); }} />
+      )}
+      {coinAim && (
+        <div className="absolute inset-0 z-20 touch-none select-none"
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); Object.assign(aim.current, { on: true, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY }); }}
+          onPointerMove={(e) => { if (aim.current.on) Object.assign(aim.current, { x: e.clientX, y: e.clientY }); }}
+          onPointerUp={() => { if (aim.current.on) { aim.current.on = false; aim.current.shoot = true; } }}
+          onPointerCancel={() => { aim.current.on = false; }}>
+          <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/90 px-4 py-1.5 text-center text-sm">
+            아래로 당겨 세기를, 좌우로 방향을 정하고 놓으면 튕겨요 · 맨 위 작은 접시에 넣어 보세요
+          </p>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { aim.current.cancel = true; }}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
+        </div>
       )}
       {matAsk && (
         <section role="dialog" aria-label="돗자리 같이 앉기" className="absolute inset-x-4 top-20 z-30 mx-auto flex w-auto max-w-[22rem] flex-col gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">

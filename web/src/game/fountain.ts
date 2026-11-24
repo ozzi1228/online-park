@@ -103,6 +103,16 @@ const sprite = () => {
   return new THREE.CanvasTexture(c);
 };
 
+/** 동전 게임 판정용: 맨 위 접시(목표)·가운데 접시·아래 수반의 물 높이와 반지름 (월드 좌표, m) */
+export function fountainTargets(at: { x: number; z: number }, scale: number) {
+  return {
+    x: at.x, z: at.z,
+    dish: { y: (UPPER.y + 0.24) * scale, r: (UPPER.r - 0.1) * scale },
+    lower: { y: (LOWER.y + 0.35) * scale, r: (LOWER.r - 0.1) * scale },
+    basin: { y: WATER_Y * scale, r: R_IN * scale },
+  };
+}
+
 export function createFountain(at: { x: number; z: number }, scale: number, sky: SkyUniforms) {
   const group = new THREE.Group(); group.position.set(at.x, 0, at.z); group.scale.setScalar(scale);
   const fog = { fogColor: { value: new THREE.Color() }, fogNear: { value: 50 }, fogFar: { value: 200 } };
