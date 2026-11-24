@@ -44,8 +44,8 @@ const sph = (r: number, sx = 1, sy = 1, sz = 1) => new THREE.SphereGeometry(r, 2
 const cap = (r: number, l: number, sx = 1, sz = 1) => new THREE.CapsuleGeometry(r, l, 6, 14).scale(sx, 1, sz);
 
 // ---------- 얼굴 ----------
-/** grin = 입을 벌리고 활짝 웃는 입 */
-export function faceTexture(p: Preset, closed: boolean, grin = false) {
+/** grin = 입을 벌리고 활짝 웃는 입, stern = 단호한 얼굴 (눈썹 내리고 입 꾹) */
+export function faceTexture(p: Preset, closed: boolean, grin = false, stern = false) {
   // 256x192 = 머리 앞면 장식 구간 비율
   const c = document.createElement("canvas"); c.width = 256; c.height = 192;
   const x = c.getContext("2d")!; x.lineCap = "round";
@@ -62,7 +62,8 @@ export function faceTexture(p: Preset, closed: boolean, grin = false) {
       x.fillStyle = "#fff"; x.beginPath(); x.arc(ex + 3, ey - 5, 3.5, 0, 7); x.fill();
     }
     x.strokeStyle = p.brow || "#5a3a30"; x.lineWidth = 5;
-    x.beginPath(); x.moveTo(ex - 11, 42); x.quadraticCurveTo(ex, 36, ex + 11, 42); x.stroke();
+    if (stern) { x.beginPath(); x.moveTo(ex - s * 13, 36); x.lineTo(ex + s * 11, 48); x.stroke(); } // 안쪽이 내려간 눈썹
+    else { x.beginPath(); x.moveTo(ex - 11, 42); x.quadraticCurveTo(ex, 36, ex + 11, 42); x.stroke(); }
     if (p.glasses) { x.strokeStyle = "#6b4a3a"; x.lineWidth = 4; x.beginPath(); x.arc(ex, ey, 23, 0, 7); x.stroke(); }
   }
   if (p.glasses) { x.beginPath(); x.moveTo(105, 74); x.lineTo(151, 74); x.stroke(); }
@@ -72,13 +73,20 @@ export function faceTexture(p: Preset, closed: boolean, grin = false) {
     x.beginPath(); x.moveTo(114, 111); x.quadraticCurveTo(128, 114, 142, 111); x.quadraticCurveTo(140, 130, 128, 131); x.quadraticCurveTo(116, 130, 114, 111); x.closePath();
     x.fill(); x.lineWidth = 4; x.stroke();
     x.fillStyle = "#f08a9a"; x.beginPath(); x.ellipse(128, 126, 6, 3.5, 0, 0, 7); x.fill();
-  } else { x.beginPath(); x.arc(128, 116, 9, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke(); }
+  } else if (stern) { x.beginPath(); x.moveTo(117, 120); x.lineTo(139, 120); x.stroke(); } // 꾹 다문 입
+  else { x.beginPath(); x.arc(128, 116, 9, 0.2 * Math.PI, 0.8 * Math.PI); x.stroke(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
 
 export type Character = ReturnType<typeof makeChar>;
 export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish";
+/** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동 */
+export type Gesture = "wave" | "shake" | "stomp";
+const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8 };
+export const isGesture = (k: unknown): k is Gesture => k === "wave" || k === "shake" || k === "stomp";
+/** 몸짓 시작 (t = animateChar에 넘기는 시각과 같은 시계) */
+export function playGesture(c: Character, kind: Gesture, t: number) { c.gesture = { kind, t0: t }; }
 
 // ---------- 조립 ----------
 export function makeChar(p: Preset) {
@@ -207,7 +215,10 @@ export function makeChar(p: Preset) {
   if (p.kid) { root.scale.setScalar(0.76); head.scale.setScalar(1.12); }
 
   return {
-    root, body, head, arms, legs, faceMat, texOpen, texClosed,
+    root, body, head, arms, legs, faceMat, texOpen, texClosed, preset: p,
+    /** 잠깐 하는 몸짓 (손 흔들기·고개 젓기·발 동동) */
+    gesture: null as { kind: Gesture; t0: number } | null,
+    faces: {} as Partial<Record<"grin" | "stern", THREE.CanvasTexture>>,
     ph: Math.random() * 6, blinkAt: 1 + Math.random() * 3,
     /** 이름표 높이 */
     top: (p.kid ? 1.55 : 1.85) + (p.hat ? 0.12 : 0),
@@ -217,7 +228,7 @@ export function makeChar(p: Preset) {
 /** 그 캐릭터가 쓰던 GPU 자원 해제 (공용 재질은 남김) */
 export function disposeChar(c: Character) {
   c.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
-  c.faceMat.dispose(); c.texOpen.dispose(); c.texClosed.dispose();
+  c.faceMat.dispose(); c.texOpen.dispose(); c.texClosed.dispose(); c.faces.grin?.dispose(); c.faces.stern?.dispose();
 }
 
 // ---------- 동작 ----------
@@ -233,15 +244,33 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   if (mode === "sit") { legX = -1.45; armX = -0.35; armZ = 0.15; bodyY = -0.3; }
   if (mode === "sitwish") { legX = -1.45; bodyY = -0.3; armX = -1.25; armZ = -0.62; headX = 0.2; closed = true; } // 앉은 채로 손 모으기
   const seated = mode === "sit" || mode === "sitwish";
+  let arm0X = mode === "walk" ? -armX : armX, arm0Z = -armZ, arm1Z = armZ, leg1X = seated ? legX : -legX, headY = 0;
+  let face: "grin" | "stern" | null = null;
+  const g = c.gesture, gt = g ? t - g.t0 : 0;
+  if (g && (gt < 0 || gt > GESTURE_SEC[g.kind])) c.gesture = null;
+  else if (g && mode !== "walk") {
+    const fade = Math.min(1, gt * 6, (GESTURE_SEC[g.kind] - gt) * 4); // 시작·끝은 부드럽게
+    if (g.kind === "wave") { // 한 손을 번쩍 들어 흔들흔들 + 활짝 웃기 (앉아서도)
+      arm0X = -0.2; arm0Z = -(2.55 + Math.sin(gt * 11) * 0.4) * fade; headX = -0.08; face = "grin";
+    } else if (g.kind === "shake") { // 고개 절레절레 + 단호한 얼굴
+      headY = Math.sin(gt * 15) * 0.5 * fade; face = "stern";
+    } else if (!seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
+      const st = Math.sin(gt * 18);
+      legX = 0.5 * st * fade; leg1X = -legX; bodyY = Math.abs(st) * 0.07 * fade;
+      arm0X = arm0X * (1 - fade) - 0.3 * fade; armX = arm0X; arm0Z = -1.2 * fade - armZ * (1 - fade); arm1Z = -arm0Z; face = "grin";
+    }
+  }
   ease(c.legs[0].rotation, "x", legX, k);
-  ease(c.legs[1].rotation, "x", seated ? legX : -legX, k);
-  ease(c.arms[0].rotation, "x", mode === "walk" ? -armX : armX, k);
+  ease(c.legs[1].rotation, "x", leg1X, k);
+  ease(c.arms[0].rotation, "x", arm0X, k);
   ease(c.arms[1].rotation, "x", armX, k);
-  ease(c.arms[0].rotation, "z", -armZ, k);
-  ease(c.arms[1].rotation, "z", armZ, k);
+  ease(c.arms[0].rotation, "z", arm0Z, k);
+  ease(c.arms[1].rotation, "z", arm1Z, k);
   ease(c.body.position, "y", bodyY, k);
   ease(c.head.rotation, "x", headX, k);
-  if (t > c.blinkAt) { if (t > c.blinkAt + 0.13) c.blinkAt = t + 2 + Math.random() * 3; else closed = true; }
-  const tex = closed ? c.texClosed : c.texOpen;
+  ease(c.head.rotation, "y", headY, Math.min(1, k * 2));
+  if (!face && t > c.blinkAt) { if (t > c.blinkAt + 0.13) c.blinkAt = t + 2 + Math.random() * 3; else closed = true; }
+  if (face && !c.faces[face]) c.faces[face] = faceTexture(c.preset, false, face === "grin", face === "stern");
+  const tex = face ? c.faces[face]! : closed ? c.texClosed : c.texOpen;
   if (c.faceMat.map !== tex) c.faceMat.map = tex;
 }

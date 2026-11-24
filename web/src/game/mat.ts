@@ -2,7 +2,7 @@
 // 위치는 깐 사람의 자리·방향으로 계산 → 서버에 따로 저장할 필요 없음
 import * as THREE from "three";
 import { toonGradient } from "./character";
-import { canSit, groundY } from "./park-map";
+import { groundY, onPath } from "./park-map";
 
 export const MAT_W = 2.2, MAT_D = 1.4, SEAT_GAP = 0.85; // 두 자리 사이 거리
 
@@ -13,13 +13,14 @@ export const matCenter = (x: number, z: number, yaw: number) => { const r = righ
 /** 같이 앉는 사람 자리 */
 export const secondSeat = (x: number, z: number, yaw: number) => { const r = right(yaw); return { x: x + r.x * SEAT_GAP, z: z + r.z * SEAT_GAP }; };
 
-/** 돗자리를 통째로 잔디 위에 펼 수 있는지 (네 귀퉁이까지 길·광장·정자가 아님) */
+/** 돗자리를 통째로 잔디 위에 펼 수 있는지: 천 전체(가장자리 포함)가 길·광장·정자에서 떨어져 있어야 (산책하는 사람 길 막지 않게) */
 export function matFits(x: number, z: number, yaw: number) {
   const c = matCenter(x, z, yaw), r = right(yaw), f = { x: Math.sin(yaw), z: Math.cos(yaw) };
-  return [[0, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]].every(([a, b]) => {
+  for (let a = -1; a <= 1; a += 0.5) for (let b = -1; b <= 1; b += 0.5) {
     const px = c.x + r.x * a * MAT_W / 2 + f.x * b * MAT_D / 2, pz = c.z + r.z * a * MAT_W / 2 + f.z * b * MAT_D / 2;
-    return groundY(px, pz) === 0 && canSit(px, pz);
-  });
+    if (groundY(px, pz) !== 0 || onPath(px, pz, 0.3)) return false;
+  }
+  return true;
 }
 
 let tex: THREE.CanvasTexture | null = null;

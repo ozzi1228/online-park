@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
-import { animateChar, makeChar, type Mode } from "@/game/character";
+import { animateChar, makeChar, playGesture, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
 import { CatBrain, type CatState } from "@/game/cat-brain";
@@ -18,6 +18,8 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { makeMat, matFits, placeMat } from "@/game/mat";
+
+type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
 import { CoinToss, LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
@@ -101,6 +103,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const panelOpen = useRef(false);
   useEffect(() => { panelOpen.current = panel !== null; }, [panel]);
   const [writeTo, setWriteTo] = useState<{ sessionId: string; uid: string; nickname: string } | null>(null);
+  /** 누가 내 돗자리에 같이 앉고 싶어함 → 허락/거절 */
+  const [matAsk, setMatAsk] = useState<{ from: string; nickname: string } | null>(null);
+  const matApi = useRef<{ answer: (ok: boolean) => void } | null>(null);
   const [sending, setSending] = useState(false);
   const [writeTree, setWriteTree] = useState(false);          // 소원 쪽지 쓰는 중
   const [treeMode, setTreeMode] = useState<"pick" | "ready" | null>(null); // 사다리 위에서 달 자리 고르는 중
@@ -183,7 +188,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
     const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish", now: 0, faceCam: false,
-      bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true };
+      bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
+      /** 돗자리 같이 앉기를 물어보고 대답을 기다리는 중 */
+      asking: null as { seat: MatSeat; until: number } | null };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let baseFov = 60, firstPerson = false;
@@ -231,13 +238,36 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     mpRef.current = mp;
     mp.onNote = (from) => { sayRef.current(`✉️ ${from}님이 쪽지를 건넸어요`); refreshMe.current(); };
     mp.onTreeChanged = refreshTree;
+    // 돗자리 같이 앉기: 깐 사람은 허락/거절 창, 물어본 사람은 대답을 기다림
+    mp.onMatAsk = (from, nickname) => { if (st.onMat) setMatAsk({ from, nickname }); else mp.answerMat(from, false); };
+    mp.onMatAnswer = (ok, owner, ownerId) => {
+      const a = st.asking; st.asking = null;
+      if (!a || a.seat.ownerId !== ownerId) return;
+      if (!ok) { sayRef.current("이 곳에는 앉을 수 없습니다"); return; }
+      const seat = mp.freeSeats().find((s) => s.ownerId === ownerId); // 그 사이 자리가 찼거나 일어났으면 못 앉음
+      if (!seat || st.sitting || Math.hypot(seat.x - pos.x, seat.z - pos.z) > 3) { sayRef.current(`${owner}님 옆자리에 앉지 못했어요`); return; }
+      joinMat(seat);
+    };
+    matApi.current = {
+      answer: (ok) => {
+        setMatAsk((q) => {
+          if (q) {
+            mp.answerMat(q.from, ok);
+            const kind = ok ? "wave" : "shake"; // 허락하면 웃으며 손 흔들흔들, 거절하면 단호하게 절레절레
+            playGesture(me, kind, st.now); mp.sendGesture(kind);
+            logClient(ok ? "mat.allowed" : "mat.refused", {});
+          }
+          return null;
+        });
+      },
+    };
     mp.connect();
     let synced = false;
 
     // ---------- 행동 ----------
     const stand = () => {
       if (!st.sitting) return;
-      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false);
+      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false); setMatAsk(null);
       if (st.bench) { st.bench = null; st.stoodAt = st.now; }
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
     };
@@ -259,7 +289,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         const hasMat = !!meRef.current?.items.mat;
         st.onMat = hasMat && matFits(pos.x, pos.z, yaw);
         if (st.onMat) { placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
-        else if (hasMat) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요");
+        else if (hasMat && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
@@ -329,8 +359,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         tree.busy = false;
         if (r?.ok) {
           tree.pending = null; treeNotes.showGhost(null); setTreeMode(null); audio.paper();
-          await refreshTree(); mp.notifyTree(); refreshMe.current();
-          st.wishUntil = st.now + WISH_SEC; st.faceCam = true;
+          await refreshTree(); mp.notifyTree(); refreshMe.current(); // 쪽지만 달고 소원 비는 동작은 없음
           sayRef.current("소원 쪽지를 나무에 달았어요 🌸");
         } else sayRef.current(r?.reason === "daily_limit" ? "오늘은 쪽지를 충분히 달았어요" : r?.reason === "no_sheet" ? "노트가 모자라요" : r?.reason === "bad_spot" ? "나뭇가지 사이를 골라 주세요" : "달지 못했어요");
       },
@@ -345,7 +374,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     ];
     // 다른 사람 돗자리의 빈 옆자리: 1.6m 안이면 같이 앉을 수 있음
     const nearSeat = () => mp.freeSeats().find((s) => Math.hypot(s.x - pos.x, s.z - pos.z) < 1.6);
-    const joinMat = (seat: { x: number; z: number; yaw: number; owner: string }) => {
+    // 같이 앉기 = 먼저 깐 사람에게 물어봄 (대답은 mp.onMatAnswer)
+    const askJoin = (seat: MatSeat) => {
+      setMenu(null);
+      if (st.asking && st.now < st.asking.until) { sayRef.current(`${st.asking.seat.owner}님의 대답을 기다리는 중이에요`); return; }
+      st.asking = { seat, until: st.now + 20 };
+      mp.askMat(seat.ownerId);
+      sayRef.current(`${seat.owner}님에게 같이 앉아도 되는지 물어봤어요`);
+      logClient("mat.ask", {});
+    };
+    const joinMat = (seat: MatSeat) => {
       setMenu(null);
       pos.x = seat.x; pos.z = seat.z; yaw = camYaw = seat.yaw; // 바로 옆이라 서버 이동 판정 안에서 따라옴
       st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true);
@@ -361,7 +399,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
-      if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => joinMat(seat) });
+      if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? [{ label: "여기 앉기", run: () => actions.current!.sit() }]
         : [{ label: "여기선 앉을 수 없어요" }]));
@@ -415,7 +453,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (other) {
         const near = Math.hypot(other.x - pos.x, other.z - pos.z) < 5;
         const sheets = meRef.current?.items.noteSheets ?? 0;
+        const theirSeat = !st.sitting ? mp.freeSeats().find((s) => s.ownerId === other.sessionId && Math.hypot(s.x - pos.x, s.z - pos.z) < 3) : undefined;
         setMenu({ x: tap.x, y: tap.y, items: [
+          ...(theirSeat ? [{ label: "돗자리에 같이 앉기", run: () => askJoin(theirSeat) }] : []),
           near && sheets > 0 && !meRef.current?.isGuest
             ? { label: `${other.nickname}님에게 쪽지 건네기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTo(other); logClient("note.open_editor", {}); } }
             : { label: meRef.current?.isGuest ? "쪽지는 회원만 쓸 수 있어요" : sheets <= 0 ? "노트가 없어요 (매점에서 살 수 있어요)" : "조금 더 가까이 가야 건넬 수 있어요" },
@@ -437,7 +477,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, cat, soloCat, me, playGesture, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
@@ -445,6 +485,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 소원꽃잎이 떨어지지 않게)
       const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
       st.now = t;
+      if (st.asking && t > st.asking.until) { sayRef.current(`${st.asking.seat.owner}님이 대답하지 않았어요`); st.asking = null; }
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
@@ -682,6 +723,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {(panel || treeDetail) && ( // 창 바깥: 누르면 닫힘 (모바일은 바깥 터치, PC는 바깥 클릭)
         <div aria-hidden className="absolute inset-0 z-10 bg-black/10" onPointerDown={(e) => { e.preventDefault(); closePanels(); }} />
+      )}
+      {matAsk && (
+        <section role="dialog" aria-label="돗자리 같이 앉기" className="absolute inset-x-4 top-20 z-30 mx-auto flex w-auto max-w-[22rem] flex-col gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+          <p className="text-center"><b>{matAsk.nickname}</b>님이 돗자리에<br />같이 앉고 싶어해요</p>
+          <div className="flex gap-2">
+            <button onClick={() => matApi.current?.answer(false)} className="flex-1 rounded-full bg-white py-2.5 ring-1 ring-sakura/40">거절하기</button>
+            <button onClick={() => matApi.current?.answer(true)} className="flex-1 rounded-full bg-sakura py-2.5 text-white">허락하기</button>
+          </div>
+        </section>
       )}
       {treeDetail && <TreeNotePanel note={treeDetail} sheets={me?.items.noteSheets ?? 0} onClose={() => setTreeDetail(null)}
         onChanged={(msg) => { sayRef.current(msg); setTreeDetail(null); treeApi.current?.refresh(); mpRef.current?.notifyTree(); refreshMe.current(); }} />}

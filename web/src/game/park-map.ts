@@ -255,14 +255,18 @@ export function groundY(x: number, z: number) {
 }
 
 /** 앉을 수 있는 곳: 잔디(길·광장 아닌 곳)나 정자 마루 */
-export function canSit(x: number, z: number) {
-  if (groundY(x, z) > 0) return true;
-  if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r) return false;
-  return !PATHS.some((p) => {
+/** 길·광장 위인지 (margin만큼 길가 잔디도 길로 침) */
+export function onPath(x: number, z: number, margin = 0) {
+  if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r + margin) return true;
+  return PATHS.some((p) => {
     const vx = p.x2 - p.x1, vz = p.z2 - p.z1, l2 = vx * vx + vz * vz;
     const t = Math.max(0, Math.min(1, ((x - p.x1) * vx + (z - p.z1) * vz) / l2));
-    return Math.hypot(x - (p.x1 + vx * t), z - (p.z1 + vz * t)) < p.w / 2;
+    return Math.hypot(x - (p.x1 + vx * t), z - (p.z1 + vz * t)) < p.w / 2 + margin;
   });
+}
+export function canSit(x: number, z: number) {
+  if (groundY(x, z) > 0) return true;
+  return !onPath(x, z);
 }
 
 export const overlaps = (x: number, z: number, r = PLAYER_R, colliders = COLLIDERS) =>

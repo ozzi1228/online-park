@@ -1,7 +1,7 @@
 // 다른 사람들: 실시간 서버 접속, 캐릭터 생성/삭제, 부드러운 위치 보간, 이름표
 import { Client, type Room } from "@colyseus/sdk";
 import * as THREE from "three";
-import { animateChar, disposeChar, makeChar, type Character } from "./character";
+import { animateChar, disposeChar, isGesture, makeChar, playGesture, type Character, type Gesture } from "./character";
 import { makeMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, benchSeatAt, groundY, type Collider } from "./park-map";
 import type { CatState } from "./cat-brain";
@@ -39,6 +39,10 @@ export class Multiplayer {
   onNote?: (from: string) => void;
   /** 누가 소원나무 쪽지를 바꿨을 때 */
   onTreeChanged?: () => void;
+  /** 누가 내 돗자리에 같이 앉고 싶어할 때 / 내가 물어본 데 대답이 왔을 때 */
+  onMatAsk?: (from: string, nickname: string) => void;
+  onMatAnswer?: (ok: boolean, owner: string, ownerId: string) => void;
+  private t = 0;
 
   constructor(private scene: THREE.Scene) {}
 
@@ -53,6 +57,12 @@ export class Multiplayer {
       room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });
       room.onMessage("noteReceived", (m: { from?: string }) => this.onNote?.(String(m?.from ?? "누군가")));
       room.onMessage("treeChanged", () => this.onTreeChanged?.());
+      room.onMessage("matAsked", (m: { from?: string; nickname?: string }) => this.onMatAsk?.(String(m?.from), String(m?.nickname ?? "누군가")));
+      room.onMessage("matAnswered", (m: { ok?: boolean; owner?: string; id?: string }) => this.onMatAnswer?.(m?.ok === true, String(m?.owner ?? "누군가"), String(m?.id)));
+      room.onMessage("gesture", (m: { id?: string; kind?: unknown }) => {
+        const o = this.others.get(String(m?.id));
+        if (o && isGesture(m?.kind)) playGesture(o.char, m.kind, this.t);
+      });
       this.setStatus(true);
     } catch (e) {
       if (this.disposed) return;
@@ -80,6 +90,7 @@ export class Multiplayer {
   }
 
   update(t: number, dt: number, me: { x: number; z: number; yaw: number; walking: boolean }) {
+    this.t = t;
     const room = this.room;
     if (!room?.state.players) return;
     // 보내기: 초당 12번까지, 바뀐 게 있을 때만 (가만히 있으면 2초마다 생존 신호)
@@ -156,7 +167,7 @@ export class Multiplayer {
 
   /** 다른 사람이 깐 돗자리의 빈 옆자리 (같이 앉기용) */
   freeSeats() {
-    const out: { x: number; z: number; yaw: number; owner: string }[] = [];
+    const out: { x: number; z: number; yaw: number; owner: string; ownerId: string }[] = [];
     const room = this.room;
     if (!room?.state.players) return out;
     room.state.players.forEach((p, id) => {
@@ -164,10 +175,14 @@ export class Multiplayer {
       const seat = secondSeat(p.x, p.z, p.yaw);
       let taken = false;
       room.state.players.forEach((q, qid) => { if (qid !== id && Math.hypot(q.x - seat.x, q.z - seat.z) < 0.45) taken = true; });
-      if (!taken) out.push({ ...seat, yaw: p.yaw, owner: p.nickname });
+      if (!taken) out.push({ ...seat, yaw: p.yaw, owner: p.nickname, ownerId: id });
     });
     return out;
   }
+
+  askMat(ownerId: string) { this.room?.send("matAsk", { to: ownerId }); }
+  answerMat(to: string, ok: boolean) { this.room?.send("matAnswer", { to, ok }); }
+  sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
   sendAnim(a: "idle" | "sit" | "sitmat" | "sitbench" | "wish") { this.room?.send("anim", a); }

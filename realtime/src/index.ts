@@ -114,6 +114,20 @@ class ParkRoom extends Room<{ state: ParkState }> {
     },
     // 누가 소원나무에 쪽지를 달거나 떼면 모두 새로 불러오도록 알림 (내용은 웹앱 API에서)
     treeChanged: (client: Client) => { this.broadcast("treeChanged", {}, { except: client }); },
+    // 돗자리 같이 앉기: 묻기 → 깐 사람에게 전달, 대답 → 물어본 사람에게 전달 (자리 판정은 각자 화면에서)
+    matAsk: (client: Client, m: { to?: unknown }) => {
+      const from = this.state.players.get(client.sessionId), owner = this.state.players.get(String(m?.to));
+      const to = this.clients.find((c) => c.sessionId === m?.to);
+      if (from && owner?.anim === "sitmat" && to && to !== client) to.send("matAsked", { from: client.sessionId, nickname: from.nickname });
+    },
+    matAnswer: (client: Client, m: { to?: unknown; ok?: unknown }) => {
+      const owner = this.state.players.get(client.sessionId), to = this.clients.find((c) => c.sessionId === m?.to);
+      if (owner && to && to !== client) to.send("matAnswered", { ok: m?.ok === true, owner: owner.nickname, id: client.sessionId });
+    },
+    // 잠깐 하는 몸짓(손 흔들기·고개 젓기·발 동동)을 다른 사람 화면에도
+    gesture: (client: Client, kind: unknown) => {
+      if (kind === "wave" || kind === "shake" || kind === "stomp") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
+    },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (p && (a === "idle" || a === "sit" || a === "sitmat" || a === "sitbench" || a === "wish")) p.anim = a;
