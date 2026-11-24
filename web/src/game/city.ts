@@ -116,7 +116,9 @@ export function createCity(scene: THREE.Scene, sky: SkyUniforms, fog: THREE.Fog)
     uniforms: { zenith: sky.zenith, horizon: sky.horizon, sunDir: sky.sunDir, sunColor: sky.sunColor, night: sky.night, haze: { value: fog.color } },
     vertexShader: VERT, fragmentShader: FRAG,
   });
-  scene.add(new THREE.Mesh(mergeGeometries(geos), mat));
+  // 강 건너 공원이 생겨서 도시는 그 뒤로 (다리는 강에 그대로)
+  const far = new THREE.Group(); far.position.z = -18; scene.add(far);
+  far.add(new THREE.Mesh(mergeGeometries(geos), mat));
 
   // 멀리 산 (뿌연 실루엣) + 봉우리 전망탑
   const hillMat = new THREE.MeshBasicMaterial({ color: "#8fa6b8", fog: false });
@@ -131,7 +133,7 @@ export function createCity(scene: THREE.Scene, sky: SkyUniforms, fog: THREE.Fog)
   mast.add(new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 2.2, 14), towerMat).translateY(15));
   mast.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 10, 6), towerMat).translateY(21));
   hills.add(mast); beacons.push(new THREE.Vector3(-40, 64.5, -185));
-  scene.add(hills);
+  far.add(hills);
 
   // 동쪽 다리: 강을 가로지르는 아치 다리 (밤엔 가로등이 줄지어 켜짐)
   const bridge = new THREE.Group();
@@ -155,12 +157,12 @@ export function createCity(scene: THREE.Scene, sky: SkyUniforms, fog: THREE.Fog)
     g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.3, "rgba(255,255,255,0.5)"); g.addColorStop(1, "rgba(255,255,255,0)");
     x.fillStyle = g; x.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c);
   })();
-  const dots = (pts: THREE.Vector3[], color: string, size: number) => {
+  const dots = (pts: THREE.Vector3[], color: string, size: number, parent: THREE.Object3D = scene) => {
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
     const m = new THREE.PointsMaterial({ color, size, map: glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0 });
-    const p = new THREE.Points(geo, m); scene.add(p); return m;
+    const p = new THREE.Points(geo, m); parent.add(p); return m;
   };
-  const red = dots(beacons, "#ff4a4a", 2.2), lamps = dots(lampPts, "#ffd38a", 1.6);
+  const red = dots(beacons, "#ff4a4a", 2.2, far), lamps = dots(lampPts, "#ffd38a", 1.6);
 
   const tmp = new THREE.Color();
   return {

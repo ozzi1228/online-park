@@ -1,13 +1,22 @@
 // 실행: node --test src/game/park-map.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BENCH_SEATS, BOUNDS, SPAWN, benchSeatAt, move, overlaps, resolve } from "./park-map.ts";
+import { BENCH_SEATS, BOUNDS, BOUNDS_N, BRIDGE, SPAWN, benchSeatAt, groundY, move, overlaps, resolve } from "./park-map.ts";
 
 test("시작 위치는 비어 있음", () => assert.ok(!overlaps(SPAWN.x, SPAWN.z)));
 
 test("경계 밖으로 못 나감", () => {
   const p = resolve(999, -999);
-  assert.ok(p.x <= BOUNDS.maxX && p.z >= BOUNDS.minZ);
+  assert.ok(p.x <= BOUNDS_N.maxX && p.z >= BOUNDS_N.minZ);
+});
+
+test("강은 다리로만 건널 수 있음", () => {
+  const swim = resolve(30, -24); // 다리 아닌 곳 강 한가운데 → 강가로 밀려남
+  assert.ok(swim.z > BOUNDS.minZ - 0.01 || swim.z < BOUNDS_N.maxZ + 0.01 || Math.abs(swim.x - BRIDGE.x) < BRIDGE.w / 2);
+  let x = BRIDGE.x, z = -3; // 산책로에서 북쪽으로 쭉 걸으면 다리를 건너 건너편 공원까지
+  for (let i = 0; i < 600; i++) ({ x, z } = move(x, z, x, z - 0.12));
+  assert.ok(z < BOUNDS_N.maxZ, `건너편까지 못 감: z=${z.toFixed(2)}`);
+  assert.ok(groundY(BRIDGE.x, (BRIDGE.z0 + BRIDGE.z1) / 2) > 1, "다리 가운데는 솟아 있음");
 });
 
 test("분수 한가운데로는 못 들어감", () => {

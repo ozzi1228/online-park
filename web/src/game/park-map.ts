@@ -3,6 +3,25 @@
 // 계절 테마는 이 배치를 그대로 두고 각 kind를 어떤 모델로 그릴지만 바꿈 (PLAN 2-9).
 
 export const BOUNDS = { minX: -59.5, maxX: 59.5, minZ: -7.5, maxZ: 28.5 };
+/** 강을 건너는 나무 다리: 가운데 x, 폭, 남쪽·북쪽 끝 z, 가운데가 솟은 높이 */
+export const BRIDGE = { x: -4.5, w: 3.4, z0: -7.0, z1: -41.8, rise: 1.6 };
+/** 강 건너 공원 (다리로 이어짐) */
+export const BOUNDS_N = { minX: -59.5, maxX: 59.5, minZ: -72, maxZ: -41.3 };
+type Area = { minX: number; maxX: number; minZ: number; maxZ: number };
+/** 걸어 다닐 수 있는 곳 = 공원 + 다리 + 강 건너 공원 (겹치게 이어 붙임) */
+const AREAS: Area[] = [BOUNDS, { minX: BRIDGE.x - BRIDGE.w / 2 + 0.2, maxX: BRIDGE.x + BRIDGE.w / 2 - 0.2, minZ: BRIDGE.z1 - 0.6, maxZ: BRIDGE.z0 + 0.6 }, BOUNDS_N];
+/** 영역 밖이면 가장 가까운 영역 안으로 (벽을 따라 미끄러지듯) */
+function clampToAreas(x: number, z: number, r: number) {
+  let best = { x, z }, bd = Infinity;
+  for (const a of AREAS) {
+    const cx = Math.max(a.minX + r, Math.min(a.maxX - r, x)), cz = Math.max(a.minZ + r, Math.min(a.maxZ - r, z)), d = (cx - x) ** 2 + (cz - z) ** 2;
+    if (d < bd) { bd = d; best = { x: cx, z: cz }; }
+  }
+  return best;
+}
+export const onBridge = (x: number, z: number) => Math.abs(x - BRIDGE.x) < BRIDGE.w / 2 + 0.05 && z < BRIDGE.z0 && z > BRIDGE.z1;
+/** 다리 위 높이: 양 끝 0 → 가운데 rise (완만한 아치) */
+export const bridgeY = (z: number) => BRIDGE.rise * Math.sin(Math.PI * Math.min(1, Math.max(0, (BRIDGE.z0 - z) / (BRIDGE.z0 - BRIDGE.z1))));
 export const SPAWN = { x: -58.5, z: 10, yaw: Math.PI / 2 }; // 서쪽 입구 밖, 동쪽(+x)을 봄
 export const PLAYER_R = 0.3;
 /** 시설물 배율: 나무에 맞춘 현실 크기 (캐릭터만 작고 뽀짝하게). 모델·충돌 모두 이 값으로 키움 */
@@ -32,6 +51,13 @@ export const PATHS: Path[] = [
   { x1: 46, z1: -4, x2: 46, z2: 1, w: 3 },        // 산책로 → 분수 광장
   { x1: 40, z1: 24, x2: 46, z2: 24, w: 3 },
   { x1: 46, z1: 19, x2: 46, z2: 24, w: 3 },       // 북쪽 길 → 광장
+  { x1: -4.5, z1: -7.5, x2: -4.5, z2: -4, w: 3.4 }, // 산책로 → 다리
+  // 강 건너 공원
+  { x1: -4.5, z1: -41.5, x2: -4.5, z2: -45, w: 3.4 }, // 다리 → 건너편 강변길
+  { x1: -70, z1: -45, x2: 70, z2: -45, w: 4 },     // 건너편 강변 산책로
+  { x1: -48, z1: -61, x2: 48, z2: -61, w: 3 },     // 안쪽 벚꽃길
+  { x1: -30, z1: -45, x2: -30, z2: -61, w: 3 },
+  { x1: 26, z1: -45, x2: 26, z2: -61, w: 3 },
 ];
 export const PLAZA = { x: 46, z: 10, r: 11 };
 
@@ -55,7 +81,8 @@ function buildProps(): Prop[] {
   out.push(...fixed);
   const free = (x: number, z: number) =>
     fixed.every((f) => Math.hypot(x - f.x, z - f.z) > (f.kind === "pavilion" ? 10 : 7)) &&
-    Math.hypot(x - PLAZA.x, z - PLAZA.z) > PLAZA.r + 3 && Math.abs(x - PLAZA.x) > 3;
+    Math.hypot(x - PLAZA.x, z - PLAZA.z) > PLAZA.r + 3 && Math.abs(x - PLAZA.x) > 3 &&
+    !(Math.abs(x - BRIDGE.x) < 3.4 && z < 2 && z > -50); // 다리로 가는 길목은 비움
   const landSide: number[] = [];
   const tree = (x: number, z: number, s = 1) => {
     x += (r() - 0.5) * 1.2; z += (r() - 0.5) * 0.4;
@@ -87,6 +114,26 @@ function buildProps(): Prop[] {
     out.push({ kind: "bench", x, z: -1.7, yaw: Math.PI });
     if (free(x + 2.4, -1.5)) out.push({ kind: "lamp", x: x + 2.4, z: -1.5, yaw: Math.PI }); // 벤치마다 하나, 초롱이 벤치 쪽으로
   }
+
+  // ---------- 강 건너 공원 ----------
+  const offBridge = (x: number) => Math.abs(x - BRIDGE.x) > BRIDGE.w / 2 + 2.2;
+  const northBank: number[] = [];
+  // 강변 산책로 양쪽 벚꽃 터널 (다리 앞은 비움)
+  for (let x = -54; x <= 56; x += 13) {
+    if (offBridge(x) && tree(x, -42.2)) northBank.push(out.at(-1)!.x);
+    if (offBridge(x + 6.5)) tree(x + 6.5, -48.4);
+  }
+  // 강을 바라보는 벤치·가로등 (강가 나무 사이)
+  northBank.sort((a, b) => a - b);
+  for (let i = 0; i < northBank.length - 1; i++) {
+    const x = northBank[i] + 6.5;
+    if (!offBridge(x) || !offBridge(x + 2.4)) continue;
+    out.push({ kind: "bench", x, z: -42.4, yaw: 0 });
+    out.push({ kind: "lamp", x: x + 2.4, z: -42.6, yaw: 0 });
+  }
+  // 안쪽 벚꽃길 양쪽 + 잔디밭 그늘 나무
+  for (let x = -46; x <= 46; x += 11) { tree(x, -57.6, 1); tree(x + 5.5, -64.6, 1.05); }
+  for (const [x, z] of [[-44, -53], [-14, -53], [12, -54], [42, -53], [-38, -68.5], [-8, -68.5], [18, -68.5], [48, -68.5]]) tree(x, z, 1.15);
   return out;
 }
 export const PROPS = buildProps();
@@ -94,8 +141,8 @@ export const PROPS = buildProps();
 /** 맵 밖 배경 나무 (지나갈 수 없는 곳, 보이기만) */
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
-  // 강 건너: 물가부터 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃)
-  for (const [z0, step, s0] of [[-42.5, 6.5, 1.1], [-47, 7, 1.25], [-52, 7.5, 1.4]] as const)
+  // 강 건너 공원 뒤: 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃, 그 뒤로 도시)
+  for (const [z0, step, s0] of [[-74.5, 6.5, 1.1], [-79, 7, 1.25], [-84, 7.5, 1.4]] as const)
     for (let x = -105 + r() * step; x <= 105; x += step * (0.85 + r() * 0.3))
       out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
   const t = (x: number, z: number, s: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 2.5, z: z + (r() - 0.5) * 2.5, s: s + r() * 0.25, inside: false });
@@ -180,8 +227,7 @@ export function resolve(x: number, z: number, r = PLAYER_R, colliders = COLLIDER
         }
       }
     }
-    x = Math.max(BOUNDS.minX + r, Math.min(BOUNDS.maxX - r, x));
-    z = Math.max(BOUNDS.minZ + r, Math.min(BOUNDS.maxZ - r, z));
+    ({ x, z } = clampToAreas(x, z, r));
     if (Math.abs(x - ox) < 1e-9 && Math.abs(z - oz) < 1e-9) break;
   }
   return { x, z };
@@ -246,6 +292,7 @@ export const onCanopy = (x: number, y: number, z: number) => nearestBranch(x, y,
 
 /** 그 자리의 바닥 높이 (정자 마루 위면 살짝 올라감) */
 export function groundY(x: number, z: number) {
+  if (onBridge(x, z)) return bridgeY(z);
   for (const p of PROPS) {
     if (p.kind !== "pavilion") continue;
     // 난간 안쪽(팔각형에 내접하는 원)만 마루 위로 침
@@ -265,6 +312,7 @@ export function onPath(x: number, z: number, margin = 0) {
   });
 }
 export function canSit(x: number, z: number) {
+  if (onBridge(x, z)) return false; // 다리 위는 지나가는 길
   if (groundY(x, z) > 0) return true;
   return !onPath(x, z);
 }

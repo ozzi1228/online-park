@@ -639,7 +639,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       focus.set(pos.x, 0, pos.z);
       const wind = world.update(t, dt, focus, walking, yaw);
       audio.update({
-        wind, riverDist: Math.max(0, pos.z + 8), fountainDist: Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z),
+        wind, riverDist: pos.z > -8 ? pos.z + 8 : pos.z < -40.6 ? -40.6 - pos.z : 0, fountainDist: Math.hypot(pos.x - FOUNTAIN.x, pos.z - FOUNTAIN.z),
         nearby: mp.nearCount(pos.x, pos.z, 15), hour: skyHour ?? kstHour(),
       });
       if (tree.pending) { // 나무 둘레를 도는 카메라

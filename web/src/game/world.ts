@@ -6,7 +6,7 @@ import { createSky } from "./sky";
 import { createRiver } from "./water";
 import { createFountain } from "./fountain";
 import { createCity } from "./city";
-import { BACKDROP_TREES, BOUNDS, PATHS, PAVILION, PAVILION_DOOR, PLAZA, PROPS, PROP_S, WISH_BRANCHES, pavilionCorner, type Prop } from "./park-map";
+import { BACKDROP_TREES, BOUNDS, BOUNDS_N, BRIDGE, PATHS, bridgeY, PAVILION, PAVILION_DOOR, PLAZA, PROPS, PROP_S, WISH_BRANCHES, pavilionCorner, type Prop } from "./park-map";
 
 export type Quality = { cards: number; groundPetals: number; fallingPetals: number; shadow: number; pixelRatio: number };
 export const QUALITY_HIGH: Quality = { cards: 38, groundPetals: 16000, fallingPetals: 900, shadow: 2048, pixelRatio: 2 };
@@ -510,13 +510,53 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   const bank = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); bank.position.set(0, -0.4, -8.2); scene.add(bank);
   const river = createRiver(scene, sky.uniforms, { y: -0.75, z: -24.2, width: 32, bankZ: -8.2 });
   flat(new THREE.PlaneGeometry(520, 150), "#bfdea2", 0, -0.3, -115); // 강 건너 땅 (도시 아래까지)
+  // 강 건너 공원: 잔디(공원과 같은 높이) + 둑
+  flat(new THREE.PlaneGeometry(400, 38), "#c6e5a9", 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
+  flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, BOUNDS_N.maxZ + 0.4);
+  { const b = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); b.position.set(0, -0.4, BOUNDS_N.maxZ + 0.7); scene.add(b); }
+  // 강 건너는 나무 다리: 가운데가 살짝 솟은 아치, 단청 빛 난간, 돌 교각
+  {
+    const g = new THREE.Group(), { x: bx, w, z0, z1 } = BRIDGE, hw = w / 2;
+    for (let z = z0 - 0.05; z > z1; z -= 0.42) { // 마루 판자
+      const y0 = bridgeY(z), y1 = bridgeY(z - 0.42), m = part(new THREE.BoxGeometry(w + 0.2, 0.1, 0.4), (Math.round(z * 2.4) & 1) ? WOOD : "#c4946a", 0.01);
+      m.position.set(bx, (y0 + y1) / 2 - 0.05, z - 0.21); m.rotation.x = Math.atan2(y0 - y1, 0.42); g.add(m);
+    }
+    const posts: number[] = [];
+    for (let z = z0; z >= z1 - 0.01; z -= (z0 - z1) / 12) posts.push(z);
+    for (const s of [-1, 1]) {
+      const px = bx + s * (hw + 0.06);
+      posts.forEach((z, i) => {
+        g.add(at(part(new THREE.BoxGeometry(0.14, 1.0, 0.14), DAN_RED, 0.012), px, bridgeY(z) + 0.45, z));
+        g.add(at(part(new THREE.SphereGeometry(0.1, 10, 8), DAN_GREEN, 0.01), px, bridgeY(z) + 1.0, z)); // 난간 머리
+        const zn = posts[i + 1]; if (zn === undefined) return;
+        for (const [h, th] of [[0.9, 0.08], [0.45, 0.05]] as const) { // 위·가운데 난간대
+          const ya = bridgeY(z) + h, yb = bridgeY(zn) + h, len = Math.hypot(z - zn, ya - yb);
+          const r = part(new THREE.BoxGeometry(th, th, len), DAN_RED, 0.01); r.position.set(px, (ya + yb) / 2, (z + zn) / 2); r.rotation.x = Math.atan2(ya - yb, z - zn); g.add(r);
+        }
+      });
+      // 옆판 (물 위에서 다리 두께가 보이게)
+      for (let i = 0; i < posts.length - 1; i++) {
+        const z = posts[i], zn = posts[i + 1], ya = bridgeY(z) - 0.2, yb = bridgeY(zn) - 0.2, len = Math.hypot(z - zn, ya - yb);
+        const b = part(new THREE.BoxGeometry(0.12, 0.34, len), "#9c6b4a", 0.01); b.position.set(bx + s * (hw + 0.08), (ya + yb) / 2, (z + zn) / 2); b.rotation.x = Math.atan2(ya - yb, z - zn); g.add(b);
+      }
+    }
+    for (let i = 1; i < 4; i++) { // 돌 교각
+      const z = z0 + ((z1 - z0) * i) / 4, top = bridgeY(z) - 0.3;
+      g.add(at(part(new THREE.BoxGeometry(w + 0.6, top + 1.4, 0.9), STONE, 0.014), bx, (top - 1.4) / 2, z));
+    }
+    scene.add(bake(g));
+  }
   const city = createCity(scene, sky.uniforms, fog); // 강 건너 도시·산·다리 (city.ts)
 
   // 난간 (강 쪽 경계)
   {
     const r = new THREE.Group();
-    for (let x = -64; x <= 64; x += 2.5) r.add(at(part(new THREE.BoxGeometry(0.08, 0.9, 0.08), "#9c8070", 0.012), x, 0.45, BOUNDS.minZ - 0.25));
-    r.add(at(part(new THREE.BoxGeometry(128, 0.07, 0.07), "#9c8070", 0.012), 0, 0.9, BOUNDS.minZ - 0.25));
+    // 양쪽 강가 난간 (다리 들어가는 자리는 비움)
+    const gap0 = BRIDGE.x - BRIDGE.w / 2 - 0.1, gap1 = BRIDGE.x + BRIDGE.w / 2 + 0.1;
+    for (const rz of [BOUNDS.minZ - 0.25, BOUNDS_N.maxZ + 0.25]) {
+      for (let x = -64; x <= 64; x += 2.5) if (x < gap0 - 0.2 || x > gap1 + 0.2) r.add(at(part(new THREE.BoxGeometry(0.08, 0.9, 0.08), "#9c8070", 0.012), x, 0.45, rz));
+      for (const [a, b] of [[-64, gap0], [gap1, 64]]) r.add(at(part(new THREE.BoxGeometry(b - a, 0.07, 0.07), "#9c8070", 0.012), (a + b) / 2, 0.9, rz));
+    }
     scene.add(bake(r));
   }
 
@@ -525,7 +565,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   const statics = new THREE.Group(), extras = new THREE.Group();
   let fountain: ReturnType<typeof createFountain> | null = null;
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
-    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -40 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
+    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -70 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
     else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
     else buildProp(p, statics);
   }

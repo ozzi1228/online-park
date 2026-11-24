@@ -1,6 +1,9 @@
 // 우하단 미니맵: 내 주변 정사각형, 보는 방향이 항상 위. 끌어서 둘러보고, 휠·두 손가락으로 확대/축소.
 // 손을 떼고 잠시 지나면 내 위치로 부드럽게 돌아옴. 맵 전체는 한 번만 그려두고 잘라서 씀.
-import { BOUNDS, PATHS, PLAZA, PROPS } from "./park-map";
+import { BOUNDS, BOUNDS_N, BRIDGE, PATHS, PLAZA, PROPS } from "./park-map";
+
+/** 미니맵에 담는 범위: 강 건너 공원부터 공원 남쪽 끝까지 */
+const MAP = { minX: BOUNDS.minX, maxX: BOUNDS.maxX, minZ: BOUNDS_N.minZ, maxZ: BOUNDS.maxZ };
 
 const PAD = 6;                 // 경계 바깥 여백(m)
 const RES = 8;                 // 미리 그려둘 해상도 (px/m)
@@ -9,8 +12,10 @@ const RECENTER_AFTER = 2.5;    // 손 뗀 뒤 돌아오기까지(초)
 const C = { grass: "#cfe8b4", water: "#a7d9ee", shore: "#e9e1cf", path: "#f6ead9", plaza: "#efe0cc", tree: "#f5b4c8", treeEdge: "#ec9db5", roof: "#5f6b78", wish: "#6aa874", me: "#e8628a" };
 
 function drawWorld(b: CanvasRenderingContext2D) {
-  b.fillStyle = C.water; b.fillRect(BOUNDS.minX - PAD, BOUNDS.minZ - PAD, BOUNDS.maxX - BOUNDS.minX + PAD * 2, PAD);
-  b.fillStyle = C.shore; b.fillRect(BOUNDS.minX - PAD, BOUNDS.minZ - 0.6, BOUNDS.maxX - BOUNDS.minX + PAD * 2, 0.6);
+  const W = MAP.maxX - MAP.minX + PAD * 2;
+  b.fillStyle = C.water; b.fillRect(MAP.minX - PAD, BOUNDS_N.maxZ, W, BOUNDS.minZ - BOUNDS_N.maxZ); // 강
+  b.fillStyle = C.shore; b.fillRect(MAP.minX - PAD, BOUNDS.minZ - 0.6, W, 0.6); b.fillRect(MAP.minX - PAD, BOUNDS_N.maxZ, W, 0.6);
+  b.fillStyle = "#d9a77c"; b.fillRect(BRIDGE.x - BRIDGE.w / 2, BRIDGE.z1, BRIDGE.w, BRIDGE.z0 - BRIDGE.z1); // 다리
   b.strokeStyle = C.path; b.lineCap = "round";
   for (const p of PATHS) { b.lineWidth = p.w; b.beginPath(); b.moveTo(p.x1, p.z1); b.lineTo(p.x2, p.z2); b.stroke(); }
   b.fillStyle = C.plaza; b.beginPath(); b.arc(PLAZA.x, PLAZA.z, PLAZA.r, 0, 7); b.fill();
@@ -40,8 +45,8 @@ function drawWorld(b: CanvasRenderingContext2D) {
 
 export function createMinimap(canvas: HTMLCanvasElement) {
   const dpr = Math.min(devicePixelRatio, 2);
-  const x0 = BOUNDS.minX - PAD, z0 = BOUNDS.minZ - PAD;
-  const ww = BOUNDS.maxX - BOUNDS.minX + PAD * 2, wh = BOUNDS.maxZ - BOUNDS.minZ + PAD * 2;
+  const x0 = MAP.minX - PAD, z0 = MAP.minZ - PAD;
+  const ww = MAP.maxX - MAP.minX + PAD * 2, wh = MAP.maxZ - MAP.minZ + PAD * 2;
   const bg = document.createElement("canvas"); bg.width = ww * RES; bg.height = wh * RES;
   const b = bg.getContext("2d")!; b.scale(RES, RES); b.translate(-x0, -z0); drawWorld(b);
 
@@ -92,7 +97,7 @@ export function createMinimap(canvas: HTMLCanvasElement) {
     if (!size || !canvas.offsetParent) return; // 접혀 있으면 안 그림
     if (ptrs.size === 0 && (idle += dt) > RECENTER_AFTER) { const k = Math.exp(-dt * 3); ox *= k; oz *= k; }
     // 맵 밖으로 너무 멀리 끌려가지 않게
-    const cx = Math.min(BOUNDS.maxX, Math.max(BOUNDS.minX, x + ox)), cz = Math.min(BOUNDS.maxZ, Math.max(BOUNDS.minZ, z + oz));
+    const cx = Math.min(MAP.maxX, Math.max(MAP.minX, x + ox)), cz = Math.min(MAP.maxZ, Math.max(MAP.minZ, z + oz));
     ox = cx - x; oz = cz - z;
     const s = size / (r * 2); // px/m
 
