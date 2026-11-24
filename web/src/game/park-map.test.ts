@@ -1,7 +1,7 @@
 // 실행: node --test src/game/park-map.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BENCH_SEATS, BOUNDS, BOUNDS_N, BRIDGE, SPAWN, benchSeatAt, groundY, move, overlaps, resolve } from "./park-map.ts";
+import { BACKDROP_TREES, BENCH_SEATS, BOUNDS, BOUNDS_N, BRIDGE, PROPS, SPAWN, benchSeatAt, groundY, inRiver, move, overlaps, resolve } from "./park-map.ts";
 
 test("시작 위치는 비어 있음", () => assert.ok(!overlaps(SPAWN.x, SPAWN.z)));
 
@@ -65,4 +65,9 @@ test("벤치 자리: 앞자리는 충돌 밖, 앉는 곳은 벤치 위", () => {
     assert.ok(overlaps(s.x, s.z, 0.05), "앉는 곳은 벤치 좌판 위");
     assert.equal(benchSeatAt(s.fx, s.fz), s);
   }
+});
+
+test("강물 위에 서 있는 나무는 하나도 없음 (공원 안·밖 모두)", () => {
+  const wet = [...PROPS, ...BACKDROP_TREES].filter((p) => p.kind === "tree" && inRiver(p.z));
+  assert.equal(wet.length, 0, wet.map((p) => `(${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(" "));
 });

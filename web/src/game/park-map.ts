@@ -132,7 +132,7 @@ function buildProps(): Prop[] {
     const x = northInner[i] + 3.25;
     if (!offBridge(x) || !offBridge(x + 2.4)) continue;
     out.push({ kind: "bench", x, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER, yaw: 0 });
-    out.push({ kind: "lamp", x: x + 2.4, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER - 0.2, yaw: 0 });
+    out.push({ kind: "lamp", x: x + 2.4, z: BOUNDS_N.maxZ - BENCH_FROM_RIVER - 0.2, yaw: Math.PI }); // 팔·초롱이 벤치 쪽(-x)으로
   }
   // 안쪽 벚꽃길 양쪽 + 잔디밭 그늘 나무
   for (let x = -46; x <= 46; x += 11) { tree(x, -47.1, 1); tree(x + 5.5, -54.1, 1.05); }
@@ -140,6 +140,9 @@ function buildProps(): Prop[] {
   return out;
 }
 export const PROPS = buildProps();
+
+/** 강물 위인지 (양쪽 강변 울타리 사이, 1m 여유) */
+export const inRiver = (z: number) => z < BOUNDS.minZ + 0.5 && z > BOUNDS_N.maxZ - 0.5;
 
 /** 맵 밖 배경 나무 (지나갈 수 없는 곳, 보이기만) */
 export const BACKDROP_TREES: Prop[] = (() => {
@@ -179,8 +182,9 @@ export const BACKDROP_TREES: Prop[] = (() => {
   }
   for (const [off, step, s0] of [[11, 7, 1.1], [18, 7.5, 1.25], [26, 8, 1.4]] as const)
     for (let x = -84 - r() * step; x > -196; x -= step * (0.85 + r() * 0.3))
-      for (const side of [-1, 1]) t(x, 10 + side * off, s0);
-  return out;
+      for (const side of [-1, 1]) if (10 + side * off > -3) t(x, 10 + side * off, s0); // 강 쪽(남쪽 너머 = 강)으로는 심지 않음
+  // 안전장치: 강(양쪽 울타리 사이) 안에 줄기가 들어가는 나무는 하나도 두지 않음
+  return out.filter((p) => !inRiver(p.z));
 })();
 
 // ---------- 충돌 ----------
