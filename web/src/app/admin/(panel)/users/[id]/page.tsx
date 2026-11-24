@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { account, eventLog, greenLedger, notes, petalCatches, user } from "@/db/schema";
 import { NoteView } from "@/app/park/note";
@@ -9,6 +9,7 @@ import type { Strokes } from "@/lib/notes-shared";
 import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
+import { DeleteUserButton } from "./delete-button";
 
 // 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 운세꽃잎, 행동 타임라인)
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
@@ -23,12 +24,13 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
   const ids = [id, ...linked.map((l) => String((l.data as { guestId?: string }).guestId)).filter(Boolean)];
   const idMatch = or(...ids.map((x) => eq(eventLog.userId, x)));
 
-  const [accounts, ledger, catches, timeline, noteRows] = await Promise.all([
+  const [accounts, ledger, catches, timeline, noteRows, treeRows] = await Promise.all([
     db.select({ providerId: account.providerId, createdAt: account.createdAt }).from(account).where(eq(account.userId, id)),
     db.select().from(greenLedger).where(eq(greenLedger.userId, id)).orderBy(desc(greenLedger.id)).limit(100),
     db.select().from(petalCatches).where(eq(petalCatches.userId, id)).orderBy(desc(petalCatches.id)).limit(30),
     db.select().from(eventLog).where(idMatch).orderBy(desc(eventLog.id)).limit(300),
-    db.select().from(notes).where(or(eq(notes.authorId, id), eq(notes.recipientId, id))).orderBy(desc(notes.id)).limit(12),
+    db.select().from(notes).where(and(ne(notes.kind, "tree"), or(eq(notes.authorId, id), eq(notes.recipientId, id)))).orderBy(desc(notes.id)).limit(12),
+    db.select().from(notes).where(and(eq(notes.kind, "tree"), eq(notes.authorId, id))).orderBy(desc(notes.id)).limit(12),
   ]);
   const balance = ledger.reduce((s, r) => s + r.amount, 0);
   const box = "rounded-2xl bg-white p-4 ring-1 ring-black/5";
@@ -39,6 +41,7 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
       <h1 className="flex flex-wrap items-center gap-2 text-2xl">
         {u.nickname ?? "(캐릭터 미정)"}
         <span className={`rounded px-2 text-sm ${u.isAnonymous ? "bg-black/5" : "bg-sakura/20"}`}>{u.isAnonymous ? "비회원" : "회원"}</span>
+        <span className="ml-auto"><DeleteUserButton id={u.id} name={u.nickname ?? u.name} /></span>
       </h1>
       <section className="grid gap-3 md:grid-cols-3">
         <div className={`${box} text-sm`}>
@@ -73,6 +76,20 @@ export default async function UserDetail({ params }: PageProps<"/admin/users/[id
           </ul>
         </div>
       </section>
+
+      {treeRows.length > 0 && (
+        <section className={box}>
+          <h2 className="mb-2 font-bold">소원나무에 단 쪽지 <span className="text-sm font-normal opacity-60">최근 {treeRows.length}장</span></h2>
+          <ul className="grid grid-cols-3 gap-3 md:grid-cols-6">
+            {treeRows.map((nt) => (
+              <li key={nt.id} className="flex flex-col items-center gap-1 text-xs">
+                <NoteView strokes={nt.strokes as Strokes} className="w-full" />
+                <span className="opacity-70">{nt.covered ? "가림 · " : ""}{kst(nt.createdAt).slice(5, 16)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {noteRows.length > 0 && (
         <section className={box}>

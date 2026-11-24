@@ -12,7 +12,7 @@ export const instant = false; // 관리자 화면은 항상 요청 때 최신 �
 
 export default async function Users({ searchParams }: PageProps<"/admin/users">) {
   await connection();
-  const q = one((await searchParams).q).trim().replace(/[%_]/g, "");
+  const sp = await searchParams, q = one(sp.q).trim().replace(/[%_]/g, ""), deleted = one(sp.deleted);
   const rows = await db.select().from(user)
     .where(q ? or(ilike(user.id, `%${q}%`), ilike(user.nickname, `%${q}%`), ilike(user.email, `%${q}%`), ilike(user.name, `%${q}%`)) : undefined)
     .orderBy(desc(user.createdAt)).limit(50);
@@ -20,6 +20,7 @@ export default async function Users({ searchParams }: PageProps<"/admin/users">)
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl">유저</h1>
+      {deleted && <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">유저({deleted}…)와 그 사람의 모든 데이터를 삭제했어요</p>}
       <form className="flex gap-2 text-sm">
         <input name="q" defaultValue={q} placeholder="ID · 닉네임 · 이메일 · 이름" aria-label="유저 검색" className="flex-1 rounded-lg bg-white px-3 py-2 ring-1 ring-black/10" />
         <button className="rounded-full bg-sakura px-5 text-white">검색</button>
