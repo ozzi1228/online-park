@@ -717,6 +717,17 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           aria-label={muted ? "소리 켜기" : "소리 끄기"} aria-pressed={!muted} className="pointer-events-auto rounded-full bg-cream/85 px-2.5 py-1">
           {muted ? "🔇" : "🔊"}
         </button>
+        {/* 친구에게 공유: 휴대폰은 공유 창(카톡 등), 안 되면 링크 복사 */}
+        <button onClick={async () => {
+          const url = `${location.origin}/`, data = { title: "랜선 벚꽃공원", text: "랜선 벚꽃공원에서 같이 산책해요 🌸", url };
+          if (touch && navigator.share) { try { await navigator.share(data); return; } catch (e) { if ((e as Error).name === "AbortError") return; } }
+          try { await navigator.clipboard.writeText(url); sayRef.current("링크를 복사했어요. 친구에게 붙여넣어 보내 주세요 🌸"); }
+          catch { window.prompt("이 링크를 복사해서 친구에게 보내 주세요", url); }
+        }} aria-label="친구에게 공유하기" title="친구에게 공유하기" className="pointer-events-auto grid size-7 place-items-center rounded-full bg-cream/85">
+          <svg viewBox="0 0 24 24" className="size-4 opacity-70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3v12" /><path d="M8 7l4-4 4 4" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+          </svg>
+        </button>
         {net && (
           <p className="hidden items-center gap-1.5 rounded-full bg-cream/85 px-3 py-1 sm:flex">
             <span className={`size-2 rounded-full ${net.online ? "bg-emerald-400" : "bg-stone-400"}`} />
