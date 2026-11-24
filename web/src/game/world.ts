@@ -218,7 +218,7 @@ vCardN = normalize(mat3(cardM) * vec3(0.0, 0.0, 1.0));`);
   float front = max(dot(V, uSunDir), 0.0);
   outgoingLight += uSunColor * (back * 0.32 + front * 0.06) * smoothstep(0.0, 0.25, uSunDir.y);
   // 멀리 있는 나무일수록 옅고 뽀얗게 (공기 원근)
-  outgoingLight = mix(outgoingLight, uHaze, smoothstep(22.0, 95.0, vCamDist) * 0.42);
+  outgoingLight = mix(outgoingLight, uHaze, smoothstep(45.0, 220.0, vCamDist) * 0.25); // 아주 멀면 살짝만 옅게
 }
 #include <opaque_fragment>`);
   };
@@ -500,7 +500,7 @@ class PetalField {
 // ---------- 전체 ----------
 /** hour: 하늘 시각을 고정해서 보고 싶을 때 (예: ?hour=19) */
 export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs?: number) {
-  const fog = new THREE.Fog(0xf7e3ea, 30, 110);
+  const fog = new THREE.Fog(0xf7e3ea, 70, 290); // 멀리 있는 나무도 색은 살고 원근만 (가까이서부터 뿌옇게 날리지 않게)
   scene.fog = fog;
   const hemi = new THREE.HemisphereLight(0xfff4ea, 0xc3b0e0, 1.3);
   scene.add(hemi);
@@ -533,35 +533,60 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   flat(new THREE.PlaneGeometry(400, 38), "#c6e5a9", 0, 0.002, BOUNDS_N.maxZ + 0.7 - 19);
   flat(new THREE.PlaneGeometry(400, 0.6), "#e9dccb", 0, 0.012, BOUNDS_N.maxZ + 0.4);
   { const b = new THREE.Mesh(new THREE.PlaneGeometry(400, 0.8), toon("#d8c8b4")); b.position.set(0, -0.4, BOUNDS_N.maxZ + 0.7); scene.add(b); }
-  // 강 건너는 나무 다리: 가운데가 살짝 솟은 아치, 단청 빛 난간, 돌 교각
+  // 강 건너는 돌다리: 매끈하게 솟은 아치 + 화강암 돌난간(연봉 머리 기둥·둥근 돌란대·동자) + 돌 교각
   {
-    const g = new THREE.Group(), { x: bx, w, z0, z1 } = BRIDGE, hw = w / 2;
-    for (let z = z0 - 0.05; z > z1; z -= 0.42) { // 마루 판자
-      const y0 = bridgeY(z), y1 = bridgeY(z - 0.42), m = part(new THREE.BoxGeometry(w + 0.2, 0.1, 0.4), (Math.round(z * 2.4) & 1) ? WOOD : "#c4946a", 0.01);
-      m.position.set(bx, (y0 + y1) / 2 - 0.05, z - 0.21); m.rotation.x = Math.atan2(y0 - y1, 0.42); g.add(m);
-    }
-    const posts: number[] = [];
-    for (let z = z0; z >= z1 - 0.01; z -= (z0 - z1) / 12) posts.push(z);
-    for (const s of [-1, 1]) {
-      const px = bx + s * (hw + 0.06);
-      posts.forEach((z, i) => {
-        g.add(at(part(new THREE.BoxGeometry(0.14, 1.0, 0.14), DAN_RED, 0.012), px, bridgeY(z) + 0.45, z));
-        g.add(at(part(new THREE.SphereGeometry(0.1, 10, 8), DAN_GREEN, 0.01), px, bridgeY(z) + 1.0, z)); // 난간 머리
-        const zn = posts[i + 1]; if (zn === undefined) return;
-        for (const [h, th] of [[0.9, 0.08], [0.45, 0.05]] as const) { // 위·가운데 난간대
-          const ya = bridgeY(z) + h, yb = bridgeY(zn) + h, len = Math.hypot(z - zn, ya - yb);
-          const r = part(new THREE.BoxGeometry(th, th, len), DAN_RED, 0.01); r.position.set(px, (ya + yb) / 2, (z + zn) / 2); r.rotation.x = Math.atan2(ya - yb, z - zn); g.add(r);
-        }
-      });
-      // 옆판 (물 위에서 다리 두께가 보이게)
-      for (let i = 0; i < posts.length - 1; i++) {
-        const z = posts[i], zn = posts[i + 1], ya = bridgeY(z) - 0.2, yb = bridgeY(zn) - 0.2, len = Math.hypot(z - zn, ya - yb);
-        const b = part(new THREE.BoxGeometry(0.12, 0.34, len), "#9c6b4a", 0.01); b.position.set(bx + s * (hw + 0.08), (ya + yb) / 2, (z + zn) / 2); b.rotation.x = Math.atan2(ya - yb, z - zn); g.add(b);
+    const g = new THREE.Group(), { x: bx, w, z0, z1 } = BRIDGE, hw = w / 2, N = 80;
+    const GRANITE = "#dcd8cf", GRANITE_D = "#c9c3b8";
+    // 다리 몸통: 단면(바닥·양쪽 연석·옆면)을 아치 따라 쭉 밀어 만든 하나의 매끈한 면
+    const prof: [number, number][] = [[-hw - 0.12, -0.5], [-hw - 0.12, 0.16], [-hw + 0.14, 0.16], [-hw + 0.14, 0], [hw - 0.14, 0], [hw - 0.14, 0.16], [hw + 0.12, 0.16], [hw + 0.12, -0.5]];
+    const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+    for (let e = 0; e < prof.length; e++) { // 단면의 변마다 띠 하나 (변마다 따로 = 모서리는 각지게, 길이 방향은 매끈하게)
+      const [ax, ay] = prof[e], [cx, cy] = prof[(e + 1) % prof.length], base = pos.length / 3;
+      for (let i = 0; i <= N; i++) {
+        const z = z0 + ((z1 - z0) * i) / N, y = bridgeY(z), len = Math.abs(z - z0);
+        pos.push(bx + ax, y + ay, z, bx + cx, y + cy, z);
+        uv.push(len / 1.1, (ax + hw) / 1.1, len / 1.1, (cx + hw) / 1.1); // 돌판 한 장 ≈ 1.1m
+        if (i) { const a = base + (i - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
       }
     }
-    for (let i = 1; i < 4; i++) { // 돌 교각
-      const z = z0 + ((z1 - z0) * i) / 4, top = bridgeY(z) - 0.3;
-      g.add(at(part(new THREE.BoxGeometry(w + 0.6, top + 1.4, 0.9), STONE, 0.014), bx, (top - 1.4) / 2, z));
+    const dg = new THREE.BufferGeometry();
+    dg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); dg.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    dg.setIndex(idx); dg.computeVertexNormals();
+    const tile = canvasTex(256, 256, (x) => { // 화강암 판석: 은은한 얼룩 + 줄눈
+      x.fillStyle = "#d8d3c8"; x.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 900; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? "90,85,80" : "255,255,250"},${0.05 + Math.random() * 0.08})`; x.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+      x.strokeStyle = "rgba(120,110,100,0.35)"; x.lineWidth = 3;
+      x.strokeRect(1.5, 1.5, 253, 253); x.beginPath(); x.moveTo(128, 0); x.lineTo(128, 128); x.moveTo(0, 128); x.lineTo(256, 128); x.moveTo(64, 128); x.lineTo(64, 256); x.moveTo(192, 128); x.lineTo(192, 256); x.stroke();
+    });
+    tile.wrapS = tile.wrapT = THREE.RepeatWrapping;
+    const deck = new THREE.Mesh(dg, new THREE.MeshToonMaterial({ map: tile, gradientMap: toonGradient(), side: THREE.DoubleSide }));
+    deck.castShadow = deck.receiveShadow = true; scene.add(deck);
+
+    // 돌난간: 기둥(연봉 머리) + 아치 따라 휘는 둥근 돌란대 + 기둥 사이 동자
+    const posts: number[] = [];
+    for (let k = 0; k <= 14; k++) posts.push(z0 + ((z1 - z0) * k) / 14);
+    for (const s of [-1, 1]) {
+      const px = bx + s * hw;
+      for (const z of posts) {
+        const y = bridgeY(z) + 0.16;
+        g.add(at(part(new THREE.BoxGeometry(0.2, 0.8, 0.2), GRANITE, 0.012), px, y + 0.4, z));
+        g.add(at(part(new THREE.CylinderGeometry(0.075, 0.09, 0.08, 10), GRANITE_D, 0.01), px, y + 0.84, z));        // 목
+        g.add(at(part(new THREE.SphereGeometry(0.12, 12, 10).scale(1, 1.25, 1), GRANITE, 0.012), px, y + 0.98, z));  // 연봉(연꽃 봉오리)
+        g.add(at(part(new THREE.ConeGeometry(0.05, 0.08, 10), GRANITE, 0.01), px, y + 1.13, z));
+      }
+      for (const [h, r] of [[0.7, 0.065], [0.26, 0.045]] as const) { // 돌란대(위)·아래 띠: 아치를 따라 매끈하게
+        const pts = Array.from({ length: 33 }, (_, i) => { const z = z0 + ((z1 - z0) * i) / 32; return new THREE.Vector3(px, bridgeY(z) + 0.16 + h, z); });
+        g.add(part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 96, r, 8), GRANITE, 0)); // 외곽선 없이 (월드 좌표 곡선이라 외곽선이 엇나감)
+      }
+      for (let k = 0; k < posts.length - 1; k++) for (const f of [0.33, 0.67]) { // 동자: 돌란대를 받치는 작은 기둥
+        const z = posts[k] + (posts[k + 1] - posts[k]) * f, y = bridgeY(z) + 0.16;
+        g.add(at(part(new THREE.CylinderGeometry(0.04, 0.06, 0.44, 8), GRANITE_D, 0.008), px, y + 0.48, z));
+      }
+    }
+    for (let i = 1; i < 4; i++) { // 돌 교각 (물속에서 다리를 받침)
+      const z = z0 + ((z1 - z0) * i) / 4, top = bridgeY(z) - 0.45;
+      g.add(at(part(new THREE.BoxGeometry(w + 0.5, top + 1.4, 1.0), GRANITE_D, 0.014), bx, (top - 1.4) / 2, z));
+      g.add(at(part(new THREE.BoxGeometry(w + 0.7, 0.12, 1.2), GRANITE, 0.01), bx, top, z));
     }
     scene.add(bake(g));
   }
@@ -583,16 +608,25 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   const spots: Spot[] = [];
   const statics = new THREE.Group(), extras = new THREE.Group();
   let fountain: ReturnType<typeof createFountain> | null = null;
+  // 맵 밖 배경 나무: 걸어 다니는 곳에서 멀수록 잎 카드를 줄임 (멀어서 덜 그려도 풍성해 보임), 그림자도 안 드리움
+  const away = (x: number, z: number) => Math.max(0, Math.abs(x) - 60, -72 - z, z - 29);
+  const far = new THREE.Group();
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
-    if (p.kind === "tree") statics.add(cherryTree(p, spots, p.inside ? q.cards : p.z < -70 ? q.cards * 0.3 : q.cards * 0.45)); // 강 건너는 멀어서 잎 카드를 줄여도 풍성해 보임
+    if (p.kind === "tree") {
+      if (p.inside) statics.add(cherryTree(p, spots, q.cards));
+      else { const d = away(p.x, p.z); far.add(cherryTree(p, spots, q.cards * (d < 12 ? 0.45 : d < 45 ? 0.3 : 0.2))); }
+    }
     else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
     else buildProp(p, statics);
   }
   // 간판·물 같은 텍스처 붙은 물체는 합치지 않고 따로
-  const keep: THREE.Object3D[] = [];
-  statics.traverse((o) => { if (o instanceof THREE.Mesh && ((o.material as THREE.MeshToonMaterial).map || o.userData.keep)) keep.push(o); });
-  for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); extras.add(o); }
-  scene.add(bake(statics), extras);
+  const split = (root: THREE.Group, shadow: boolean) => {
+    const keep: THREE.Mesh[] = [];
+    root.traverse((o) => { if (o instanceof THREE.Mesh && ((o.material as THREE.MeshToonMaterial).map || o.userData.keep)) keep.push(o); });
+    for (const o of keep) { o.updateWorldMatrix(true, false); const w = o.matrixWorld.clone(); o.removeFromParent(); w.decompose(o.position, o.quaternion, o.scale); if (!shadow) o.castShadow = false; extras.add(o); }
+    return bake(root, shadow);
+  };
+  scene.add(split(statics, true), split(far, false), extras);
 
   // 가로등 청사초롱: 해 지면 따뜻하게 켜짐 (불빛 + 초롱 빛남 + 둘레 은은한 빛무리)
   const glowTex = canvasTex(64, 64, (x) => {

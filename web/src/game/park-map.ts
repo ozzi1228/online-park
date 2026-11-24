@@ -142,9 +142,16 @@ export const PROPS = buildProps();
 export const BACKDROP_TREES: Prop[] = (() => {
   const r = rng(29), out: Prop[] = [];
   // 강 건너 공원 뒤: 세 줄로 빽빽하고 크게 (벤치에 앉으면 건너편이 온통 벚꽃, 그 뒤로 도시)
-  for (const [z0, step, s0] of [[-74.5, 6.5, 1.1], [-79, 7, 1.25], [-84, 7.5, 1.4]] as const)
-    for (let x = -105 + r() * step; x <= 105; x += step * (0.85 + r() * 0.3))
+  for (const [z0, step, s0] of [[-74.5, 6.5, 1.1], [-79, 7, 1.25], [-84, 7.5, 1.4], [-90, 8, 1.5], [-96.5, 8.5, 1.6]] as const)
+    for (let x = -190 + r() * step; x <= 190; x += step * (0.85 + r() * 0.3))
       out.push({ kind: "tree", x, z: z0 - r() * 2, s: s0 + r() * 0.25, inside: false });
+  // 강둑 따라 공원 밖까지: 양쪽 물가에 벚나무가 줄지어 멀리 이어짐 (물가 땅 위에 서 있게)
+  for (const side of [-1, 1]) for (let x = 64 + r() * 3; x < 192; x += 6.5 + r() * 1.5) {
+    const k = Math.min(1, (x - 60) / 120), xs = side * x;
+    out.push({ kind: "tree", x: xs, z: -5.6 + r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });           // 이쪽 강둑
+    out.push({ kind: "tree", x: xs + side * 3, z: -42.6 - r() * 0.6, s: 1.05 + k * 0.3 + r() * 0.15, inside: false });  // 건너편 강둑
+    for (const z of [-49, -56, -63.5, -70]) out.push({ kind: "tree", x: xs + (r() - 0.5) * 4, z: z - r() * 2, s: 1.15 + k * 0.3 + r() * 0.2, inside: false }); // 건너편 숲
+  }
   const t = (x: number, z: number, s: number) => out.push({ kind: "tree", x: x + (r() - 0.5) * 2.5, z: z + (r() - 0.5) * 2.5, s: s + r() * 0.25, inside: false });
   // 남쪽 뒤: 네 줄로 엇갈려 빽빽하게, 멀수록 크게 (울타리 너머가 벚꽃 숲)
   for (const [z0, step, s0] of [[33.5, 6.5, 1], [39.5, 7, 1.1], [46, 7.5, 1.25], [53, 8, 1.4]] as const)
