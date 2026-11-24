@@ -9,13 +9,22 @@ import { logEvent } from "@/lib/log";
 import { getSettings } from "@/lib/settings";
 
 // 환경변수가 있는 로그인만 켬
+// 카카오·네이버는 이메일을 안 줄 수 있음(카카오 이메일은 비즈 앱만, 네이버는 사용자가 동의 안 할 수 있음)
+// → 이메일이 없으면 계정 ID로 만든 가짜 주소를 씀 (메일은 안 보내니 상관없음, .invalid 라 실제로 없는 주소)
+const placeholder = (id: string, sub: unknown, email?: string | null) => (email ? {} : { email: `${id}-${sub}@member.sakura.invalid` });
+const extra: Record<string, object> = {
+  // 카카오는 닉네임만 요청 (이메일·프로필 사진 동의항목은 설정 안 해도 로그인되게)
+  kakao: { disableDefaultScope: true, scope: ["profile_nickname"],
+    mapProfileToUser: (p: { id: number; kakao_account?: { email?: string } }) => placeholder("kakao", p.id, p.kakao_account?.email) },
+  naver: { mapProfileToUser: (p: { response: { id: string; email?: string } }) => placeholder("naver", p.response.id, p.response.email) },
+};
 const provider = (id: string) => {
-  const clientId = process.env[`${id}_CLIENT_ID`], clientSecret = process.env[`${id}_CLIENT_SECRET`];
-  return clientId && clientSecret ? { clientId, clientSecret } : undefined;
+  const clientId = process.env[`${id.toUpperCase()}_CLIENT_ID`], clientSecret = process.env[`${id.toUpperCase()}_CLIENT_SECRET`];
+  return clientId && clientSecret ? { clientId, clientSecret, ...extra[id] } : undefined;
 };
 const socialProviders = Object.fromEntries(
   (["google", "kakao", "naver"] as const)
-    .map((id) => [id, provider(id.toUpperCase())])
+    .map((id) => [id, provider(id)])
     .filter(([, v]) => v),
 );
 export const enabledProviders = Object.keys(socialProviders);

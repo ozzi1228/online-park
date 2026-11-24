@@ -17,6 +17,7 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 COPY --from=build /app/web/.next/standalone ./
 COPY --from=build /app/web/.next/static ./.next/static
 COPY --from=build /app/web/public ./public
+RUN mkdir -p .next/cache && chown node:node .next/cache  # 이미지 최적화 캐시 (없으면 EACCES)
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
