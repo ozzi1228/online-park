@@ -28,7 +28,7 @@ const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
 const subscribeCoarse = (cb: () => void) => { const m = matchMedia(COARSE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
 
-const WALK = 3.0;                             // m/s
+const WALK = 3.0;                             // m/s (관리자 설정 걷기 빠르기가 없을 때)
 const EYE = 1.5, EYE_SIT = 0.95;             // 1인칭 눈높이 (서 있을 때 / 앉았을 때, 캐릭터 키 기준)
 const DRAG_YAW = 0.006, DRAG_PITCH = 0.004; // 끌어서 둘러보기 빠르기
 const PITCH_UP = -0.9, PITCH_DOWN = 1.0;      // 올려다보기·내려다보기 한계 (rad)
@@ -485,7 +485,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
           const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
           if (dragY === 0 && drag.x === 0) pitch += (0 - pitch) * (1 - Math.exp(-dt * 1.2)); // 걸으면 시선이 천천히 앞으로 돌아옴
-          const step = WALK * amount * dt;
+          const step = ((meRef.current?.controls?.walkSpeedCm ?? WALK * 100) / 100) * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
           pos.x = np.x; pos.z = np.z;

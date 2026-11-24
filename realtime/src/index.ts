@@ -9,7 +9,7 @@ import { CatBrain, type CatConfig } from "../../web/src/game/cat-brain.ts";
 const SECRET = process.env.REALTIME_SECRET;
 if (!SECRET) throw new Error("REALTIME_SECRET 이 필요해요 (.env 참고)");
 const PORT = Number(process.env.PORT ?? 2567);
-const MAX_SPEED = 3.2;            // m/s, 클라이언트 걷기 속도(3.0)보다 약간 여유
+const MAX_SPEED = 6.3;            // m/s, 관리자 설정 걷기 빠르기 최대(6m/초)보다 약간 여유
 const WEB_URL = process.env.WEB_URL ?? "http://localhost:3001"; // 관리자 설정(고양이 등)을 읽어 올 웹앱 주소
 
 // 관리자 화면의 고양이 설정을 1분마다 웹앱에서 받아 옴 (실패하면 기존 값 유지)

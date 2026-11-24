@@ -14,7 +14,7 @@ export type MeInfo = {
   unreadNotes: number;
   fountainPrice: number;
   sound: { wind: number; water: number; crowd: number; nature: number; sfx: number };
-  controls: { turnSpeed: number; cameraBackCm: number; cameraSideCm: number };
+  controls: { walkSpeedCm: number; turnSpeed: number; cameraBackCm: number; cameraSideCm: number };
   cat: { enabled: number; intervalMinSec: number; intervalMaxSec: number; staySec: number };
 };
 

@@ -35,6 +35,7 @@ export const DEFAULTS = {
     staySec: 90,          // 한 번 나오면 머무는 시간 (대략)
   },
   controls: {
+    walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
     turnSpeed: 110,       // 좌우 키로 몸·시야가 도는 빠르기 (도/초)
     cameraBackCm: 320,    // 시점: 내 머리 뒤로 떨어진 거리 (0 = 완전 1인칭, 클수록 내 캐릭터가 많이 보임)
     cameraSideCm: 0,      // 시점: 오른쪽으로 비켜선 거리 (0 = 내 캐릭터가 화면 가운데 아래)
@@ -99,6 +100,7 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
   controls: {
     title: "조작",
     fields: {
+      walkSpeedCm: { label: "걷기 빠르기", unit: "cm/초", min: 100, max: 600 },
       turnSpeed: { label: "좌우 키로 도는 빠르기", unit: "도/초", min: 30, max: 300 },
       cameraBackCm: { label: "시점: 내 캐릭터 뒤 거리 (0 = 완전 1인칭)", unit: "cm", min: 0, max: 400 },
       cameraSideCm: { label: "시점: 오른쪽으로 비켜선 거리", unit: "cm", min: 0, max: 150 },
