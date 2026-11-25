@@ -4,6 +4,7 @@ import { inquiries, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { logEvent, requestCtx } from "@/lib/log";
 import { INQUIRY_CATEGORIES } from "@/lib/inquiry";
+import { notifyInquiry } from "@/lib/mail";
 import { getSettings } from "@/lib/settings";
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
@@ -41,5 +42,6 @@ export async function POST(req: Request) {
   }).returning({ id: inquiries.id });
   await logEvent("inquiry.created", { inquiryId: row.id, category, length: content.length },
     { userId: s.user.id, isGuest: !!s.user.isAnonymous, sessionId: s.session.id, ...requestCtx(req.headers) });
+  await notifyInquiry({ id: row.id, nickname: u?.nickname ?? null, email, category: INQUIRY_CATEGORIES[category as keyof typeof INQUIRY_CATEGORIES], content });
   return Response.json({ ok: true, id: row.id });
 }
