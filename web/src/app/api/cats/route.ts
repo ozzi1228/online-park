@@ -1,0 +1,32 @@
+import { auth } from "@/lib/auth";
+import { logEvent, requestCtx } from "@/lib/log";
+import { isCat, myBonds, nameCat, pet } from "@/lib/cat-bond";
+
+const session = (req: Request) => auth.api.getSession({ headers: req.headers });
+
+/** 내 고양이들: 하트 개수·지어 준 이름 */
+export async function GET(req: Request) {
+  const s = await session(req);
+  if (!s) return new Response(null, { status: 401 });
+  return Response.json(await myBonds(s.user.id), { headers: { "cache-control": "no-store" } });
+}
+
+/** 고양이에게 하기: { cat, act: "pet" } 쓰다듬기 · { cat, act: "name", name } 이름 지어 주기 */
+export async function POST(req: Request) {
+  const s = await session(req);
+  if (!s) return new Response(null, { status: 401 });
+  const body = await req.json().catch(() => ({})) as { cat?: unknown; act?: unknown; name?: unknown };
+  if (!isCat(body.cat)) return new Response(null, { status: 400 });
+  const ctx = { userId: s.user.id, isGuest: !!s.user.isAnonymous, sessionId: s.session.id, ...requestCtx(req.headers) };
+  if (body.act === "pet") {
+    const r = await pet(s.user.id, body.cat);
+    await logEvent("cat.pet", { cat: body.cat, ...r }, ctx);
+    return Response.json(r);
+  }
+  if (body.act === "name" && typeof body.name === "string") {
+    const r = await nameCat(s.user.id, body.cat, body.name);
+    await logEvent(r.ok ? "cat.named" : "cat.name_refused", { cat: body.cat, ...(r.ok ? { name: r.name } : { reason: r.reason }) }, ctx);
+    return Response.json(r);
+  }
+  return new Response(null, { status: 400 });
+}

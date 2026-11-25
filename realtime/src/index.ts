@@ -55,6 +55,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
   private budget = new Map<string, number>(); // 움직여도 되는 남은 거리 (속도 검사)
 
   private cats = new CatColony(); // 늘 공원에 있는 고양이들 (서로 다른 무늬)
+  private petAt = new Map<string, number>();
 
   onCreate() {
     const st = new ParkState(); this.setState(st);
@@ -141,6 +142,14 @@ class ParkRoom extends Room<{ state: ParkState }> {
     gesture: (client: Client, kind: unknown) => {
       if (kind === "wave" || kind === "shake" || kind === "stomp" || kind === "cheer") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
     },
+    // 고양이를 쓰다듬었을 때의 반응 (반응 종류는 웹 서버가 호감도로 정해 줌. 화면에 보이는 것뿐이라 거리·횟수만 확인)
+    catPet: (client: Client, m: { cat?: unknown; kind?: unknown }) => {
+      const p = this.state.players.get(client.sessionId), now = Date.now();
+      if (!p || (this.petAt.get(client.sessionId) ?? 0) > now - 800) return;
+      const b = this.cats.brains.find((x) => x.s.look === m?.cat);
+      if (!b || b.busy || Math.hypot(b.s.x - p.x, b.s.z - p.z) > 4) return;
+      if (m?.kind === "flee" || m?.kind === "content" || m?.kind === "rub") { b.react(m.kind, { x: p.x, z: p.z }); this.petAt.set(client.sessionId, now); }
+    },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
       if (p && typeof a === "string" && /^(idle|sit|sitbench|wish|lie|sitmat(:(pink|yellow|blue|green|white))?)$/.test(a)) p.anim = a; // sitmat:색
@@ -150,7 +159,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.last.delete(client.sessionId); this.uids.delete(client.sessionId); this.budget.delete(client.sessionId);
+    this.last.delete(client.sessionId); this.uids.delete(client.sessionId); this.budget.delete(client.sessionId); this.petAt.delete(client.sessionId);
     console.log(`[leave] ${p?.nickname} (${this.state.players.size}명)`);
   }
 }

@@ -193,6 +193,19 @@ export class ParkAudio {
     const t = this.ctx!.currentTime;
     for (let i = 0; i < 4; i++) this.tone(this.sfxBus, "triangle", 260, 180, t + i * 0.28, 0.08, 0.2);
   }
+  /** 고로롱: 낮게 웅웅 떨리는 소리 (숨 들이쉬고 내쉬듯 두 번) */
+  purr() {
+    if (!this.ok()) return;
+    const ctx = this.ctx!, t = ctx.currentTime;
+    for (const [at, dur] of [[0, 1.1], [1.25, 1.3]] as const) {
+      const src = ctx.createBufferSource(), lp = this.filter("lowpass", 160, 0.8), g = ctx.createGain(), lfo = ctx.createOscillator(), depth = ctx.createGain();
+      src.buffer = this.buffers!.white; src.loop = true;
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.linearRampToValueAtTime(0.5, t + at + 0.25); g.gain.linearRampToValueAtTime(0.0001, t + at + dur);
+      lfo.frequency.value = 26; depth.gain.value = 0.45; lfo.connect(depth); depth.connect(g.gain); // 초당 26번 떨림
+      src.connect(lp); lp.connect(g); g.connect(this.sfxBus);
+      src.start(t + at); src.stop(t + at + dur + 0.05); lfo.start(t + at); lfo.stop(t + at + dur + 0.05);
+    }
+  }
   /** 작은 버튼 소리 (구매 등) */
   pop() {
     if (!this.ok()) return;

@@ -38,6 +38,19 @@ export const DEFAULTS = {
     enabled: 1,           // 공원 고양이 (1 = 있음, 0 = 없음). 있으면 늘 공원 어딘가를 돌아다님
     count: 2,             // 몇 마리 (서로 다른 무늬로)
   },
+  catBond: {              // 고양이 호감도 (사람마다·고양이마다 따로, 0~100). 화면엔 하트 개수로만
+    heart1: 11, heart2: 31, heart3: 51, heart4: 71, heart5: 91, // 하트 n개가 되는 호감도
+    start: 20,            // 처음 만났을 때
+    nameHearts: 3,        // 이름 지어 주기·부르기: 하트 몇 개부터
+    petStayHearts: 4,     // 쓰다듬어도 도망가지 않음: 하트 몇 개부터
+    purrAt: 85,           // 이 호감도부터 쓰다듬으면 고로롱 + 부비부비 (하트로는 안 보이는 숨은 단계)
+    petGain: 1,           // 쓰다듬으면 오르는 호감도 (가만히 있을 때만)
+    petGainMin: 10,       // 쓰다듬기로 오르는 건 같은 고양이에게 몇 분에 한 번
+    dislikeBelow: 30,     // 이 호감도 밑에서 쓰다듬으려 하면 깎임
+    dislikePenalty: 1,
+    decayAfterDays: 3,    // 이만큼 안 만나면 그다음 날부터
+    decayPerDay: 2,       // 하루에 깎이는 호감도
+  },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
     turnSpeed: 110,       // 좌우 키로 몸·시야가 도는 빠르기 (도/초)
@@ -105,6 +118,26 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     fields: {
       enabled: { label: "고양이 있음 (1 = 켬, 0 = 끔)", unit: "", min: 0, max: 1 },
       count: { label: "마리 수 (서로 다른 무늬)", unit: "마리", min: 0, max: 6 },
+    },
+  },
+  catBond: {
+    title: "고양이 호감도",
+    fields: {
+      heart1: { label: "하트 1개가 되는 호감도", unit: "점", min: 0, max: 100 },
+      heart2: { label: "하트 2개", unit: "점", min: 0, max: 100 },
+      heart3: { label: "하트 3개", unit: "점", min: 0, max: 100 },
+      heart4: { label: "하트 4개", unit: "점", min: 0, max: 100 },
+      heart5: { label: "하트 5개", unit: "점", min: 0, max: 100 },
+      start: { label: "처음 만났을 때 호감도", unit: "점", min: 0, max: 100 },
+      nameHearts: { label: "이름 짓기·부르기 (하트 몇 개부터)", unit: "개", min: 0, max: 5 },
+      petStayHearts: { label: "쓰다듬어도 가만히 (하트 몇 개부터)", unit: "개", min: 0, max: 5 },
+      purrAt: { label: "고로롱·부비부비 (호감도)", unit: "점", min: 0, max: 100 },
+      petGain: { label: "쓰다듬으면 오르는 호감도", unit: "점", min: 0, max: 20 },
+      petGainMin: { label: "쓰다듬기로 오르는 간격", unit: "분", min: 0, max: 1440 },
+      dislikeBelow: { label: "이 호감도 밑에서 쓰다듬으면 깎임", unit: "점", min: 0, max: 100 },
+      dislikePenalty: { label: "그때 깎이는 호감도", unit: "점", min: 0, max: 20 },
+      decayAfterDays: { label: "안 만나면 깎이기 시작 (며칠 뒤)", unit: "일", min: 1, max: 60 },
+      decayPerDay: { label: "하루에 깎이는 호감도", unit: "점", min: 0, max: 20 },
     },
   },
   controls: {

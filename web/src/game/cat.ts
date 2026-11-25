@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { part, toonGradient } from "./character";
 import type { CatState } from "./cat-brain";
+import { nameSprite } from "./multiplayer";
 
 type Look = { name: string; base: string; stripe?: string; white: number; patch?: string; eyeL: string; eyeR: string };
 const LOOKS: Look[] = [
@@ -110,9 +111,20 @@ export class CatView {
   private look = -1;
   private x = 0; private y = 0; private z = 0; private yaw = 0; private headYaw = 0; private blinkAt = 1;
   private pose = { stretch: 0, sit: 0, groom: 0, gait: 0 };
+  /** 내가 지어 준 이름표 (내 화면에만) */
+  private label: THREE.Sprite | null = null; private labelText = "";
   constructor(private scene: THREE.Scene) {}
+  get pos() { return this.cat ? { x: this.x, y: this.y, z: this.z } : null; }
+  get catLook() { return this.look; }
+  setName(name: string | null) {
+    if ((name ?? "") === this.labelText) return;
+    if (this.label) { this.scene.remove(this.label); this.label.material.map?.dispose(); this.label.material.dispose(); this.label = null; }
+    this.labelText = name ?? "";
+    if (name) { this.label = nameSprite(name); this.label.scale.multiplyScalar(0.8); this.scene.add(this.label); }
+  }
 
   private clear() {
+    if (this.label) this.label.visible = false;
     if (!this.cat) return;
     this.scene.remove(this.cat.root);
     this.cat.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
@@ -126,24 +138,27 @@ export class CatView {
       this.x = s.x; this.y = s.y; this.z = s.z; this.yaw = s.yaw;
     }
     const c = this.cat;
+    if (this.label) this.label.visible = true;
     if (Math.hypot(s.x - this.x, s.z - this.z) > 3) { this.x = s.x; this.z = s.z; this.y = s.y; } // 순간이동이면 바로
     const k = 1 - Math.exp(-dt * 10), px = this.x, pz = this.z;
     this.x += (s.x - this.x) * k; this.z += (s.z - this.z) * k; this.y += (s.y - this.y) * k;
     this.yaw = turn(this.yaw, s.yaw, k);
-    const walking = (s.act === "walk" || s.act === "leave") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
+    const walking = (s.act === "walk" || s.act === "leave" || s.act === "flee" || s.act === "rub") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
     const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
-      : s.act === "sit" || s.act === "look" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
+      : s.act === "sit" || s.act === "look" || s.act === "content" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
     // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)
-    let lookAt: number | null = s.act === "look" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
+    let lookAt: number | null = s.act === "look" || s.act === "content" || s.act === "rub" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
     if (lookAt === null && !walking && Math.hypot(me.x - this.x, me.z - this.z) < 4) lookAt = Math.atan2(me.x - this.x, me.z - this.z);
     const rel = lookAt === null ? 0 : THREE.MathUtils.clamp(Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw)), -1.1, 1.1);
 
     // 자세
     const pk = 1 - Math.exp(-dt * 6), P = this.pose;
     P.stretch += (target.stretch - P.stretch) * pk; P.sit += (target.sit - P.sit) * pk; P.groom += (target.groom - P.groom) * pk;
-    P.gait += walking ? dt * 9 : 0;
+    P.gait += walking ? dt * (s.act === "flee" ? 20 : 9) : 0; // 도망칠 땐 다다다다
     this.headYaw += (rel - this.headYaw) * pk;
     c.root.position.set(this.x, this.y, this.z); c.root.rotation.y = this.yaw;
+    c.root.rotation.z += ((s.act === "rub" ? -0.18 : 0) - c.root.rotation.z) * pk; // 부비부비: 사람 쪽으로 몸을 기울임
+    if (this.label) this.label.position.set(this.x, this.y + 0.75, this.z);
     const sw = walking ? Math.sin(P.gait) : 0;
     // 앉으면 엉덩이를 내리고 몸을 세움, 기지개는 앞발을 뻗고 가슴을 낮춤
     c.body.rotation.x = -0.55 * P.sit + 0.32 * P.stretch;
@@ -164,8 +179,8 @@ export class CatView {
     });
     // 눈 깜빡임 (그루밍 중엔 지그시)
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
-    const shut = P.groom > 0.5 || (t > this.blinkAt && t < this.blinkAt + 0.14);
+    const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면 지그시
     const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
   }
-  dispose() { this.clear(); }
+  dispose() { this.setName(null); this.clear(); }
 }

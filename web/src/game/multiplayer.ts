@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { animateChar, disposeChar, isGesture, makeChar, playGesture, type Character, type Gesture } from "./character";
 import { makeMat, matColorOf, paintMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, benchSeatAt, groundY, type Collider } from "./park-map";
-import type { CatState } from "./cat-brain";
+import type { CatReaction, CatState } from "./cat-brain";
 import { PRESETS } from "./presets";
 
 type NetPlayer = { x: number; z: number; yaw: number; walking: boolean; anim: string; preset: string; nickname: string; uid: string };
@@ -183,6 +183,7 @@ export class Multiplayer {
   askMat(ownerId: string) { this.room?.send("matAsk", { to: ownerId }); }
   answerMat(to: string, ok: boolean) { this.room?.send("matAnswer", { to, ok }); }
   sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
+  catPet(cat: number, kind: CatReaction) { this.room?.send("catPet", { cat, kind }); }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
   sendAnim(a: "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }

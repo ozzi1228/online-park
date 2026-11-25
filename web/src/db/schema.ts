@@ -98,6 +98,16 @@ export const wishPetalDays = pgTable("wish_petal_days", {
   day: text().primaryKey(),           // 한국 날짜 YYYY-MM-DD
   caught: integer().notNull().default(0),
 });
+// ---------- 고양이 호감도: 사람 × 고양이(무늬 번호)마다 한 줄. 이름은 그 사람에게만 보임 ----------
+export const catBonds = pgTable("cat_bonds", {
+  userId: text().notNull(),
+  cat: integer().notNull(),           // 고양이 = 무늬 번호 (game/cat.ts LOOKS)
+  score: real().notNull(),            // 0~100 (마지막으로 만난 때 기준. 안 만난 날만큼 깎는 건 읽을 때 계산)
+  name: text(),                       // 이 사람이 지어 준 이름
+  lastAt: now(),                      // 마지막으로 교류한 때 (오래 안 만나면 깎이는 기준)
+  pettedAt: timestamp({ withTimezone: true }), // 쓰다듬기로 마지막에 오른 때
+}, (t) => [uniqueIndex().on(t.userId, t.cat)]);
+
 export const petalCatches = pgTable("petal_catches", {
   id: bigserial({ mode: "number" }).primaryKey(),
   userId: text().notNull(),
