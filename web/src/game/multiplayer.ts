@@ -46,12 +46,12 @@ export class Multiplayer {
 
   constructor(private scene: THREE.Scene) {}
 
-  async connect() {
+  async connect(resume?: { x: number; z: number; yaw: number }) {
     try {
       const res = await fetch("/api/realtime/token", { cache: "no-store" });
       if (!res.ok) throw new Error(`token ${res.status}`);
       const { token, url } = await res.json();
-      const room = await new Client(url).joinOrCreate<NetState>("park", { token });
+      const room = await new Client(url).joinOrCreate<NetState>("park", { token, resume });
       if (this.disposed) { room.leave(); return; } // 접속하는 사이 화면이 닫혔으면 바로 나감
       this.room = room;
       room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });

@@ -308,7 +308,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         });
       },
     };
-    mp.connect();
+    // 같은 탭에서 10분 안에 다시 들어오면(충전하고 돌아오기·새로고침) 있던 자리에서 시작
+    const RESUME = "park.resume", resume = (() => {
+      try { const r = JSON.parse(sessionStorage.getItem(RESUME) ?? "null"); return r && Date.now() - r.at < 10 * 60_000 ? r as { x: number; z: number; yaw: number } : undefined; } catch { return undefined; }
+    })();
+    const saveSpot = () => { try { sessionStorage.setItem(RESUME, JSON.stringify({ x: pos.x, z: pos.z, yaw, at: Date.now() })); } catch {} };
+    window.addEventListener("pagehide", saveSpot);
+    mp.connect(resume);
     let synced = false;
 
     // ---------- 행동 ----------
@@ -714,6 +720,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
     return () => {
       clearInterval(wishTimer);
+      window.removeEventListener("pagehide", saveSpot);
       window.removeEventListener("pointerdown", wake); window.removeEventListener("keydown", wake); audio.dispose(); audioRef.current = null;
       drawMini.dispose();
       ro.disconnect(); renderer.setAnimationLoop(null); inp.dispose(); input.current = null; actions.current = null; mp.dispose();

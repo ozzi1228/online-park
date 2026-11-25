@@ -3,7 +3,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Room, defineRoom, defineServer, type Client } from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
-import { COLLIDERS, PLAYER_R, SPAWN, move, overlaps, type Collider } from "../../web/src/game/park-map.ts";
+import { COLLIDERS, PLAYER_R, SPAWN, move, overlaps, resolve, type Collider } from "../../web/src/game/park-map.ts";
 import { CatColony, type CatConfig } from "../../web/src/game/cat-brain.ts";
 
 const SECRET = process.env.REALTIME_SECRET;
@@ -78,19 +78,25 @@ class ParkRoom extends Room<{ state: ParkState }> {
     return out;
   }
 
-  onJoin(client: Client, _options: unknown, auth: Auth) {
+  onJoin(client: Client, options: { resume?: { x?: unknown; z?: unknown; yaw?: unknown } }, auth: Auth) {
     // 같은 계정이 다른 창으로 또 들어오면 이전 접속을 정리
     for (const [sid, uid] of this.uids) if (uid === auth.uid) this.clients.find((c) => c.sessionId === sid)?.leave();
     this.uids.set(client.sessionId, auth.uid);
     // 입구가 붐비면 비어 있는 자리를 나선형으로 찾음
     const cs = this.others(client.sessionId);
-    let x = SPAWN.x, z = SPAWN.z;
+    let x = SPAWN.x, z = SPAWN.z, yaw = SPAWN.yaw;
+    // 결제·새로고침으로 잠깐 나갔다 오면 있던 자리에서 (걸을 수 있는 곳이고 다른 사람과 안 겹칠 때만)
+    const rs = options?.resume;
+    if (rs && typeof rs.x === "number" && typeof rs.z === "number" && Number.isFinite(rs.x) && Number.isFinite(rs.z)) {
+      const p = resolve(rs.x, rs.z);
+      if (Math.hypot(p.x - rs.x, p.z - rs.z) < 0.5 && !overlaps(p.x, p.z, PLAYER_R, cs)) { x = p.x; z = p.z; if (typeof rs.yaw === "number" && Number.isFinite(rs.yaw)) yaw = rs.yaw; }
+    }
     for (let i = 0; i < 200 && overlaps(x, z, PLAYER_R, cs); i++) {
       const a = i * 2.4, r = 0.7 + i * 0.08;
       x = SPAWN.x + Math.cos(a) * r * 0.5; z = SPAWN.z + Math.sin(a) * r;
     }
     const p = new Player();
-    Object.assign(p, { x, z, yaw: SPAWN.yaw, walking: false, anim: "idle", preset: auth.preset, nickname: auth.nickname, uid: auth.uid });
+    Object.assign(p, { x, z, yaw, walking: false, anim: "idle", preset: auth.preset, nickname: auth.nickname, uid: auth.uid });
     this.state.players.set(client.sessionId, p);
     this.last.set(client.sessionId, Date.now());
     console.log(`[join] ${auth.nickname} (${this.state.players.size}명)`);
