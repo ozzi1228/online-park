@@ -56,6 +56,7 @@ function verify(token: unknown): Auth {
 
 class ParkRoom extends Room<{ state: ParkState }> {
   maxClients = 80;
+  autoDispose = false; // 아무도 없어도 방(고양이들)을 그대로 둠 — 비었다 다시 들어올 때마다 고양이가 새 자리에 새로 생겨 순간이동처럼 보였음
   private last = new Map<string, number>(); // 마지막 이동 시각 (속도 검사)
   private uids = new Map<string, string>();  // sessionId → userId
   private budget = new Map<string, number>(); // 움직여도 되는 남은 거리 (속도 검사)

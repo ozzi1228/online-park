@@ -1,6 +1,6 @@
 // 고양이 두뇌: 어디로 가서 무엇을 할지 정함. 화면과 상관없는 순수 계산이라
 // 실시간 서버가 이걸 돌려 모두에게 같은 고양이를 보여줌 (서버 없이 혼자 놀 땐 브라우저가 직접 돌림).
-import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map.ts";
+import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move, resolve } from "./park-map.ts";
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 /** 고양이(무늬 번호) 이름: 관리자 화면용 (cat.ts LOOKS 순서와 같게) */
@@ -72,21 +72,24 @@ export class CatBrain {
       else if (a?.k === "come" && a.next) a.next = a.next.filter((x) => x.k !== "eat");
       return;
     }
-    this.queue = [];
-    if (kind === "flee") { if (this.onRail || this.onBench) this.queue.push(this.hopDown()); this.queue.push({ k: "flee", dur: 2.4, who }); }
+    // 뛰는 중이면 끝까지 뛰고 나서 (공중에서 멈추면 땅으로 뚝 떨어지거나 난간 위로 되돌아가 순간이동처럼 보였음)
+    const air = this.cur?.k === "jump" ? this.cur : null;
+    this.queue = air && air.ty > 0.3 ? [this.hopDown(air.tx, air.tz)] : [];
+    const up = !air && (this.onRail || this.onBench);
+    if (kind === "flee") { if (up) this.queue.push(this.hopDown()); this.queue.push({ k: "flee", dur: 2.4, who }); }
     else if (kind === "content") this.queue.push({ k: "content", dur: 4, who });
     else if (kind === "pet") this.queue.push({ k: "content", dur: 40, who }); // 내 손으로 쓰다듬는 동안 그 자리(벤치 위여도)에 앉아서 기다림 (petEnd 까지)
     else if (kind === "eat") { // 츄르: 와서 앞에 앉아 할짝할짝 → 다리에 부비 → 잠깐 졸졸 따라다님
-      if (this.onRail || this.onBench) this.queue.push(this.hopDown());
+      if (up) this.queue.push(this.hopDown());
       this.queue.push({ k: "come", dur: 15, who, near: 0.55, next: [{ k: "eat", dur: 40, who }, { k: "rub", dur: 2.6, who, a: 0 }, { k: "follow", dur: 20, who }] });
     }
-    else if (kind === "huff") this.queue.push({ k: "look", dur: 1.1, who }, { k: "flee", dur: 3, who, speed: 0.8 });
-    else if (kind === "come") { if (this.onRail || this.onBench) this.queue.push(this.hopDown()); this.queue.push({ k: "come", dur: 15, who }); } // 불렀을 때: 종종걸음으로 와서 앞에 앉음
+    else if (kind === "huff") { this.queue.push({ k: "look", dur: 1.1, who }); if (up) this.queue.push(this.hopDown()); this.queue.push({ k: "flee", dur: 3, who, speed: 0.8 }); } // 벤치 위였으면 흘끗 보고 내려와서 감
+    else if (kind === "come") { if (up) this.queue.push(this.hopDown()); this.queue.push({ k: "come", dur: 15, who }); } // 불렀을 때: 종종걸음으로 와서 앞에 앉음
     else { // 다가와서 다리에 몸을 비비며 한 바퀴 반
-      if (this.onRail || this.onBench) this.queue.push(this.hopDown());
+      if (up) this.queue.push(this.hopDown());
       this.queue.push({ k: "rub", dur: 6, who, a: Math.atan2(s.x - who.x, s.z - who.z) }); // 다가가는 것부터 (막혀도 포기하지 않고 비빌 자리로)
     }
-    this.cur = null;
+    if (!air) this.cur = null;
   }
   /** 지금 사람과 하는 중인지 (쓰다듬기 반응 중엔 다른 사람이 끼어들지 않게) */
   get busy() { const k = this.cur?.k; return k === "content" || k === "rub" || k === "come" || k === "eat" || k === "watch" || k === "crouch" || k === "roll" || k === "pounce" || this.playUntil > this.t || this.calledUntil > this.t; }
@@ -104,7 +107,10 @@ export class CatBrain {
     else if (this.onRail || this.onBench) this.queue.push(this.hopDown());
     if (phase === "watch") this.queue.push({ k: "watch", dur: 30, at });
     else if (phase === "crouch") this.queue.push({ k: "crouch", dur: 30, at });
-    else if (phase === "pounce") this.queue.push({ k: "pounce", tx: at.x - Math.sin(s.yaw) * 0.12, tz: at.z - Math.cos(s.yaw) * 0.12, dur: 0.55 }, { k: "watch", dur: 30, at });
+    else if (phase === "pounce") { // 덮치는 자리는 나무·벽 앞에서 멈춤 (안으로 뛰어들면 다음 걸음에 밖으로 툭 밀려나 순간이동처럼 보였음)
+      const r = move(s.x, s.z, at.x - Math.sin(s.yaw) * 0.12, at.z - Math.cos(s.yaw) * 0.12, CAT_R, COLLIDERS);
+      this.queue.push({ k: "pounce", tx: r.x, tz: r.z, dur: 0.55 }, { k: "watch", dur: 30, at });
+    }
     else if (phase === "roll") this.queue.push({ k: "roll", dur: 3.6 }, { k: "sit", dur: 2 }); // 화면의 뒹굴 순서(cat.ts)와 같은 길이
     else this.queue.push({ k: "leave" });
     if (!air) this.cur = null;
@@ -113,7 +119,8 @@ export class CatBrain {
   private calledUntil = 0;
   private hopDown(x = this.s.x, z = this.s.z): Act {
     const f = BENCH_SEATS.find((b) => Math.hypot(b.x - x, b.z - z) < 0.4);
-    return { k: "jump", tx: f ? f.fx : x, ty: 0, tz: f ? f.fz : z + 0.8, dur: 0.45 };
+    const land = f ? { x: f.fx, z: f.fz } : resolve(x, z + 0.8, CAT_R, COLLIDERS); // 내려설 자리가 나무·가로등 안이면 비켜서 (안 그러면 다음 걸음에 툭 밀려남)
+    return { k: "jump", tx: land.x, ty: 0, tz: land.z, dur: 0.45 };
   }
 
   /** 다음 할 일 고르기 */
