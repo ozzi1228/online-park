@@ -28,6 +28,11 @@ export const MESSAGES = {
   "mat.noAnswer": { group: "앉기·돗자리", label: "대답이 없을 때 ({owner})", text: "{owner}님이 대답하지 않았어요" },
   "mat.joined": { group: "앉기·돗자리", label: "같이 앉았을 때 ({owner})", text: "{owner}님 돗자리에 같이 앉았어요" },
   "mat.refused": { group: "앉기·돗자리", label: "거절당했을 때", text: "이 곳에는 앉을 수 없습니다" },
+  "mat.packAsk": { group: "앉기·돗자리", label: "같이 앉은 사람이 있는데 일어나려 할 때 (확인 창)", text: "돗자리에 같이 앉아 있는 사람이 있습니다. 자리를 정리하시겠습니까?" },
+  "mat.packYes": { group: "앉기·돗자리", label: "확인 창: 정리 버튼", text: "확인" },
+  "mat.packNo": { group: "앉기·돗자리", label: "확인 창: 그대로 앉기 버튼", text: "취소" },
+  "mat.packed": { group: "앉기·돗자리", label: "돗자리를 정리했을 때 (깐 사람)", text: "돗자리를 정리했어요" },
+  "mat.packedByOwner": { group: "앉기·돗자리", label: "같이 앉아 있다가 정리당했을 때 ({owner})", text: "{owner}님이 돗자리를 정리했어요" },
   "mat.joinFail": { group: "앉기·돗자리", label: "허락받았지만 앉지 못했을 때 ({owner})", text: "{owner}님 옆자리에 앉지 못했어요" },
 
   // ---------- 운세꽃잎 ----------

@@ -44,6 +44,8 @@ export class Multiplayer {
   onMatAnswer?: (ok: boolean, owner: string, ownerId: string) => void;
   /** 고양이를 부른 결과: came(나에게 옴) · other(다른 사람에게 감, to=그 사람) · ignored(못 들은 척) · busy · gone */
   onCatCall?: (cat: number, result: string, to: string) => void;
+  /** 같이 앉아 있던 돗자리를 깐 사람이 정리했을 때 */
+  onMatClosed?: (owner: string) => void;
   private t = 0;
 
   constructor(private scene: THREE.Scene) {}
@@ -61,6 +63,7 @@ export class Multiplayer {
       room.onMessage("treeChanged", () => this.onTreeChanged?.());
       room.onMessage("matAsked", (m: { from?: string; nickname?: string }) => this.onMatAsk?.(String(m?.from), String(m?.nickname ?? "누군가")));
       room.onMessage("matAnswered", (m: { ok?: boolean; owner?: string; id?: string }) => this.onMatAnswer?.(m?.ok === true, String(m?.owner ?? "누군가"), String(m?.id)));
+      room.onMessage("matClosed", (m: { owner?: string }) => this.onMatClosed?.(String(m?.owner ?? "누군가")));
       room.onMessage("catCallResult", (m: { cat?: number; result?: string; to?: string }) => this.onCatCall?.(Number(m?.cat), String(m?.result), String(m?.to ?? "")));
       room.onMessage("gesture", (m: { id?: string; kind?: unknown }) => {
         const o = this.others.get(String(m?.id));
@@ -184,6 +187,15 @@ export class Multiplayer {
   }
 
   askMat(ownerId: string) { this.room?.send("matAsk", { to: ownerId }); }
+  /** 내 돗자리 옆자리(seat)에 앉아 있는 사람 */
+  matGuest(seat: { x: number; z: number }) {
+    const room = this.room;
+    let out: { id: string; nickname: string } | null = null;
+    room?.state.players?.forEach((p, id) => { if (!out && id !== room.sessionId && p.anim === "sit" && Math.hypot(p.x - seat.x, p.z - seat.z) < 0.9) out = { id, nickname: p.nickname }; });
+    return out as { id: string; nickname: string } | null;
+  }
+  /** 돗자리 정리: 같이 앉은 사람도 일어나게 */
+  closeMat(guestId: string) { this.room?.send("matClose", { to: guestId }); }
   answerMat(to: string, ok: boolean) { this.room?.send("matAnswer", { to, ok }); }
   sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
   catPet(cat: number, kind: CatReaction) { this.room?.send("catPet", { cat, kind }); }

@@ -23,7 +23,7 @@ import { LoadingScreen } from "./loading-screen";
 import { churuIcon, rodIcon } from "@/game/item-icons";
 import { CatToy, ChuruStick } from "@/game/cat-toy";
 import { setMsgOverrides, t as msg, type MsgKey } from "@/content/messages";
-import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
+import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, secondSeat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
@@ -139,6 +139,9 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   const toyDrag = useRef({ on: false, x: 0, y: 0, dx: 0, dy: 0, stop: false });
   /** 츄르 짜 주기 화면: 남은 양 0~1 */
   const [squeezeUi, setSqueezeUi] = useState<{ paste: number } | null>(null);
+  /** 같이 앉은 사람이 있는데 내 돗자리에서 일어나려 할 때 묻는 창 */
+  const [packAsk, setPackAsk] = useState<{ id: string; nickname: string } | null>(null);
+  const packApi = useRef<{ yes: () => void; no: () => void } | null>(null);
   /** 쓰다듬기 화면: 손 모양이 따라다님 (x, y = 화면 위치, on = 고양이에 닿았는지) */
   const [petUi, setPetUi] = useState<{ x: number; y: number; on: boolean; seen: boolean } | null>(null);
   const petPtr = useRef({ x: 0, y: 0, inside: false, down: false, moved: 0, stop: false });
@@ -379,6 +382,23 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       if (st.bench) { st.bench = null; st.stoodAt = st.now; }
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
     };
+    // 내 돗자리 옆자리에 누가 앉아 있으면 그냥 일어나지 않고 먼저 물어봄 (확인하면 그 사람도 일어남)
+    let packOpen = false;
+    // 내 돗자리 옆자리: 다른 사람 화면에 보이는(서버) 내 자리 기준 (내 화면 위치는 망 지연만큼 살짝 다를 수 있어서), 넉넉히 0.9m 안
+    const mySeat2 = () => { const m = mp.mine(); return m ? secondSeat(m.x, m.z, m.yaw) : secondSeat(pos.x, pos.z, yaw); };
+    const askPack = () => {
+      if (!st.sitting || !st.onMat) return false;
+      const g = mp.matGuest(mySeat2());
+      if (!g) return false;
+      st.waitRelease = true; // 키를 뗄 때까지는 앉은 채로
+      if (!packOpen) { packOpen = true; setPackAsk(g); }
+      return true;
+    };
+    packApi.current = {
+      yes: () => { const g = mp.matGuest(mySeat2()); if (g) mp.closeMat(g.id); packOpen = false; setPackAsk(null); stand(); sayRef.current(msg("mat.packed")); },
+      no: () => { packOpen = false; setPackAsk(null); },
+    };
+    mp.onMatClosed = (owner) => { if (st.sitting && !st.onMat) { stand(); sayRef.current(msg("mat.packedByOwner", { owner })); } };
     // 벤치에 걸어 들어가면 자동으로 앉음: 돌아서 벤치가 보는 쪽(강)을 바라봄
     const sitBench = (seat: BenchSeat) => {
       st.sitting = true; st.bench = seat; st.onMat = false; st.wishUntil = 0; st.waitRelease = true;
@@ -409,7 +429,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         } else if (color && groundY(pos.x, pos.z) === 0) sayRef.current(msg("mat.grassOnly")); // 정자 마루에선 안내 없이 그냥 앉음
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
-      stand: () => { setMenu(null); stand(); },
+      stand: () => { setMenu(null); if (!askPack()) stand(); },
     };
     // 운세꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 하루 한 번, 횟수는 잡았을 때만 셈). 1분마다 다시 확인
     const refreshWish = async () => {
@@ -452,6 +472,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     const stopAim = () => { st.aiming = false; aim.current.on = false; coin.preview(null); coin.showTarget(false); setCoinAim(false); };
     const tossCoin = () => {
       setMenu(null);
+      if (askPack()) return; // 내 돗자리에 손님이 있으면 먼저 물어봄 (확인하면 같이 일어남)
       if (coin.busy) return;
       if (st.sitting) stand();
       yaw = camYaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z); pitch = -0.12; // 분수 꼭대기 접시가 보이게
@@ -581,6 +602,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     const catDist = (v: CatView) => { const p = v.pos; return p ? Math.hypot(p.x - pos.x, p.z - pos.z) : Infinity; };
     const petCat = async (v: CatView) => {
       setMenu(null);
+      if (askPack()) return; // 내 돗자리에 손님이 있으면 먼저 물어봄 (확인하면 같이 일어남)
       const cat = v.catLook;
       if (catDist(v) > 3) { sayRef.current(msg("cat.closer")); return; }
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "pet" }) })
@@ -663,6 +685,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     };
     const feedCat = async (v: CatView) => {
       setMenu(null);
+      if (askPack()) return; // 내 돗자리에 손님이 있으면 먼저 물어봄 (확인하면 같이 일어남)
       const cat = v.catLook;
       if (catDist(v) > 3) { sayRef.current(msg("cat.closer")); return; }
       // 가까이(질투 거리 안)에서 지켜본 다른 고양이들 → 서버가 정든 고양이만 골라 질투시킴
@@ -719,6 +742,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     };
     const startPlay = async (v: CatView) => {
       setMenu(null);
+      if (askPack()) return; // 내 돗자리에 손님이 있으면 먼저 물어봄 (확인하면 같이 일어남)
       if (catDist(v) > 4) { sayRef.current(msg("cat.closer")); return; }
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: v.catLook, act: "play" }) })
         .then((x) => x.json() as Promise<{ ok: boolean; usesLeft?: number; hearts?: number }>).catch(() => null);
@@ -905,7 +929,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       }
       // 빈 곳을 톡: 모바일은 내 메뉴(앉기 등)를 열고, 메뉴가 떠 있으면 닫음 (PC는 우클릭)
       // 모바일은 할 수 있는 게 있을 때만 메뉴 (이동하려다 톡 닿을 때마다 "앉을 수 없어요"가 뜨지 않게)
-      if (coarse && st.sitting) { setMenu(null); stand(); return; } // 앉아 있을 때 빈 곳 톡 = 일어나기 (끌면 둘러보기)
+      if (coarse && st.sitting) { setMenu(null); if (!askPack()) stand(); return; } // 앉아 있을 때 빈 곳 톡 = 일어나기 (끌면 둘러보기). 돗자리에 손님이 있으면 먼저 물어봄
       if (coarse && !menuOpen.current) { openMenu(tap, true); return; }
       setMenu(null);
     };
@@ -966,6 +990,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       // 위아래 끌기: 옆으로 돌리며 끌 때 섞이는 작은 세로 움직임은 무시 (모르는 새 하늘을 보게 되지 않게)
       const dragY = Math.abs(drag.y) > Math.abs(drag.x) * 0.6 ? drag.y : 0;
       let walking = false;
+      if (st.sitting && Math.hypot(forward, right) >= 0.05 && !st.waitRelease) askPack(); // 손님이 있으면 걷지 않고 확인 창
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
       } else if (st.sitting && (Math.hypot(forward, right) < 0.05 || st.waitRelease)) {
@@ -1297,6 +1322,15 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { aim.current.cancel = true; }}
             className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
         </div>
+      )}
+      {packAsk && (
+        <section role="dialog" aria-label="돗자리 정리" className="absolute inset-x-4 top-20 z-30 mx-auto flex w-auto max-w-[22rem] flex-col gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
+          <p className="text-center">{msg("mat.packAsk")}</p>
+          <div className="flex gap-2">
+            <button onClick={() => packApi.current?.no()} className="flex-1 rounded-full bg-white py-2.5 ring-1 ring-sakura/40">{msg("mat.packNo")}</button>
+            <button onClick={() => packApi.current?.yes()} className="flex-1 rounded-full bg-sakura py-2.5 text-white">{msg("mat.packYes")}</button>
+          </div>
+        </section>
       )}
       {nameFor && (
         <form role="dialog" aria-label="고양이 이름 지어 주기" className="absolute inset-x-4 top-20 z-30 mx-auto flex w-auto max-w-[20rem] flex-col gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20"

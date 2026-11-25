@@ -161,6 +161,11 @@ class ParkRoom extends Room<{ state: ParkState }> {
       const owner = this.state.players.get(client.sessionId), to = this.clients.find((c) => c.sessionId === m?.to);
       if (owner && to && to !== client) to.send("matAnswered", { ok: m?.ok === true, owner: owner.nickname, id: client.sessionId });
     },
+    // 돗자리를 깐 사람이 자리를 정리하면 옆자리에 앉은 사람도 일어나게
+    matClose: (client: Client, m: { to?: unknown }) => {
+      const owner = this.state.players.get(client.sessionId), guest = this.state.players.get(String(m?.to)), to = this.clients.find((c) => c.sessionId === m?.to);
+      if (owner?.anim.startsWith("sitmat") && guest && to && to !== client && Math.hypot(guest.x - owner.x, guest.z - owner.z) < 2) to.send("matClosed", { owner: owner.nickname });
+    },
     // 잠깐 하는 몸짓(손 흔들기·고개 젓기·발 동동)을 다른 사람 화면에도
     gesture: (client: Client, kind: unknown) => {
       if (kind === "wave" || kind === "shake" || kind === "stomp" || kind === "cheer") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
