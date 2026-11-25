@@ -619,12 +619,12 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       if (st.sitting) stand();
       const p = v.pos!; yaw = camYaw = Math.atan2(p.x - pos.x, p.z - pos.z);
       st.petAt = { ...p }; st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // playAt: 몸이 카메라 쪽으로 돌지 않게
-      petting = { v, cat, purr: r.outcome === "rub", t: 0, idle: 0, stroke: 0, purrAt: 0, done: false };
+      petting = { v, cat, purr: r.outcome === "rub", t: 0, idle: 0, stroke: 0, rubAt: -9, purrAt: 0, done: false };
       petPtr.current = { x: innerWidth / 2, y: innerHeight / 2, inside: false, down: false, moved: 0, stop: false };
       setPetUi({ x: innerWidth / 2, y: innerHeight * 0.7, on: false, seen: false });
       sayRef.current(msg("pet.hint"));
     };
-    let petting: null | { v: CatView; cat: number; purr: boolean; t: number; idle: number; stroke: number; purrAt: number; done: boolean } = null;
+    let petting: null | { v: CatView; cat: number; purr: boolean; t: number; idle: number; stroke: number; rubAt: number; purrAt: number; done: boolean } = null;
     const endPet = (why: string) => {
       if (!petting || petting.done) return;
       const p = petting; p.done = true; petting = null; p.v.pet = null;
@@ -653,13 +653,15 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const at = petRay.ray.intersectPlane(plane, new THREE.Vector3()) ?? head;
       P.v.pet = { at: { x: at.x, y: at.y, z: at.z }, dx: THREE.MathUtils.clamp(dx, -1, 1), dy: THREE.MathUtils.clamp(dy, -1, 1), touching };
       // 문지르면 고로롱 (아주 친한 고양이만), 한참 안 만지면 끝
-      const rubbing = touching && ptr.moved > 6; ptr.moved = 0;
+      // 움직인 거리를 모아서 6px 넘을 때마다 '문지름'으로 침 (한 장면 안에서만 재면 천천히 쓰다듬을 땐 안 쳐져서 안 끝났음)
+      if (!touching) ptr.moved = 0; else if (ptr.moved > 6) { P.rubAt = P.t; ptr.moved = 0; }
+      const rubbing = touching && P.t - P.rubAt < 0.35;
       P.idle = touching ? 0 : P.idle + dt;
       if (P.purr && rubbing && P.t > P.purrAt) { audio.purr(); P.purrAt = P.t + 2.6; }
       // 충분히 문질러 주면 저절로 끝 (관리자 설정 초), 한참 손을 안 대도 끝
       if (rubbing) P.stroke += dt;
       const rules = bondsRef.current?.rules;
-      if (P.stroke >= (rules?.petStrokeSec ?? 10)) { audio.purr(); endPet(msg("pet.done")); return; }
+      if (P.stroke >= (rules?.petStrokeSec ?? 4)) { audio.purr(); endPet(msg("pet.done")); return; }
       if (P.idle > (rules?.petIdleSec ?? 6)) { endPet(msg("pet.done")); return; }
       if (Math.floor(P.t * 20) !== Math.floor((P.t - dt) * 20)) setPetUi({ x: ptr.x, y: ptr.y, on: touching, seen: ptr.inside });
     };

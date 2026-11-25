@@ -1,6 +1,6 @@
 // 고양이 두뇌: 어디로 가서 무엇을 할지 정함. 화면과 상관없는 순수 계산이라
 // 실시간 서버가 이걸 돌려 모두에게 같은 고양이를 보여줌 (서버 없이 혼자 놀 땐 브라우저가 직접 돌림).
-import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map";
+import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map.ts";
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 /** 고양이(무늬 번호) 이름: 관리자 화면용 (cat.ts LOOKS 순서와 같게) */
@@ -98,19 +98,22 @@ export class CatBrain {
     if ((phase === "watch" || phase === "crouch") && a && a.k === phase) { a.at = at; return; } // 같은 단계면 깃털 자리만
     if (phase === "watch" && a?.k === "crouch") { this.cur = { k: "watch", dur: 30, at }; this.actT = 0; return; }
     this.queue = [];
-    if (this.onRail || this.onBench) this.queue.push(this.hopDown());
+    // 뛰는 중이면 끝까지 뛰게 둠 (놀이 알림이 1초에 몇 번씩 와서, 매번 새로 뛰어내리면 허공에서 통통 튀며 날아갔음)
+    const air = a?.k === "jump" ? a : null;
+    if (air) { if (air.ty > 0.3) this.queue.push(this.hopDown(air.tx, air.tz)); } // 올라가던 중이면 내려올 것까지
+    else if (this.onRail || this.onBench) this.queue.push(this.hopDown());
     if (phase === "watch") this.queue.push({ k: "watch", dur: 30, at });
     else if (phase === "crouch") this.queue.push({ k: "crouch", dur: 30, at });
     else if (phase === "pounce") this.queue.push({ k: "pounce", tx: at.x - Math.sin(s.yaw) * 0.12, tz: at.z - Math.cos(s.yaw) * 0.12, dur: 0.55 }, { k: "watch", dur: 30, at });
     else if (phase === "roll") this.queue.push({ k: "roll", dur: 3.6 }, { k: "sit", dur: 2 }); // 화면의 뒹굴 순서(cat.ts)와 같은 길이
     else this.queue.push({ k: "leave" });
-    this.cur = null;
+    if (!air) this.cur = null;
   }
   /** 부름을 받고 와서 앉아 있는 동안 (다른 사람이 데려가지 못하게) */
   private calledUntil = 0;
-  private hopDown(): Act {
-    const f = BENCH_SEATS.find((b) => Math.hypot(b.x - this.s.x, b.z - this.s.z) < 0.4);
-    return { k: "jump", tx: f ? f.fx : this.s.x, ty: 0, tz: f ? f.fz : this.s.z + 0.8, dur: 0.45 };
+  private hopDown(x = this.s.x, z = this.s.z): Act {
+    const f = BENCH_SEATS.find((b) => Math.hypot(b.x - x, b.z - z) < 0.4);
+    return { k: "jump", tx: f ? f.fx : x, ty: 0, tz: f ? f.fz : z + 0.8, dur: 0.45 };
   }
 
   /** 다음 할 일 고르기 */
