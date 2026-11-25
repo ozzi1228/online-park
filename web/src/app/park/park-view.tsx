@@ -950,6 +950,8 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
     let firstFrame = false;
+    // 느린 기기: 3초 평균이 25fps 아래면 화면 해상도를 한 단계씩 낮춤 (올리지는 않음 → 들쭉날쭉 안 함)
+    const perf = { t: 0, n: 0, ratio: renderer.getPixelRatio() };
     renderer.setAnimationLoop(() => {
       // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 운세꽃잎이 떨어지지 않게)
       const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
@@ -1100,6 +1102,13 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       me.root.visible = !!tree.pending || showMe > 0.02 || !firstPerson; // 완전 1인칭일 때만 내 몸을 숨김
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
+      if (t > 5 && document.visibilityState === "visible") { // 처음 몇 초(셰이더 준비)는 빼고
+        perf.t += dt; perf.n++;
+        if (perf.t >= 3) {
+          if (perf.n / perf.t < 25 && perf.ratio > 0.75) { perf.ratio = Math.max(0.75, perf.ratio - 0.25); renderer.setPixelRatio(perf.ratio); }
+          perf.t = 0; perf.n = 0;
+        }
+      }
       if (!firstFrame) { firstFrame = true; setTimeout(() => setLoaded(true), 150); }
     });
 

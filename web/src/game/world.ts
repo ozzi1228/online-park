@@ -193,8 +193,8 @@ const barkTexture = () => {
   return t;
 };
 /** 나무 기둥: 울퉁불퉁 + 밑동은 뿌리처럼 갈라져 퍼짐 + 살짝 휨. uv는 실제 크기(1m ≈ 텍스처 반 장)에 맞춤 */
-function trunkGeo(r0: number, r1: number, h: number, seed: number) {
-  const g = new THREE.CylinderGeometry(r0, r1, h, 18, 10);
+function trunkGeo(r0: number, r1: number, h: number, seed: number, lod = false) {
+  const g = new THREE.CylinderGeometry(r0, r1, h, lod ? 9 : 18, lod ? 4 : 10);
   const pos = g.attributes.position, uv = g.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), t = y / h + 0.5, a = Math.atan2(z, x);
@@ -220,18 +220,19 @@ const sign = (text: string, w: number, bg: string, fg?: string) =>
   new THREE.Mesh(new THREE.PlaneGeometry(w, w * 160 / 512), new THREE.MeshToonMaterial({ map: signTex(text, bg, fg), gradientMap: toonGradient() }));
 
 // ---------- 나무 ----------
-type Spot = { c: THREE.Vector3; r: number; top: number; k: number };
-function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: number) {
+type Spot = { c: THREE.Vector3; r: number; top: number; k: number; grow?: number };
+/** lod: 맵 밖 먼 나무 — 줄기·가지를 성기게, 꽃 카드는 절반 장수에 크게 (멀리선 똑같이 꽉 차 보이고 그리는 양은 절반) */
+function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: number, lod = false) {
   // 거대한 왕벚나무: 굵은 줄기가 3m쯤에서 갈라져 옆으로 넓게 뻗음. 꽃 아랫면 ≈ 3m, 폭 ≈ 11m, 높이 ≈ 9m
   const g = new THREE.Group(); g.position.set(p.x, 0, p.z); g.scale.setScalar(p.s); g.rotation.y = (p.x * 13.7 + p.z * 7.1) % 6.28;
   let n = Math.floor(Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233)) * 2147483646) + 1;
   const rnd = () => ((n = (n * 16807) % 2147483647) / 2147483647);
   const FORK = 2.9;
-  g.add(at(barkPart(trunkGeo(0.34, 0.6, FORK + 0.3, n % 7)), 0, (FORK + 0.3) / 2, 0)); // 울퉁불퉁한 기둥 + 뿌리
+  g.add(at(barkPart(trunkGeo(0.34, 0.6, FORK + 0.3, n % 7, lod)), 0, (FORK + 0.3) / 2, 0)); // 울퉁불퉁한 기둥 + 뿌리
   const puffs: [THREE.Vector3, number][] = [];
   const up = new THREE.Vector3(0, 1, 0), base = new THREE.Vector3(0, FORK, 0);
   const limb = (dir: THREE.Vector3, len: number, r0: number) => {
-    const geo = new THREE.CylinderGeometry(r0 * 0.25, r0, len, 9, 3, true), uv = geo.attributes.uv;
+    const geo = new THREE.CylinderGeometry(r0 * 0.25, r0, len, lod ? 5 : 9, lod ? 1 : 3, true), uv = geo.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), uv.getY(i) * len * 0.5);
     const b = barkPart(geo, 0.02);
     b.quaternion.setFromUnitVectors(up, dir); b.position.copy(base).addScaledVector(dir, len / 2); g.add(b);
@@ -252,7 +253,7 @@ function cherryTree(p: Extract<Prop, { kind: "tree" }>, spots: Spot[], density: 
   }
   puffs.push([new THREE.Vector3(0, FORK + 4.2, 0), 2.1]);
   g.updateMatrixWorld(true);
-  for (const [c, r] of puffs) spots.push({ c: g.localToWorld(c.clone()), r: r * p.s, top: (FORK + 3) * p.s, k: density });
+  for (const [c, r] of puffs) spots.push({ c: g.localToWorld(c.clone()), r: r * p.s, top: (FORK + 3) * p.s, k: lod ? density / 2 : density, grow: lod ? Math.SQRT2 : 1 });
   return g;
 }
 
@@ -309,7 +310,7 @@ vCardN = normalize(mat3(cardM) * vec3(0.0, 0.0, 1.0));`);
       d.position.copy(s.c).addScaledVector(u, s.r * dep);
       d.lookAt(d.position.clone().add(u)); d.rotateZ(Math.random() * 6.28); d.rotateX((Math.random() - 0.5) * 1.2);
       // 꽃 크기는 일정하게, 대신 장수로 채움. 멀리 있는(카드 수를 줄인) 나무는 큼직하게 → 덩어리가 꽉 차 보임
-      d.scale.setScalar(Math.min(s.r * 0.6, 1.05) * (0.8 + Math.random() * 0.45) * (s.c.z < -38 ? 1.7 : 1)); // 강 건너편
+      d.scale.setScalar(Math.min(s.r * 0.6, 1.05) * (0.8 + Math.random() * 0.45) * (s.c.z < -38 ? 1.7 : 1) * (s.grow ?? 1)); // 강 건너편
       d.updateMatrix(); mesh.setMatrixAt(i, d.matrix);
       const l = THREE.MathUtils.clamp((u.dot(sunDir) * 0.5 + 0.5) * (0.4 + dep * 0.7) + (d.position.y - s.top) * 0.12, 0, 1);
       mesh.setColorAt(i, col.copy(cd).lerp(cl, Math.pow(l, 0.8) * (0.85 + Math.random() * 0.15)));
@@ -728,7 +729,7 @@ export function buildWorld(scene: THREE.Scene, q: Quality, hour?: number, dateMs
   for (const p of [...PROPS, ...BACKDROP_TREES]) {
     if (p.kind === "tree") {
       if (p.inside) statics.add(cherryTree(p, spots, q.cards));
-      else { const d = away(p.x, p.z); far.add(cherryTree(p, spots, q.cards * (d < 70 ? 0.6 : 0.4))); } // 멀어도 꽃은 풍성하게
+      else { const d = away(p.x, p.z); far.add(cherryTree(p, spots, q.cards * (d < 70 ? 0.6 : 0.4), true)); } // 멀어도 꽃은 풍성하게
     }
     else if (p.kind === "fountain") { fountain = createFountain(p, PROP_S, sky.uniforms); scene.add(fountain.group); }
     else buildProp(p, statics);
