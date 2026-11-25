@@ -95,6 +95,29 @@ export async function feed(userId: string, cat: number, saw: number[]) {
   return { ok: true, hearts: heartsOf(score, r), churuLeft: used[0].qty, jealous: await jealousy(userId, cat, saw) } as const;
 }
 
+/** 낚싯대 놀이 시작: 낚싯대를 한 번 씀 (0이 되면 부러짐) */
+export async function startPlay(userId: string, cat: number) {
+  const used = await db.update(inventory).set({ qty: sql`${inventory.qty} - 1` })
+    .where(and(eq(inventory.userId, userId), eq(inventory.item, "rod"), sql`${inventory.qty} > 0`)).returning({ qty: inventory.qty });
+  if (!used.length) return { ok: false, reason: "no_rod" } as const;
+  const { catBond: r } = await getSettings();
+  const [row] = await db.select().from(catBonds).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  const score = effective(row, r);
+  await save(userId, cat, score, { playAt: new Date() });
+  return { ok: true, usesLeft: used[0].qty, hearts: heartsOf(score, r) } as const;
+}
+
+/** 낚싯대 놀이 끝: 사냥에 성공했으면 호감도가 오름 (시작한 놀이 하나에 한 번만, 최소 몇 초는 놀았어야) */
+export async function finishPlay(userId: string, cat: number, success: boolean, saw: number[]) {
+  const { catBond: r } = await getSettings();
+  const [row] = await db.select().from(catBonds).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  const age = row?.playAt ? Date.now() - row.playAt.getTime() : -1;
+  if (!row || age < 4000 || age > 5 * 60_000) return { ok: false, reason: "no_play" } as const;
+  const score = clamp(effective(row, r) + (success ? r.playGain : 0));
+  await save(userId, cat, score, { playAt: null });
+  return { ok: true, hearts: heartsOf(score, r), jealous: success ? await jealousy(userId, cat, saw) : [] } as const;
+}
+
 /** 이름 지어 주기 (하트가 넉넉할 때만). 1~8자, 제어문자·꺾쇠 빼고 */
 export async function nameCat(userId: string, cat: number, raw: string) {
   const name = raw.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 8);

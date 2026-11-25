@@ -9,6 +9,17 @@ const draw = (key: string, w: number, h: number, paint: (x: CanvasRenderingConte
   return u ?? "";
 };
 
+/** 낚싯대: 대각선 막대 + 늘어진 줄 + 분홍 깃털 */
+export const rodIcon = () => draw("rod", 132, 84, (x) => {
+  x.lineCap = "round";
+  x.strokeStyle = "#c9a27a"; x.lineWidth = 5; x.beginPath(); x.moveTo(18, 76); x.lineTo(92, 12); x.stroke();
+  x.strokeStyle = "#7a6a62"; x.lineWidth = 1.5; x.beginPath(); x.moveTo(92, 12); x.quadraticCurveTo(112, 30, 106, 52); x.stroke();
+  ["#ff8fb3", "#ffffff", "#ffc2d4", "#fff0a8"].forEach((c, i) => {
+    x.save(); x.translate(106, 54); x.rotate(-0.6 + i * 0.4); x.fillStyle = c; x.strokeStyle = "#e7a3b8"; x.lineWidth = 1;
+    x.beginPath(); x.ellipse(0, 12, 4.5, 13, 0, 0, Math.PI * 2); x.fill(); x.stroke(); x.restore();
+  });
+});
+
 /** 츄르: 비스듬히 놓인 길쭉한 봉지 두 개 (분홍·노랑 띠, 뜯는 톱니 끝) */
 export const churuIcon = () => draw("churu", 132, 84, (x) => {
   const stick = (cx: number, cy: number, rot: number, band: string) => {

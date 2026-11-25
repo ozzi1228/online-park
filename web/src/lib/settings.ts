@@ -22,6 +22,8 @@ export const DEFAULTS = {
     matPrice: 10,         // 돗자리 (한 번 사면 계속 사용)
     churuPrice: 10,       // 츄르 한 묶음 (고양이 간식)
     churuPack: 3,         // 한 묶음에 든 츄르 수
+    rodPrice: 30,         // 고양이 낚싯대 장난감
+    rodUses: 100,         // 낚싯대는 이만큼 놀아 주면 부러짐
   },
   fountain: {
     coinPrice: 10,        // 분수에 동전 던지기 (그린)
@@ -60,6 +62,7 @@ export const DEFAULTS = {
     jealousMin: 50,       // 이 호감도 이상인(정든) 고양이만 질투함
     jealousRangeM: 8,     // 이 거리 안에서 본 고양이만
     jealousCooldownMin: 10, // 같은 고양이는 몇 분에 한 번만 질투
+    playGain: 5,          // 낚싯대로 놀아 줘서 사냥에 성공하면 오르는 호감도
   },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
@@ -104,6 +107,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       matPrice: { label: "돗자리 가격", unit: "그린", min: 0, max: 100000 },
       churuPrice: { label: "츄르 한 묶음 가격", unit: "그린", min: 0, max: 100000 },
       churuPack: { label: "츄르 한 묶음 개수", unit: "개", min: 1, max: 100 },
+      rodPrice: { label: "낚싯대 가격", unit: "그린", min: 0, max: 100000 },
+      rodUses: { label: "낚싯대가 부러지기까지 (놀아 주는 횟수)", unit: "번", min: 1, max: 10000 },
     },
   },
   fountain: {
@@ -158,6 +163,7 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       jealousMin: { label: "질투하는 고양이 (이 호감도 이상)", unit: "점", min: 0, max: 100 },
       jealousRangeM: { label: "질투하는 거리 (이 안에서 본 고양이)", unit: "m", min: 0, max: 100 },
       jealousCooldownMin: { label: "같은 고양이 질투 간격", unit: "분", min: 0, max: 1440 },
+      playGain: { label: "낚싯대 사냥 성공하면 오르는 호감도", unit: "점", min: 0, max: 50 },
     },
   },
   controls: {

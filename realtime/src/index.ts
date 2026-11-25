@@ -62,6 +62,8 @@ class ParkRoom extends Room<{ state: ParkState }> {
 
   private cats = new CatColony(); // 늘 공원에 있는 고양이들 (서로 다른 무늬)
   private petAt = new Map<string, number>(); private ticketAt = new Map<string, number>();
+  /** 고양이별 지금 낚싯대로 놀아 주는 사람 */
+  private playMate = new Map<number, string>();
   /** 고양이별로 1.5초 동안 모은 부르기 → 온다고 나온 사람 중 호감도가 가장 높은 사람에게 (같으면 무작위) */
   private calls = new Map<number, { sid: string; score: number; comes: boolean }[]>();
   private resolveCalls(cat: number) {
@@ -173,6 +175,18 @@ class ParkRoom extends Room<{ state: ParkState }> {
       if (list) { if (!list.some((c) => c.sid === client.sessionId)) list.push({ sid: client.sessionId, score: t.score, comes: t.comes }); return; }
       this.calls.set(t.cat, [{ sid: client.sessionId, score: t.score, comes: t.comes }]);
       this.clock.setTimeout(() => this.resolveCalls(t.cat), 1500);
+    },
+    // 낚싯대 놀이: 노는 사람이 단계(watch·crouch·pounce·roll·end)와 깃털 자리를 알려 줌 → 모두에게 같은 고양이
+    catPlay: (client: Client, m: { cat?: unknown; phase?: unknown; x?: unknown; z?: unknown }) => {
+      const p = this.state.players.get(client.sessionId), b = this.cats.brains.find((x) => x.s.look === m?.cat);
+      const ph = m?.phase, x = Number(m?.x), z = Number(m?.z);
+      if (!p || !b || !Number.isFinite(x) || !Number.isFinite(z) || Math.hypot(x - p.x, z - p.z) > 3 || Math.hypot(b.s.x - p.x, b.s.z - p.z) > 8) return;
+      const mine = this.playMate.get(m?.cat as number);
+      if (mine && mine !== client.sessionId && b.busy) return; // 다른 사람과 노는 중
+      if (ph === "watch" || ph === "crouch" || ph === "pounce" || ph === "roll" || ph === "end") {
+        if (ph === "end") this.playMate.delete(m?.cat as number); else this.playMate.set(m?.cat as number, client.sessionId);
+        b.play(ph, { x, z });
+      }
     },
     // 고양이를 쓰다듬었을 때의 반응 (반응 종류는 웹 서버가 호감도로 정해 줌. 화면에 보이는 것뿐이라 거리·횟수만 확인)
     catPet: (client: Client, m: { cat?: unknown; kind?: unknown }) => {

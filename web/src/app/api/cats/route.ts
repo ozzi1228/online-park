@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { logEvent, requestCtx } from "@/lib/log";
-import { callCat, feed, isCat, myBonds, nameCat, pet } from "@/lib/cat-bond";
+import { callCat, feed, finishPlay, isCat, myBonds, nameCat, pet, startPlay } from "@/lib/cat-bond";
 
 const session = (req: Request) => auth.api.getSession({ headers: req.headers });
 
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
-  const body = await req.json().catch(() => ({})) as { cat?: unknown; act?: unknown; name?: unknown; saw?: unknown };
+  const body = await req.json().catch(() => ({})) as { cat?: unknown; act?: unknown; name?: unknown; saw?: unknown; success?: unknown };
   if (!isCat(body.cat)) return new Response(null, { status: 400 });
   const ctx = { userId: s.user.id, isGuest: !!s.user.isAnonymous, sessionId: s.session.id, ...requestCtx(req.headers) };
   if (body.act === "pet") {
@@ -23,8 +23,18 @@ export async function POST(req: Request) {
     await logEvent("cat.pet", { cat: body.cat, ...r }, ctx);
     return Response.json(r);
   }
+  const saw = Array.isArray(body.saw) ? body.saw.filter(isCat).slice(0, 6) : [];
+  if (body.act === "play") {
+    const r = await startPlay(s.user.id, body.cat);
+    await logEvent(r.ok ? "cat.play" : "cat.play_refused", { cat: body.cat, ...(r.ok ? { usesLeft: r.usesLeft } : { reason: r.reason }) }, ctx);
+    return Response.json(r);
+  }
+  if (body.act === "played") {
+    const r = await finishPlay(s.user.id, body.cat, body.success === true, saw);
+    await logEvent("cat.played", { cat: body.cat, success: body.success === true, ...(r.ok ? { jealous: r.jealous } : { reason: r.reason }) }, ctx);
+    return Response.json(r);
+  }
   if (body.act === "feed") {
-    const saw = Array.isArray(body.saw) ? body.saw.filter(isCat).slice(0, 6) : [];
     const r = await feed(s.user.id, body.cat, saw);
     await logEvent(r.ok ? "cat.fed" : "cat.feed_refused", { cat: body.cat, ...(r.ok ? { churuLeft: r.churuLeft, jealous: r.jealous } : { reason: r.reason }) }, ctx);
     return Response.json(r);

@@ -4,7 +4,9 @@ import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 /** flee = 놀라서 후다닥, content = 쓰다듬어지며 눈 지그시, rub = 다리에 부비부비, come = 부르면 옴, eat = 츄르 할짝, follow = 졸졸 따라옴 (사람에게 반응) */
-export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump" | "flee" | "content" | "rub" | "come" | "eat" | "follow";
+export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump" | "flee" | "content" | "rub" | "come" | "eat" | "follow" | "watch" | "crouch" | "roll";
+/** 낚싯대 놀이 단계: watch = 깃털을 눈으로 좇음, crouch = 엉덩이 씰룩, pounce = 덮침, roll = 신나서 뒹굴, end = 그만 */
+export type PlayPhase = "watch" | "crouch" | "pounce" | "roll" | "end";
 /** huff = 질투: 흘끗 보고 꼬리 휙, 가 버림 */
 export type CatReaction = "flee" | "content" | "rub" | "come" | "eat" | "huff";
 export type CatConfig = { enabled: number; count: number };
@@ -20,6 +22,8 @@ type Act =
   | { k: "flee"; dur: number; who: P; speed?: number }
   | { k: "eat"; dur: number; who: P }
   | { k: "follow"; dur: number; who: P }
+  | { k: "watch" | "crouch"; dur: number; at: P }
+  | { k: "roll"; dur: number }
   | { k: "content"; dur: number; who: P }
   | { k: "rub"; dur: number; who: P; a: number }
   | { k: "come"; dur: number; who: P; near?: number; next?: Act[] };
@@ -74,7 +78,22 @@ export class CatBrain {
     this.cur = null;
   }
   /** 지금 사람과 하는 중인지 (쓰다듬기 반응 중엔 다른 사람이 끼어들지 않게) */
-  get busy() { const k = this.cur?.k; return k === "content" || k === "rub" || k === "come" || k === "eat" || this.calledUntil > this.t; }
+  get busy() { const k = this.cur?.k; return k === "content" || k === "rub" || k === "come" || k === "eat" || k === "watch" || k === "crouch" || k === "roll" || this.playUntil > this.t || this.calledUntil > this.t; }
+  private playUntil = 0;
+  /** 낚싯대 놀이: 노는 사람이 단계마다 알려 줌 (at = 깃털 자리). 놀이 중엔 다른 사람이 끼어들지 못함 */
+  play(phase: PlayPhase, at: P) {
+    const s = this.s, a = this.cur;
+    this.playUntil = phase === "end" ? 0 : this.t + 6; // 알림이 끊기면 6초 뒤 저절로 놀이 끝
+    if (phase === "watch" && a && (a.k === "watch" || a.k === "crouch")) { a.at = at; if (a.k === "crouch") this.cur = { k: "watch", dur: 30, at }; return; }
+    this.queue = [];
+    if (this.onRail || this.onBench) this.queue.push(this.hopDown());
+    if (phase === "watch") this.queue.push({ k: "watch", dur: 30, at });
+    else if (phase === "crouch") this.queue.push({ k: "crouch", dur: 30, at });
+    else if (phase === "pounce") this.queue.push({ k: "jump", tx: at.x - Math.sin(s.yaw) * 0.15, ty: groundY(at.x, at.z), tz: at.z - Math.cos(s.yaw) * 0.15, dur: 0.4 }, { k: "watch", dur: 30, at });
+    else if (phase === "roll") this.queue.push({ k: "roll", dur: 3.4 }, { k: "sit", dur: 2 });
+    else this.queue.push({ k: "leave" });
+    this.cur = null;
+  }
   /** 부름을 받고 와서 앉아 있는 동안 (다른 사람이 데려가지 못하게) */
   private calledUntil = 0;
   private hopDown(): Act {
@@ -170,6 +189,15 @@ export class CatBrain {
         if (this.actT > a.dur) this.cur = null;
         break;
       }
+      case "watch": case "crouch": { // 깃털을 좇아 고개를 돌리고, 멀면 살금살금 다가감 (1m 쯤까지)
+        s.lx = a.at.x; s.lz = a.at.z;
+        const dx = a.at.x - s.x, dz = a.at.z - s.z, dist = Math.hypot(dx, dz);
+        s.yaw = turn(s.yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * (a.k === "crouch" ? 3 : 5)));
+        if (dist > 1.3 && a.k === "watch") { const r = move(s.x, s.z, s.x + dx / dist * 0.9 * dt, s.z + dz / dist * 0.9 * dt, CAT_R, COLLIDERS); s.x = r.x; s.z = r.z; s.y = groundY(s.x, s.z); }
+        if (this.actT > a.dur || this.playUntil < this.t) { this.cur = null; this.queue = []; }
+        break;
+      }
+      case "roll": if (this.actT > a.dur) this.cur = null; break;
       case "content": case "eat": s.lx = a.who.x; s.lz = a.who.z; s.yaw = turn(s.yaw, Math.atan2(a.who.x - s.x, a.who.z - s.z), 1 - Math.exp(-dt * 6)); if (this.actT > a.dur) this.cur = null; break;
       case "follow": { // 1m 쯤 떨어져서 졸졸 (멀어지면 따라가고, 가까우면 서서 봄)
         const dx = a.who.x - s.x, dz = a.who.z - s.z, dist = Math.hypot(dx, dz);

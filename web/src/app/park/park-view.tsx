@@ -8,7 +8,7 @@ import { CATCH_HIGH, CatchPetal } from "@/game/catch-petal";
 import { animateChar, makeChar, playGesture, type Mode } from "@/game/character";
 import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
-import { CatColony, type CatReaction, type CatState } from "@/game/cat-brain";
+import { CatColony, type CatReaction, type CatState, type PlayPhase } from "@/game/cat-brain";
 import { Input, JOY_R, type Tap } from "@/game/controls";
 import { createMinimap } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
@@ -20,7 +20,8 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { LoadingScreen } from "./loading-screen";
-import { churuIcon } from "@/game/item-icons";
+import { churuIcon, rodIcon } from "@/game/item-icons";
+import { CatToy } from "@/game/cat-toy";
 import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
@@ -131,6 +132,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [treeMode, setTreeMode] = useState<"pick" | "ready" | null>(null); // 사다리 위에서 달 자리 고르는 중
   /** 동전 게임 조준 중 (화면을 당겼다 놓으면 튕김) */
   const [coinAim, setCoinAim] = useState(false);
+  /** 낚싯대 놀이 화면: 흥미 게이지(0~1)·단계·잡은 수 */
+  const [playUi, setPlayUi] = useState<{ interest: number; phase: "watch" | "crouch"; catches: number } | null>(null);
+  const toyDrag = useRef({ on: false, x: 0, dx: 0, stop: false });
   const aim = useRef({ on: false, sx: 0, sy: 0, x: 0, y: 0, shoot: false, cancel: false });
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
   const treeApi = useRef<{ start: (strokes: Strokes, covered: boolean) => void; confirm: () => void; cancel: () => void; refresh: () => void } | null>(null);
@@ -191,6 +195,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const wake = () => audio.start();
     window.addEventListener("pointerdown", wake); window.addEventListener("keydown", wake);
     const coin = new CoinGame(FT); scene.add(coin.group);
+    const toy = new CatToy(); scene.add(toy.group);
     // 동전 게임 카메라: 조준할 땐 내 뒤 위에서 맨 위 접시를 보고, 날아갈 땐 옆에서 동전을 따라감
     const coinCam = { on: false, eye: new THREE.Vector3(), look: new THREE.Vector3() };
     const refreshTree = async () => {
@@ -216,7 +221,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
     const st = { sitting: false, onMat: false, matColor: "pink" as MatColor,
       /** 돗자리에 앉아 있으면(내 것이든 같이 앉았든) 그 돗자리 가운데 → 카메라가 뒤에서 둘을 같이 보여 줌 */
-      matAt: null as { x: number; z: number } | null, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
+      matAt: null as { x: number; z: number } | null,
+      /** 낚싯대 놀이 중: 나와 고양이 사이 (카메라가 뒤에서 둘을 같이 보여 줌) */
+      playAt: null as { x: number; z: number } | null, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
       /** 정자에 드러누움 (누운 몸 방향) */
       lying: false, lieYaw: 0,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
@@ -249,8 +256,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (!st.lying) look.set(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       firstPerson = camBack < 0.35;
       // 돗자리: 돗자리 가운데 뒤 3.4m·위에서 내려다봄 (끌면 돗자리 둘레를 돎). 나무에 막히면 당겨 옴
-      if (st.matAt) lastMatAt = st.matAt;
-      matView += ((st.sitting && st.matAt && !st.lying ? 1 : 0) - matView) * 0.07;
+      if (st.playAt) lastMatAt = st.playAt; else if (st.matAt) lastMatAt = st.matAt;
+      matView += (((st.sitting && st.matAt && !st.lying) || st.playAt ? 1 : 0) - matView) * 0.07;
       if (matView > 0.001) {
         const c = lastMatAt, D = 3.4, d = THREE.MathUtils.clamp(cameraRoom(c.x, c.z, -fx, -fz, D + 0.4) - 0.3, 1.4, D), f = matView * matView * (3 - 2 * matView);
         // 기본은 돗자리를 내려다보는 각도, 위아래로 끌면(pitch) 그 자리에서 하늘·벚꽃 쪽이나 발밑으로 고개를 듦
@@ -584,6 +591,82 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       refreshMe.current(); refreshBonds.current();
     };
+    // ---------- 낚싯대 놀이: 좌우로 끌어 깃털을 흔들면 흥미가 차오름 → 엉덩이 씰룩일 때 깃털을 멈추면 덮침 → 3번 잡으면 뒹굴뒹굴 ----------
+    // ponytail: 흥미가 오르내리는 빠르기는 코드 값 (손맛 조정용). 운영하며 바꿀 일이 생기면 관리자 설정으로
+    const PLAY = { goodMin: 0.35, goodMax: 2.6, rise: 0.32, tooFast: 0.35, idle: 0.14, still: 0.12, stillNeed: 0.35, crouchMax: 2.6, catches: 3 };
+    let play: null | { v: CatView; cat: number; interest: number; phase: "watch" | "crouch"; phaseT: number; still: number; catches: number; t: number;
+      off: number; lastOff: number; speed: number; idleT: number; sentAt: number; done: boolean; boost: number } = null;
+    const featherAt = () => { // 내 앞 1.3m, 좌우로 off 만큼
+      const f = { x: Math.sin(yaw), z: Math.cos(yaw) }, r = { x: -Math.cos(yaw), z: Math.sin(yaw) }, o = play?.off ?? 0;
+      return new THREE.Vector3(pos.x + f.x * 1.3 + r.x * o, footY + 0.05, pos.z + f.z * 1.3 + r.z * o);
+    };
+    const sendPlay = (phase: PlayPhase) => {
+      if (!play) return;
+      const at = featherAt();
+      if (mp.online) mp.catPlay(play.cat, phase, at.x, at.z); else soloCats.brains.find((b) => b.s.look === play!.cat)?.play(phase, { x: at.x, z: at.z });
+    };
+    const startPlay = async (v: CatView) => {
+      setMenu(null);
+      if (catDist(v) > 4) { sayRef.current("조금 더 가까이 가 볼까요?"); return; }
+      const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: v.catLook, act: "play" }) })
+        .then((x) => x.json() as Promise<{ ok: boolean; usesLeft?: number; hearts?: number }>).catch(() => null);
+      if (!r?.ok) { sayRef.current("낚싯대가 없어요"); return; }
+      if (st.sitting) stand();
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 0.95; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
+      // 친한 고양이일수록 흥미가 빨리 참 (하트 하나에 15%씩)
+      play = { v, cat: v.catLook, interest: 0.15, phase: "watch", phaseT: 0, still: 0, catches: 0, t: 0, off: 0, lastOff: 0, speed: 0, idleT: 0, sentAt: 0, done: false, boost: 1 + (r.hearts ?? 0) * 0.15 };
+      toy.visible = true; toyDrag.current = { on: false, x: 0, dx: 0, stop: false };
+      setPlayUi({ interest: 0.15, phase: "watch", catches: 0 });
+      sendPlay("watch");
+      sayRef.current(r.usesLeft === 0 ? "낚싯대가 많이 낡았어요… 이번이 마지막일지도" : "좌우로 끌어서 깃털을 살랑살랑 흔들어 봐요");
+      refreshMe.current();
+    };
+    const endPlay = async (success: boolean, why: string) => {
+      if (!play || play.done) return;
+      const p = play; p.done = true;
+      sendPlay(success ? "roll" : "end");
+      toy.visible = false; setPlayUi(null); play = null; st.playAt = null; pitch = 0; camYaw = yaw;
+      const saw = catViews.filter((o) => o !== p.v && o.pos && catDist(o) < 8).map((o) => o.catLook);
+      const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: p.cat, act: "played", success, saw }) })
+        .then((x) => x.json() as Promise<{ ok: boolean; jealous?: number[] }>).catch(() => null);
+      const name = bondsRef.current?.cats[p.cat]?.name;
+      sayRef.current(success ? `${name ? nameGa(name) : "고양이가"} 신나서 데굴데굴 뒹굴어요 ♥` : why);
+      if (success) { audio.chime(); for (const j of r?.jealous ?? []) { if (mp.online) mp.catPet(j, "huff"); else soloCats.brains.find((b) => b.s.look === j)?.react("huff", pos); } }
+      if ((meRef.current?.items.rod ?? 1) <= 0) setTimeout(() => sayRef.current("뚝! 낚싯대가 부러졌어요 (매점에서 새로 살 수 있어요)"), 2600);
+      refreshMe.current(); refreshBonds.current();
+    };
+    const updatePlay = (dt: number, walking: boolean) => {
+      if (!play || play.done || play.catches >= PLAY.catches) return; // 세 번 잡으면 뒹굴기만 (다시 씰룩이지 않게)
+      const p = play, d = toyDrag.current;
+      if (walking || d.stop || !p.v.pos || catDist(p.v) > 9) { void endPlay(false, d.stop ? "낚싯대를 내려놓았어요" : "고양이와 놀기를 그만뒀어요"); return; }
+      p.t += dt; p.phaseT += dt;
+      p.off = THREE.MathUtils.clamp(p.off + d.dx, -1.1, 1.1); d.dx = 0;
+      // 깃털 빠르기: 끄는 신호가 매 장면마다 오지는 않아서 순간값은 들쭉날쭉 → 0.2초쯤으로 고르게
+      p.speed += (Math.abs(p.off - p.lastOff) / Math.max(dt, 1e-3) - p.speed) * (1 - Math.exp(-dt * 5)); p.lastOff = p.off;
+      const speed = p.speed;
+      if (p.phase === "watch") {
+        p.idleT = speed > PLAY.goodMin ? 0 : p.idleT + dt;
+        if (speed > PLAY.goodMax) p.interest -= PLAY.tooFast * dt;                       // 너무 마구 흔들면 시큰둥
+        else if (speed > PLAY.goodMin) p.interest += PLAY.rise * p.boost * dt;              // 살랑살랑 → 흥미 쑥
+        else if (p.idleT > 0.5) p.interest -= PLAY.idle * dt;                              // 한참 가만히 두면 식음 (흔들다 방향 바꾸는 순간은 괜찮음)
+        if (p.interest >= 1) { p.interest = 1; p.phase = "crouch"; p.phaseT = 0; p.still = 0; sendPlay("crouch"); sayRef.current("엉덩이 씰룩씰룩! 지금 깃털을 멈춰요!"); }
+        else if (p.interest <= 0 && p.t > 4) { void endPlay(false, "흥미를 잃고 가 버렸어요"); return; }
+      } else {
+        p.still = speed < PLAY.still ? p.still + dt : 0;
+        if (p.still >= PLAY.stillNeed) { // 멈춘 깃털을 덮침!
+          sendPlay("pounce"); audio.pop(); p.catches++;
+          sayRef.current(p.catches >= PLAY.catches ? "덥석! 잡았다!" : `덥석! (${p.catches}/${PLAY.catches})`);
+          if (p.catches >= PLAY.catches) { setTimeout(() => void endPlay(true, ""), 700); p.phase = "watch"; p.interest = 1; }
+          else { p.phase = "watch"; p.interest = 0.55; p.phaseT = 0; }
+        } else if (p.phaseT > PLAY.crouchMax) { p.phase = "watch"; p.interest = 0.45; p.phaseT = 0; sendPlay("watch"); sayRef.current("놓쳤어요… 다시 살랑살랑"); } // 계속 흔들면 타이밍을 놓침
+      }
+      p.interest = Math.max(0, p.interest);
+      if (p.t - p.sentAt > 0.12 && p.phase === "watch") { p.sentAt = p.t; sendPlay("watch"); } // 깃털 자리를 고양이에게 계속 알려 줌
+      const hand = new THREE.Vector3(pos.x + Math.sin(yaw) * 0.3 - Math.cos(yaw) * 0.18, footY + 1.0, pos.z + Math.cos(yaw) * 0.3 + Math.sin(yaw) * 0.18);
+      toy.set(hand, featherAt(), dt);
+      const cp = p.v.pos!; st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
+      if (Math.floor(p.t * 10) !== Math.floor((p.t - dt) * 10)) setPlayUi({ interest: p.interest, phase: p.phase, catches: p.catches });
+    };
     const catTap = (v: CatView, tap: Tap) => {
       if (!tap.menu && !coarse) { void petCat(v); return; } // PC 좌클릭 = 바로 쓰다듬기
       const b = bondsRef.current, me = b?.cats[v.catLook], hearts = me?.hearts ?? 0, canName = !!b && hearts >= b.rules.nameHearts;
@@ -592,6 +675,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const churu = meRef.current?.items.churu ?? 0;
       items.push({ label: churu ? `츄르 주기 (${churu}개)` : "츄르가 없어요 (매점에서 살 수 있어요)", tile: churuIcon(), badge: String(churu), dim: !churu,
         run: churu ? () => void feedCat(v) : () => sayRef.current("츄르는 매점에서 살 수 있어요") });
+      const rod = meRef.current?.items.rod ?? 0;
+      items.push({ label: rod ? `낚싯대로 놀아 주기 (${rod}번 남음)` : "낚싯대가 없어요 (매점에서 살 수 있어요)", tile: rodIcon(), badge: String(rod), dim: !rod,
+        run: rod ? () => void startPlay(v) : () => sayRef.current("낚싯대는 매점에서 살 수 있어요") });
       items.push(canName
         ? { label: me?.name ? "이름 바꿔 주기" : "이름 지어 주기", run: () => { setMenu(null); setNameFor({ cat: v.catLook, name: me?.name ?? "" }); } }
         : { label: `하트 ${b?.rules.nameHearts ?? 3}개가 되면 이름을 지어 줄 수 있어요` });
@@ -760,7 +846,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       } else {
         if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
         pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
-        if (!st.faceCam) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도)
+        if (!st.faceCam && !st.playAt) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도). 낚싯대 놀이 중엔 몸은 고양이 쪽, 카메라만 비스듬히
         // 보는 방향 기준 앞/옆으로 걸음
         const amount = Math.min(1, Math.abs(forward));
         walking = amount > 0.05;
@@ -816,6 +902,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         animateChar(me, t, dt, mode);
       }
       coin.update(dt);
+      updatePlay(dt, walking);
 
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
@@ -988,6 +1075,25 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {(panel || treeDetail) && ( // 창 바깥: 누르면 닫힘 (모바일은 바깥 터치, PC는 바깥 클릭)
         <div aria-hidden className="absolute inset-0 z-10 bg-black/10" onPointerDown={(e) => { e.preventDefault(); closePanels(); }} />
+      )}
+      {playUi && (
+        <div className="absolute inset-0 z-20 touch-none select-none"
+          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} toyDrag.current.on = true; toyDrag.current.x = e.clientX; }}
+          onPointerMove={(e) => { const d = toyDrag.current; if (!d.on) return; d.dx += (e.clientX - d.x) / (innerWidth * 0.35); d.x = e.clientX; }}
+          onPointerUp={() => { toyDrag.current.on = false; }} onPointerCancel={() => { toyDrag.current.on = false; }}>
+          <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit max-w-[22rem] flex-col items-center gap-1.5 rounded-2xl bg-cream/90 px-4 py-2 text-center text-sm">
+            <p>{playUi.phase === "crouch" ? "엉덩이 씰룩씰룩! 지금 깃털을 멈춰요!" : "좌우로 끌어서 깃털을 살랑살랑 · 너무 마구 흔들면 시큰둥해요"}</p>
+            <div className="flex w-56 items-center gap-2 text-xs">
+              <span className="shrink-0 opacity-70">흥미</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10">
+                <div className={`h-full rounded-full transition-[width] duration-100 ${playUi.phase === "crouch" ? "bg-[#ff5a5f]" : "bg-sakura"}`} style={{ width: `${Math.round(playUi.interest * 100)}%` }} />
+              </div>
+              <span className="shrink-0 tabular-nums opacity-70">🐾 {playUi.catches}/3</span>
+            </div>
+          </div>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { toyDrag.current.stop = true; setTimeout(() => setPlayUi(null), 400); }}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
+        </div>
       )}
       {coinAim && (
         <div className="absolute inset-0 z-20 touch-none select-none"

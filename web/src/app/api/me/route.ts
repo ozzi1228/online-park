@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     isGuest,
     green: await greenBalance(s.user.id),
     items: await myItems(s.user.id),
-    shop: { notebookPrice: shop.notebookPrice, notebookSheets: shop.notebookSheets, matPrice: shop.matPrice, churuPrice: shop.churuPrice, churuPack: shop.churuPack },
+    shop: { notebookPrice: shop.notebookPrice, notebookSheets: shop.notebookSheets, matPrice: shop.matPrice, churuPrice: shop.churuPrice, churuPack: shop.churuPack, rodPrice: shop.rodPrice, rodUses: shop.rodUses },
     charge: await chargeOptions(),
     paymentsReady: paymentsReady(),
     fountainPrice: fountain.coinPrice,
