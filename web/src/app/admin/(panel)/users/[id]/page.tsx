@@ -10,13 +10,14 @@ import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
 import { DeleteTreeNoteButton, DeleteUserButton } from "./delete-button";
+import { forceLogout, grantGreen } from "./actions";
 
 // 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 운세꽃잎, 행동 타임라인)
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
 
 export default async function UserDetail({ params, searchParams }: PageProps<"/admin/users/[id]">) {
   await connection();
-  const { id } = await params, treeDeleted = !!(await searchParams).treeDeleted;
+  const { id } = await params, q = await searchParams, treeDeleted = !!q.treeDeleted, granted = q.granted, loggedOut = q.loggedOut;
   const [u] = await db.select().from(user).where(eq(user.id, id));
   if (!u) notFound();
   // 비회원 시절 ID도 같이 (회원 전환 기록으로 연결)
@@ -39,10 +40,16 @@ export default async function UserDetail({ params, searchParams }: PageProps<"/a
     <div className="flex flex-col gap-4">
       <Link href="/admin/users" className="text-sm opacity-60 hover:underline">← 유저 목록</Link>
       {treeDeleted && <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">소원 쪽지를 삭제하고 노트 1장을 돌려줬어요</p>}
+      {granted && <p role="status" className={`rounded-xl px-4 py-2 text-sm ${granted === "bad" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{granted === "bad" ? "그린 금액을 확인해 주세요 (0이 아닌 정수)" : `그린 ${granted}을(를) 반영했어요`}</p>}
+      {loggedOut && <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">로그인 세션 {loggedOut}개를 끊었어요 · 공원에 있었다면 30초 안에 첫 화면으로 나가요</p>}
       <h1 className="flex flex-wrap items-center gap-2 text-2xl">
         {u.nickname ?? "(캐릭터 미정)"}
         <span className={`rounded px-2 text-sm ${u.isAnonymous ? "bg-black/5" : "bg-sakura/20"}`}>{u.isAnonymous ? "비회원" : "회원"}</span>
-        <span className="ml-auto"><DeleteUserButton id={u.id} name={u.nickname ?? u.name} /></span>
+        <span className="ml-auto flex gap-2">
+          <form action={forceLogout}><input type="hidden" name="id" value={u.id} />
+            <button className="rounded-full px-4 py-1.5 text-sm ring-1 ring-black/10 hover:bg-black/5">강제 로그아웃</button></form>
+          <DeleteUserButton id={u.id} name={u.nickname ?? u.name} />
+        </span>
       </h1>
       <section className="grid gap-3 md:grid-cols-3">
         <div className={`${box} text-sm`}>
@@ -59,6 +66,12 @@ export default async function UserDetail({ params, searchParams }: PageProps<"/a
         <div className={box}>
           <p className="text-xs opacity-60">보유 그린</p>
           <p className="text-2xl tabular-nums">{balance.toLocaleString("ko-KR")}</p>
+          <form action={grantGreen} className="mt-2 flex gap-1 text-sm">
+            <input type="hidden" name="id" value={u.id} />
+            <input name="amount" type="number" step="1" required placeholder="+100 / -50" aria-label="넣을 그린 (빼려면 음수)" className="w-24 rounded-lg bg-cream px-2 py-1 ring-1 ring-black/10" />
+            <input name="memo" placeholder="메모 (선택)" aria-label="메모" className="min-w-0 flex-1 rounded-lg bg-cream px-2 py-1 ring-1 ring-black/10" />
+            <button className="rounded-full bg-sakura px-3 py-1 text-white">넣기</button>
+          </form>
           <ul className="mt-2 max-h-48 overflow-y-auto text-xs">
             {ledger.map((r) => (
               <li key={r.id} className="flex justify-between border-t border-black/5 py-1">

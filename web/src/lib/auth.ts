@@ -79,8 +79,8 @@ export const auth = betterAuth({
         await db.transaction(async (tx) => {
           await tx.update(schema.greenLedger).set({ userId: member.id })
             .where(and(eq(schema.greenLedger.userId, guest.id), ne(schema.greenLedger.reason, "signup_bonus")));
-          await tx.execute(sql`insert into inventory (user_id, item, qty) select ${member.id}, item, qty from inventory where user_id = ${guest.id}
-            on conflict (user_id, item) do update set qty = inventory.qty + excluded.qty`);
+          await tx.execute(sql`insert into inventory (user_id, item, qty, variant) select ${member.id}, item, qty, variant from inventory where user_id = ${guest.id}
+            on conflict (user_id, item) do update set qty = inventory.qty + excluded.qty, variant = coalesce(inventory.variant, excluded.variant)`);
           await tx.delete(schema.inventory).where(eq(schema.inventory.userId, guest.id));
           await tx.update(schema.notes).set({ authorId: member.id }).where(eq(schema.notes.authorId, guest.id));
           await tx.update(schema.notes).set({ recipientId: member.id }).where(eq(schema.notes.recipientId, guest.id));

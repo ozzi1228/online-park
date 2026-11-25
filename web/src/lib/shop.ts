@@ -4,6 +4,7 @@ import { and, eq, sql, sum } from "drizzle-orm";
 import { db } from "@/db";
 import { greenLedger, inventory } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
+import { MAT_COLORS, type MatColor } from "@/lib/mat-colors";
 
 export const ITEMS = ["notebook", "mat"] as const;
 export type Item = (typeof ITEMS)[number];
@@ -11,14 +12,15 @@ export type Item = (typeof ITEMS)[number];
 export async function myItems(userId: string) {
   const rows = await db.select().from(inventory).where(eq(inventory.userId, userId));
   const q = (k: string) => rows.find((r) => r.item === k)?.qty ?? 0;
-  return { noteSheets: q("note_sheet"), mat: q("mat") > 0 };
+  const mat = rows.find((r) => r.item === "mat");
+  return { noteSheets: q("note_sheet"), mat: (mat?.qty ?? 0) > 0, matColor: (MAT_COLORS.find((c) => c === mat?.variant) ?? "pink") as MatColor };
 }
 
 export type BuyResult =
   | { ok: true; balance: number; items: Awaited<ReturnType<typeof myItems>>; price: number }
   | { ok: false; reason: "insufficient" | "owned"; balance: number };
 
-export async function buy(userId: string, item: Item): Promise<BuyResult> {
+export async function buy(userId: string, item: Item, color: MatColor = "pink"): Promise<BuyResult> {
   const { shop } = await getSettings();
   const price = item === "notebook" ? shop.notebookPrice : shop.matPrice;
   const result = await db.transaction(async (tx) => {
@@ -32,8 +34,9 @@ export async function buy(userId: string, item: Item): Promise<BuyResult> {
     if (balance < price) return { ok: false, reason: "insufficient", balance } as const;
     await tx.insert(greenLedger).values({ userId, amount: -price, reason: `shop.${item}`, refId: randomUUID() });
     const key = item === "notebook" ? "note_sheet" : "mat", add = item === "notebook" ? shop.notebookSheets : 1;
-    await tx.insert(inventory).values({ userId, item: key, qty: add })
-      .onConflictDoUpdate({ target: [inventory.userId, inventory.item], set: { qty: sql`${inventory.qty} + ${add}` } });
+    const variant = item === "mat" ? color : null;
+    await tx.insert(inventory).values({ userId, item: key, qty: add, variant })
+      .onConflictDoUpdate({ target: [inventory.userId, inventory.item], set: { qty: sql`${inventory.qty} + ${add}`, ...(variant ? { variant } : {}) } });
     return { ok: true, balance: balance - price } as const;
   });
   return result.ok ? { ...result, price, items: await myItems(userId) } : result;

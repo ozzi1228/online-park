@@ -1,10 +1,11 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { eventLog, greenLedger, inquiries, inventory, notes, orders, petalCatches, user } from "@/db/schema";
+import { eventLog, greenLedger, inquiries, inventory, notes, orders, petalCatches, session, user } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin";
 import { logEvent, requestCtx } from "@/lib/log";
 
@@ -47,4 +48,27 @@ export async function deleteTreeNote(form: FormData) {
   });
   if (removed) await logEvent("admin.tree.note_deleted", { noteId: id, userId: removed.authorId, sheetsReturned: 1 }, requestCtx(await headers()));
   redirect(`${back}${back.includes("?") ? "&" : "?"}treeDeleted=1`);
+}
+
+/** 관리자가 그린 넣기(빼기는 음수). 원장에 admin_grant 로 남음 */
+export async function grantGreen(form: FormData) {
+  await requireAdmin();
+  const id = String(form.get("id") ?? ""), amount = Math.trunc(Number(form.get("amount"))), memo = String(form.get("memo") ?? "").trim().slice(0, 100);
+  const back = `/admin/users/${encodeURIComponent(id)}`;
+  if (!id || !Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1_000_000) redirect(`${back}?granted=bad`);
+  const [u] = await db.select({ id: user.id }).from(user).where(eq(user.id, id));
+  if (!u) redirect("/admin/users");
+  await db.insert(greenLedger).values({ userId: id, amount, reason: "admin_grant", refId: randomUUID() });
+  await logEvent("admin.green.granted", { userId: id, amount, memo }, requestCtx(await headers()));
+  redirect(`${back}?granted=${amount}`);
+}
+
+/** 강제 로그아웃: 그 사람(비회원 시절 ID 포함)의 로그인 세션을 모두 지움. 공원에 있으면 30초 안에 첫 화면으로 나감 */
+export async function forceLogout(form: FormData) {
+  await requireAdmin();
+  const id = String(form.get("id") ?? "");
+  if (!id) redirect("/admin/users");
+  const n = (await db.delete(session).where(eq(session.userId, id)).returning({ id: session.id })).length;
+  await logEvent("admin.user.logged_out", { userId: id, sessions: n }, requestCtx(await headers()));
+  redirect(`/admin/users/${encodeURIComponent(id)}?loggedOut=${n}`);
 }

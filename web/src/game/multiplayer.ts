@@ -2,7 +2,7 @@
 import { Client, type Room } from "@colyseus/sdk";
 import * as THREE from "three";
 import { animateChar, disposeChar, isGesture, makeChar, playGesture, type Character, type Gesture } from "./character";
-import { makeMat, placeMat, secondSeat } from "./mat";
+import { makeMat, matColorOf, paintMat, placeMat, secondSeat } from "./mat";
 import { PLAYER_R, benchSeatAt, groundY, type Collider } from "./park-map";
 import type { CatState } from "./cat-brain";
 import { PRESETS } from "./presets";
@@ -121,12 +121,12 @@ export class Multiplayer {
       if (seat) { o.char.root.position.set(seat.x, seat.y, seat.z); o.char.root.rotation.y = seat.yaw; }
       else { o.char.root.position.set(o.x, y, o.z); o.char.root.rotation.y = o.yaw; }
       o.label.position.set(seat?.x ?? o.x, (seat?.y ?? y) + o.char.top + 0.3, seat?.z ?? o.z);
-      const sitting = p.anim === "sit" || p.anim === "sitmat" || p.anim === "sitbench";
+      const matColor = matColorOf(p.anim), sitting = p.anim === "sit" || !!matColor || p.anim === "sitbench";
       animateChar(o.char, t, dt, p.walking || moving ? "walk" : p.anim === "lie" ? "lie" : sitting ? "sit" : p.anim === "wish" ? "wish" : "idle");
       // 돗자리 깔고 앉은 사람은 돗자리도 보임
-      if (p.anim === "sitmat" && !moving) {
-        if (!o.mat) { o.mat = makeMat(); this.scene.add(o.mat); }
-        o.mat.visible = true; placeMat(o.mat, p.x, p.z, p.yaw, y + 0.02);
+      if (matColor && !moving) {
+        if (!o.mat) { o.mat = makeMat(matColor); this.scene.add(o.mat); }
+        paintMat(o.mat, matColor); o.mat.visible = true; placeMat(o.mat, p.x, p.z, p.yaw, y + 0.02);
       } else if (o.mat) o.mat.visible = false;
     });
     for (const [id, o] of this.others) if (!seen.has(id)) this.remove(id, o);
@@ -171,7 +171,7 @@ export class Multiplayer {
     const room = this.room;
     if (!room?.state.players) return out;
     room.state.players.forEach((p, id) => {
-      if (id === room.sessionId || p.anim !== "sitmat") return;
+      if (id === room.sessionId || !matColorOf(p.anim)) return;
       const seat = secondSeat(p.x, p.z, p.yaw);
       let taken = false;
       room.state.players.forEach((q, qid) => { if (qid !== id && Math.hypot(q.x - seat.x, q.z - seat.z) < 0.45) taken = true; });
@@ -185,7 +185,7 @@ export class Multiplayer {
   sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
-  sendAnim(a: "idle" | "sit" | "sitmat" | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }
+  sendAnim(a: "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }
 
   dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
 }

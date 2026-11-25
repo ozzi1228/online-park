@@ -128,6 +128,7 @@ export const inventory = pgTable("inventory", {
   userId: text().notNull(),
   item: text().notNull(),             // "note_sheet" | "mat"
   qty: integer().notNull().default(0),
+  variant: text(),                    // 돗자리 색 등 (lib/mat-colors)
   updatedAt: now().$onUpdate(() => new Date()),
 }, (t) => [uniqueIndex().on(t.userId, t.item)]);
 

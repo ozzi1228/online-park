@@ -15,3 +15,21 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
+
+/* 공원 로딩 화면 (꽃잎이 떨어지고 로고가 살랑임) */
+.park-petal {
+  background: radial-gradient(circle at 30% 30%, #ffe3ec, #f4a6bf);
+  border-radius: 80% 0 80% 0;
+  opacity: 0.85;
+  animation: park-fall linear infinite;
+}
+@keyframes park-fall {
+  0% { transform: translate(0, -2rem) rotate(0deg); }
+  50% { transform: translate(var(--drift), 50dvh) rotate(200deg); }
+  100% { transform: translate(0, 105dvh) rotate(400deg); }
+}
+.park-sway { animation: park-sway 2.8s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes park-sway { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-6px); } }
+.park-dot { animation: park-dot 1.2s ease-in-out infinite; }
+@keyframes park-dot { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .park-petal, .park-sway, .park-dot { animation: none; } .park-petal { display: none; } }

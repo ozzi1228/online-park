@@ -19,7 +19,8 @@ import { InfoPanel } from "./info-panel";
 import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
-import { makeMat, matFits, placeMat } from "@/game/mat";
+import { LoadingScreen } from "./loading-screen";
+import { makeMat, matAnim, matFits, paintMat, placeMat } from "@/game/mat";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
 import { LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
@@ -104,6 +105,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const [sitting, setSitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
+  const [loaded, setLoaded] = useState(false); // 첫 장면을 그리면 로딩 화면을 걷음
   const meRef = useRef<MeInfo | null>(null);
   const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | null>(null);
   const panelOpen = useRef(false);
@@ -131,12 +133,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   const refreshMe = useRef(async () => {
     const r = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
     if (r?.ok) { const m = await r.json() as MeInfo; meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
+    else if (r?.status === 401) location.replace("/"); // 관리자가 강제 로그아웃·삭제함 → 공원에서 나감
   });
   useEffect(() => {
     refreshMe.current();
+    const alive = setInterval(() => { if (document.visibilityState === "visible") refreshMe.current(); }, 30_000);
     // 결제하고 돌아온 경우 (?charged=1000)
     const charged = Number(new URLSearchParams(location.search).get("charged"));
     if (charged > 0) { sayRef.current(`${charged.toLocaleString("ko-KR")}그린이 충전됐어요`); history.replaceState(null, "", location.pathname); }
+    return () => clearInterval(alive);
   }, []);
 
   useEffect(() => {
@@ -197,7 +202,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
-    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | "sitmat" | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
+    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
       /** 정자에 드러누움 (누운 몸 방향) */
       lying: false, lieYaw: 0,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
@@ -336,7 +341,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         // 돗자리는 통째로 잔디 위일 때만 (길·광장에 걸치면 그냥 앉음)
         const hasMat = !!meRef.current?.items.mat;
         st.onMat = hasMat && matFits(pos.x, pos.z, yaw);
-        if (st.onMat) { placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
+        if (st.onMat) { paintMat(mat, meRef.current?.items.matColor ?? "pink"); placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
         else if (hasMat && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
@@ -544,10 +549,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, catViews, soloCats, me, playGesture, coin, launchVelocity, THREE, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, catViews, soloCats, me, playGesture, coin, launchVelocity, THREE, makeMat, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
+    let firstFrame = false;
     renderer.setAnimationLoop(() => {
       // 게임 시간: 실제 흐른 시간이 아니라 화면이 돌아간 만큼만 (탭을 내려 둔 동안엔 멈춤 → 돌아오자마자 운세꽃잎이 떨어지지 않게)
       const dt = Math.min(clock.getDelta(), 0.05); gameT += dt; const t = gameT;
@@ -640,7 +646,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
 
       const mode: Mode = st.lying ? "lie" : st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
-      const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? "sitmat" : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
+      const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? matAnim(meRef.current?.items.matColor ?? "pink") : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 
@@ -691,6 +697,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       me.root.visible = !!tree.pending || showMe > 0.02 || !firstPerson; // 완전 1인칭일 때만 내 몸을 숨김
       drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
       renderer.render(scene, camera);
+      if (!firstFrame) { firstFrame = true; setTimeout(() => setLoaded(true), 150); }
     });
 
     return () => {
@@ -720,6 +727,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
       <div ref={box} className="absolute inset-0" />
+      <LoadingScreen hidden={loaded} />
       <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 text-sm">
         <p className="rounded-full bg-cream/85 px-3 py-1">{nickname}</p>
         <button onClick={() => { const a = audioRef.current; if (!a) return; a.start(); a.setMuted(!a.muted); setMuted(a.muted); }}

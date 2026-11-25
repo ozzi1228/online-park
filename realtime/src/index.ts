@@ -125,7 +125,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
     matAsk: (client: Client, m: { to?: unknown }) => {
       const from = this.state.players.get(client.sessionId), owner = this.state.players.get(String(m?.to));
       const to = this.clients.find((c) => c.sessionId === m?.to);
-      if (from && owner?.anim === "sitmat" && to && to !== client) to.send("matAsked", { from: client.sessionId, nickname: from.nickname });
+      if (from && owner?.anim.startsWith("sitmat") && to && to !== client) to.send("matAsked", { from: client.sessionId, nickname: from.nickname });
     },
     matAnswer: (client: Client, m: { to?: unknown; ok?: unknown }) => {
       const owner = this.state.players.get(client.sessionId), to = this.clients.find((c) => c.sessionId === m?.to);
@@ -137,7 +137,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
     },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
-      if (p && (a === "idle" || a === "sit" || a === "sitmat" || a === "sitbench" || a === "wish" || a === "lie")) p.anim = a;
+      if (p && typeof a === "string" && /^(idle|sit|sitbench|wish|lie|sitmat(:(pink|yellow|blue|green|white))?)$/.test(a)) p.anim = a; // sitmat:색
     },
   };
 
