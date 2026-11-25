@@ -1,6 +1,6 @@
-// 입력 (1인칭).
-// PC: ↑↓(W·S) 앞뒤로 걷기, ←→(A·D) 몸·시야 돌리기, 마우스로 끌어서 둘러보기, 클릭 = 탭, 우클릭 = 메뉴.
-// 모바일: 화면 아래쪽 어디든 누르면 그 자리에 조이스틱이 생김 — 위아래 = 앞뒤로 걷기, 좌우 = 돌기.
+// 입력.
+// PC: WASD·방향키 = 화면 기준으로 그쪽으로 걷기 (1인칭으로 당겨 두면 ←→는 돌기), 마우스로 끌어서 둘러보기, 휠 = 카메라 거리, 클릭 = 탭, 우클릭 = 메뉴.
+// 모바일: 화면 아래쪽 어디든 누르면 그 자리에 조이스틱이 생김 — 민 쪽으로 걷기 (화면 기준), 두 손가락 = 카메라 거리.
 //        위쪽에서 한 손가락으로 끌면 둘러보기, 짧게 톡 = 탭 (아래쪽에서 톡 해도 탭).
 //        앉아 있을 땐 조이스틱 없이 어디서든 끌면 둘러보기, 짧게 톡 = 일어나기.
 const FWD = ["ArrowUp", "KeyW"], BACK = ["ArrowDown", "KeyS"], LEFT = ["ArrowLeft", "KeyA"], RIGHT = ["ArrowRight", "KeyD"];
@@ -97,7 +97,7 @@ export class Input {
   private releaseJoy() { this.joyId = null; this.joy = { x: 0, y: 0 }; this.joyKnob = null; this.joyCenter = null; }
   private any(codes: string[]) { return codes.some((c) => this.keys.has(c)) ? 1 : 0; }
 
-  /** forward: 앞(+)/뒤(-), right: 오른쪽으로 돌기(+) */
+  /** forward: 앞(+)/뒤(-), right: 오른쪽(+) — 3인칭은 그쪽으로 걷기, 1인칭은 돌기 */
   axes() {
     const clamp = (v: number) => Math.max(-1, Math.min(1, v));
     return {

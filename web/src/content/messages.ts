@@ -4,8 +4,8 @@ type M = { group: string; label: string; text: string };
 
 export const MESSAGES = {
   // ---------- 공통 ----------
-  "hint.pc": { group: "공통", label: "처음 들어왔을 때 조작 안내 (PC)", text: "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴" },
-  "hint.mobile": { group: "공통", label: "처음 들어왔을 때 조작 안내 (휴대폰)", text: "화면 아래쪽을 누른 채 밀면 걷고 돌아요 · 위쪽을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" },
+  "hint.pc": { group: "공통", label: "처음 들어왔을 때 조작 안내 (PC)", text: "WASD·방향키로 걸어요 · 마우스로 끌어서 둘러보기 · 휠로 멀리/가까이 · 우클릭하면 메뉴" },
+  "hint.mobile": { group: "공통", label: "처음 들어왔을 때 조작 안내 (휴대폰)", text: "화면 아래쪽을 누른 채 밀면 그쪽으로 걸어요 · 위쪽을 끌어서 둘러보기 · 두 손가락으로 멀리/가까이 · 빈 곳을 톡 하면 메뉴" },
   "npc.greet": { group: "공통", label: "안내원 첫인사 ({npc} = 안내원 이름)", text: "{npc}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요" },
   "charge.done": { group: "공통", label: "충전하고 돌아왔을 때 ({amount} = 그린)", text: "{amount}그린이 충전됐어요" },
   "menu.shop": { group: "공통", label: "메뉴: 매점", text: "매점 둘러보기" },

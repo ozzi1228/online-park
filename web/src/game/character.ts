@@ -163,7 +163,7 @@ export function makeChar(p: Preset) {
   });
   // 브이 손가락 (사진 찍을 때만 보임): 손끝에서 두 손가락을 벌려 뻗음
   const vSign = new THREE.Group(); vSign.position.set(0, -0.36, 0); vSign.visible = false; arms[0].add(vSign);
-  for (const a of [-0.3, 0.3]) { const f = add(cap(0.021, 0.09), p.skin, Math.sin(a) * 0.05, -0.06, 0, vSign); f.rotation.z = a; }
+  for (const a of [-0.45, 0.45]) { const f = add(cap(0.032, 0.14), p.skin, -Math.sin(a) * 0.08, -0.09, 0.03, vSign); f.rotation.z = a; }
   // 머리
   const head = new THREE.Group(); head.position.y = H; body.add(head);
   const hy = (y: number) => y - H;
@@ -286,7 +286,7 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
       arm0X = -0.15 * fade; armX = arm0X; arm0Z = -(2.85 + wig) * fade - armZ * (1 - fade); arm1Z = (2.85 - wig) * fade + armZ * (1 - fade);
       headX = -0.18 * fade; face = "grin";
     } else if (g.kind === "v") { // 브이: 한 손을 얼굴 옆으로 들어 손가락 브이, 고개 살짝 갸웃 + 활짝 웃기 (앉아서도)
-      arm0X = -0.55 * fade; arm0Z = -2.45 * fade - armZ * (1 - fade); arm1Z = armZ + 0.25 * fade;
+      arm0X = -2.65 * fade + arm0X * (1 - fade); arm0Z = -0.5 * fade - armZ * (1 - fade); arm1Z = armZ + 0.25 * fade;
       headZ = 0.14 * fade; headX = -0.05; face = "grin"; c.vSign.visible = fade > 0.5;
     } else if (g.kind === "stomp" && !seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
       const st = Math.sin(gt * 18);

@@ -254,6 +254,11 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       aiming: false, stompUntil: 0, coinViewUntil: 0 };
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
+    // camDist: 내가 휠·두 손가락으로 고른 카메라 거리(m, 0 = 1인칭). 안 골랐으면 관리자 기본값. 이 기기에 기억
+    let camDist: number | null = (() => { try { const v = localStorage.getItem("camDist"); return v === null ? null : Math.min(8, Math.max(0, Number(v) || 0)); } catch { return null; } })();
+    const adminBack = () => Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 420) / 100);
+    const chosenBack = () => camDist ?? adminBack();
+    const vel = { x: 0, z: 0 }; let lastDragT = -9; // 걷는 속도(가속·감속), 마지막으로 끌어서 둘러본 때
     let baseFov = 60, firstPerson = false, zoomK = 1, camBack = 0; // camBack: 지금 카메라가 내 뒤로 떨어진 거리(부드럽게 따라감) // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
     let matView = 0, lastMatAt = { x: 0, z: 0 }, petView = 0, lastPetAt = { x: 0, y: 0, z: 0 }; // 돗자리에 앉으면 1인칭 대신 뒤에서 둘이 같이 앉은 모습이 보이게 (0~1 부드럽게)
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
@@ -264,13 +269,13 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw), cp = Math.cos(pitch), rx = -Math.cos(camYaw), rz = Math.sin(camYaw);
       const at = st.bench ?? { x: pos.x, y: footY, z: pos.z }; // 벤치에 앉으면 좌판 위에서
       const eyeY = at.y + (st.lying ? 0.32 : (st.sitting ? EYE_SIT : EYE) * (preset.kid ? 0.76 : 1));
-      const back = Math.max(0, (meRef.current?.controls?.cameraBackCm ?? 420) / 100), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
+      const back = chosenBack(), side = (meRef.current?.controls?.cameraSideCm ?? 0) / 100;
       const room = back > 0.3 ? Math.min(back, cameraRoom(at.x, at.z, -fx, -fz, back + 0.4) - 0.3) : 0; // 나무·벽에 묻히지 않게
       const shoulder = room > 0.9 && !st.sitting; // 너무 가까워지면(벽 앞 등) 내 머리가 화면을 가리니 그때도 1인칭으로
       // 뒤 거리는 부드럽게: 나무에 막히면 빨리 당기고(묻히지 않게), 트이면 천천히 물러남 (카메라가 툭툭 튀지 않게)
       const wantBack = shoulder ? room : -0.25;
       camBack += (wantBack - camBack) * (wantBack < camBack ? 0.45 : 0.06);
-      const dBack = camBack, up = THREE.MathUtils.clamp((camBack + 0.25) / 1.2, 0, 1) * 0.5, sd = shoulder ? side : 0;
+      const dBack = camBack, up = THREE.MathUtils.clamp((camBack + 0.25) / 1.2, 0, 1) * 0.5 + Math.max(0, camBack - 1) * 0.17, sd = shoulder ? side : 0;
       const eye = new THREE.Vector3(at.x - fx * dBack + rx * sd, eyeY + up, at.z - fz * dBack + rz * sd);
       if (st.lying) eye.set(at.x - Math.sin(st.lieYaw) * 0.8, eyeY, at.z - Math.cos(st.lieYaw) * 0.8); // 누우면 눈은 머리 자리 (발 반대쪽)
       const look = eye.clone().setY(eyeY).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
@@ -441,7 +446,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       photo: () => {
         setMenu(null);
         if (st.photoAt || petting || feeding || st.playAt || st.aiming || tree.pending) return;
-        if (!st.sitting) yaw += Math.PI;
+        if (!st.sitting) yaw = camYaw + Math.PI; // 카메라 쪽을 봄
         playGesture(me, "v", st.now); mp.sendGesture("v");
         st.faceCam = true; st.photoAt = st.now + 1.2; st.photoUntil = st.now + 2.4;
         logClient("photo.take", {});
@@ -991,8 +996,18 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         knob.current.style.transform = c && k ? `translate(${k.x - c.x}px, ${k.y - c.y}px)` : "translate(0px, 0px)";
       }
       inp.seated = coarse && st.sitting;
-      zoomK = THREE.MathUtils.clamp(zoomK * inp.takeZoom(), 0.45, 1.35);
+      const zIn = inp.takeZoom();
+      if (st.sitting || tree.pending) zoomK = THREE.MathUtils.clamp(zoomK * zIn, 0.45, 1.35); // 앉아서는 풍경 당겨 보기
+      else if (zIn !== 1) { // 걸을 땐 카메라 거리: 끝까지 당기면 1인칭, 밀면 멀리서 나와 주변이 다 보이게
+        const cur = chosenBack();
+        let nd = cur < 0.5 ? (zIn > 1 ? 0.9 : 0) : cur * zIn;
+        if (nd < 0.7 && zIn < 1) nd = 0;
+        camDist = THREE.MathUtils.clamp(nd, 0, 8);
+        try { localStorage.setItem("camDist", camDist.toFixed(2)); } catch { /* 저장 안 되는 브라우저 */ }
+      }
       const { forward, right } = inp.axes(), drag = inp.takeDrag();
+      if (drag.x !== 0 || drag.y !== 0) lastDragT = t;
+      const fp = chosenBack() < 0.5; // 1인칭으로 골랐으면 예전처럼: 몸 = 보는 쪽, 좌우는 돌기
       if (Math.hypot(forward, right) < 0.05) st.waitRelease = false; // 앉은 뒤엔 키를 한 번 뗐다 눌러야 일어남
       if (st.camTurn !== null) { // 벤치에 앉으면 시야가 벤치 앞쪽으로 천천히 돎
         const d = Math.atan2(Math.sin(st.camTurn - camYaw), Math.cos(st.camTurn - camYaw));
@@ -1001,7 +1016,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       }
       camYaw -= drag.x * DRAG_YAW;
       if (tree.pending) camYaw -= right * LOOK_YAW * dt; // 사다리 위: 좌우로 나무를 돌아보기
-      else { // 좌우 키 = 몸과 시야가 같이 그쪽으로 돎 (살살 붙었다 살살 멈춤)
+      else if (fp) { // 1인칭: 좌우 키 = 몸과 시야가 같이 그쪽으로 돎 (살살 붙었다 살살 멈춤)
         const turnSpeed = ((meRef.current?.controls?.turnSpeed ?? 110) * Math.PI) / 180;
         turnVel += (-right * turnSpeed - turnVel) * (1 - Math.exp(-dt * 10));
         camYaw += turnVel * dt;
@@ -1015,30 +1030,43 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       if (tree.pending) {
         // 사다리 위에선 걷지 않음
       } else if (st.sitting && (Math.hypot(forward, right) < 0.05 || st.waitRelease)) {
+        vel.x = vel.z = 0;
         // 앉아 있을 땐 끌어서 둘러보기 (조금 더 내려다볼 수 있게). 누워 있으면 천장까지 올려다봄
         pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, st.lying ? -1.5 : PITCH_UP, st.lying ? 0.2 : PITCH_DOWN);
       } else {
         if (st.sitting) stand(); // 방향키를 누르면 바로 일어나서 걸어감
         pitch = THREE.MathUtils.clamp(pitch + dragY * DRAG_PITCH, PITCH_UP, PITCH_DOWN);
-        if (!st.faceCam && !st.playAt) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도). 낚싯대 놀이 중엔 몸은 고양이 쪽, 카메라만 비스듬히
-        // 보는 방향 기준 앞/옆으로 걸음
-        const amount = Math.min(1, Math.abs(forward));
-        walking = amount > 0.05;
-        if (walking) {
-          st.wishUntil = 0; st.faceCam = false; st.photoAt = 0; // 걸으면 소원 동작·사진은 멈춤
-          if (st.aiming) stopAim();
-          const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
-          const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
+        if (fp && !st.faceCam && !st.playAt) yaw = camYaw; // 1인칭: 몸은 늘 내가 보는 쪽 (다른 사람 눈에도). 낚싯대 놀이 중엔 몸은 고양이 쪽, 카메라만 비스듬히
+        // 화면 기준으로 민 쪽으로 걸음 (1인칭은 앞뒤만, 방향은 도는 걸로)
+        const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) }, cr = { x: -Math.cos(camYaw), z: Math.sin(camYaw) };
+        const ix = cf.x * forward + (fp ? 0 : cr.x * right), iz = cf.z * forward + (fp ? 0 : cr.z * right), il = Math.hypot(ix, iz);
+        const amount = Math.min(1, il), speed = (meRef.current?.controls?.walkSpeedCm ?? WALK * 100) / 100;
+        // 살살 출발·살살 멈춤 (0.1~0.15초): 속도가 원하는 속도로 부드럽게 붙음
+        const wx = amount > 0.05 ? (ix / il) * speed * amount : 0, wz = amount > 0.05 ? (iz / il) * speed * amount : 0;
+        const ka = 1 - Math.exp(-dt * (amount > 0.05 ? 9 : 13));
+        vel.x += (wx - vel.x) * ka; vel.z += (wz - vel.z) * ka;
+        const v = Math.hypot(vel.x, vel.z);
+        if (amount > 0.05) { st.wishUntil = 0; st.faceCam = false; st.photoAt = 0; if (st.aiming) stopAim(); } // 걸으면 소원 동작·사진은 멈춤
+        walking = v > 0.15;
+        if (v < 0.02) { vel.x = vel.z = 0; }
+        else {
+          const mvYaw = Math.atan2(vel.x, vel.z); // 실제로 움직이는 쪽
+          if (!fp && !st.playAt) {
+            // 몸은 가는 쪽으로 부드럽게 돎
+            yaw += Math.atan2(Math.sin(mvYaw - yaw), Math.cos(mvYaw - yaw)) * (1 - Math.exp(-dt * 11));
+            // 카메라는 천천히 등 뒤로 따라옴 (방금 끌어서 둘러봤으면 잠깐 그대로, 옆·뒤로 걸을 땐 안 돌림 → 빙글빙글 안 돎)
+            const d = Math.atan2(Math.sin(yaw - camYaw), Math.cos(yaw - camYaw));
+            if (t - lastDragT > 1.5 && Math.cos(d) > 0) camYaw += d * (1 - Math.exp(-dt * 1.1)) * Math.cos(d) * Math.min(1, v / speed); // 앞쪽으로 걸을수록 따라옴 (옆으로만 걸으면 화면이 안 돎)
+          }
           if (dragY === 0 && drag.x === 0) pitch += (0 - pitch) * (1 - Math.exp(-dt * 1.2)); // 걸으면 시선이 천천히 앞으로 돌아옴
-          const step = ((meRef.current?.controls?.walkSpeedCm ?? WALK * 100) / 100) * amount * dt;
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
-          const np = move(pos.x, pos.z, pos.x + (dx / len) * step, pos.z + (dz / len) * step, undefined, [...COLLIDERS, ...mp.colliders()]);
+          const np = move(pos.x, pos.z, pos.x + vel.x * dt, pos.z + vel.z * dt, undefined, [...COLLIDERS, ...mp.colliders()]);
           pos.x = np.x; pos.z = np.z;
           // 벤치 쪽으로 걸어 들어가거나, 벤치를 등지고 뒷걸음질로 붙으면 앉음 (일어난 직후·남이 앉은 자리는 빼고)
           if (st.now - st.stoodAt > 1) {
             const others = mp.colliders();
             const seat = BENCH_SEATS.filter((s) => Math.hypot(s.fx - pos.x, s.fz - pos.z) < 0.55
-              && (Math.sin(yaw) * Math.sin(s.yaw) + Math.cos(yaw) * Math.cos(s.yaw)) * Math.sign(forward) < -0.4
+              && Math.sin(mvYaw) * Math.sin(s.yaw) + Math.cos(mvYaw) * Math.cos(s.yaw) < -0.4 // 벤치 쪽으로 걸어 들어갈 때
               && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45)
               && !catOn(s)) // 고양이가 앉은 자리는 비워 둠 (옆자리에 앉으면 고양이와 나란히)
               .sort((a, b) => Math.hypot(a.fx - pos.x, a.fz - pos.z) - Math.hypot(b.fx - pos.x, b.fz - pos.z))[0];
@@ -1047,7 +1075,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
           // 사다리 앞에서 나무 쪽으로 걸어 들어가면 쪽지 쓰기 (한 번 뜨면 1.5m 떨어졌다 와야 다시)
           const ld = Math.hypot(pos.x - LADDER_FOOT.x, pos.z - LADDER_FOOT.z);
           if (ld > 1.5) st.ladderArmed = true;
-          else if (st.ladderArmed && forward > 0 && ld < 0.55 && Math.sin(yaw) > 0.6) { st.ladderArmed = false; openTreeEditor(); }
+          else if (st.ladderArmed && ld < 0.55 && Math.sin(mvYaw) > 0.6) { st.ladderArmed = false; openTreeEditor(); }
           if (!moved) { moved = true; setHint(false); }
         }
       }
