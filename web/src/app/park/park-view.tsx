@@ -1054,9 +1054,11 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
           if (!fp && !st.playAt) {
             // 몸은 가는 쪽으로 부드럽게 돎
             yaw += Math.atan2(Math.sin(mvYaw - yaw), Math.cos(mvYaw - yaw)) * (1 - Math.exp(-dt * 11));
-            // 카메라는 천천히 등 뒤로 따라옴 (방금 끌어서 둘러봤으면 잠깐 그대로, 옆·뒤로 걸을 땐 안 돌림 → 빙글빙글 안 돎)
+            // 카메라는 천천히 따라옴 (방금 끌어서 둘러봤으면 잠깐 그대로)
             const d = Math.atan2(Math.sin(yaw - camYaw), Math.cos(yaw - camYaw));
-            if (t - lastDragT > 1.5 && Math.cos(d) > 0) camYaw += d * (1 - Math.exp(-dt * 1.1)) * Math.cos(d) * Math.min(1, v / speed); // 앞쪽으로 걸을수록 따라옴 (옆으로만 걸으면 화면이 안 돎)
+            // 앞으로 걸으면 등 뒤로, 옆으로 걸으면 그쪽으로 화면이 천천히 돎(조이스틱만으로도 돌아서 매점 같은 걸 마주 볼 수 있게), 뒤로 걸을 땐 안 돎
+            const cd = Math.cos(d), follow = cd > 0 ? 1 : cd > -0.35 ? 0.75 : 0;
+            if (t - lastDragT > 1.2 && follow) camYaw += Math.sign(d) * Math.min(Math.abs(d), dt * 1.5 * follow * Math.min(1, v / speed) * (cd > 0 ? Math.max(0.4, Math.abs(d)) : 1));
           }
           if (dragY === 0 && drag.x === 0) pitch += (0 - pitch) * (1 - Math.exp(-dt * 1.2)); // 걸으면 시선이 천천히 앞으로 돌아옴
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
