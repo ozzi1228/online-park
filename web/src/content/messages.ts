@@ -189,6 +189,53 @@ export const MESSAGES = {
   "wallet.guestAfter": { group: "매점", label: "지갑: 비회원 안내 (링크 뒤)", text: "에서 로그인하면 쓴 그린·산 물건은 그대로 가져가요." },
   "wallet.notReady": { group: "매점", label: "지갑: 결제 설정 전", text: "결제 설정 전이에요 (토스페이먼츠 키 필요)" },
   "wallet.opening": { group: "매점", label: "지갑: 결제창 여는 중", text: "결제창을 여는 중…" },
+  "wallet.title": { group: "매점", label: "지갑: 제목", text: "내 지갑" },
+  "wallet.bag": { group: "매점", label: "지갑: 가방 ({notes} 노트 장수, {mats} 돗자리, {churu} 츄르, {rod} 낚싯대)", text: "가방: 벚꽃잎 노트 {notes}장 · 돗자리 {mats} · 츄르 {churu}개 · 낚싯대 {rod}" },
+  "wallet.none": { group: "매점", label: "지갑: 가방에 없을 때", text: "없음" },
+  "wallet.rodLeft": { group: "매점", label: "지갑: 낚싯대 남은 횟수 ({n})", text: "{n}번 남음" },
+  "wallet.chargeTitle": { group: "매점", label: "지갑: 충전 제목", text: "충전하기 (1그린 = 1원)" },
+  "wallet.noKey": { group: "매점", label: "지갑: 결제 설정이 안 됐을 때 오류", text: "결제 설정이 아직 안 됐어요" },
+  "wallet.orderFail": { group: "매점", label: "지갑: 주문을 못 만들었을 때", text: "주문을 만들지 못했어요" },
+  "wallet.startFail": { group: "매점", label: "지갑: 결제창을 못 열었을 때", text: "결제를 시작하지 못했어요" },
+  "shop.title": { group: "매점", label: "매점: 제목", text: "매점" },
+  "shop.green": { group: "매점", label: "그린 단위 ({n})", text: "{n}그린" },
+
+  // ---------- 공원 밖 화면 ----------
+  "home.guest": { group: "첫 화면", label: "비회원 입장 버튼", text: "비회원으로 둘러보기" },
+  "home.guestAgain": { group: "첫 화면", label: "비회원 입장 버튼 (이미 비회원으로 들어왔던 사람)", text: "비회원으로 계속 둘러보기" },
+  "home.memberNote": { group: "첫 화면", label: "소셜 로그인 버튼 위 안내", text: "회원은 그린으로 노트·소원 기능을 쓸 수 있어요" },
+  "home.social": { group: "첫 화면", label: "소셜 로그인 버튼 설명 ({name} = 구글·카카오·네이버)", text: "{name}로 시작" },
+  "home.enter": { group: "첫 화면", label: "회원 입장 버튼", text: "공원 입장하기" },
+  "home.guestFail": { group: "첫 화면", label: "비회원 입장 실패", text: "입장하지 못했어요. 잠시 후 다시 시도해 주세요." },
+  "home.loginFail": { group: "첫 화면", label: "로그인 화면을 못 열었을 때", text: "로그인 화면을 열지 못했어요. 잠시 후 다시 시도해 주세요." },
+  "share.button": { group: "첫 화면", label: "공유 버튼", text: "친구에게 공유하기" },
+  "share.copied": { group: "첫 화면", label: "공유: 링크 복사했을 때", text: "링크를 복사했어요" },
+  "share.text": { group: "첫 화면", label: "공유: 같이 보내는 글", text: "랜선 벚꽃공원에서 같이 산책해요 🌸" },
+  "share.prompt": { group: "첫 화면", label: "공유: 복사가 안 될 때 창", text: "이 링크를 복사해서 친구에게 보내 주세요" },
+  "pick.title": { group: "캐릭터 고르기", label: "제목", text: "캐릭터 고르기" },
+  "pick.sub": { group: "캐릭터 고르기", label: "제목 아래 안내", text: "정하기 전까지는 마음껏 바꿔볼 수 있어요" },
+  "pick.all": { group: "캐릭터 고르기", label: "분류: 전체", text: "전체" },
+  "pick.idle": { group: "캐릭터 고르기", label: "미리보기 동작: 서 있기", text: "서 있기" },
+  "pick.walk": { group: "캐릭터 고르기", label: "미리보기 동작: 걷기", text: "걷기" },
+  "pick.wish": { group: "캐릭터 고르기", label: "미리보기 동작: 소원 빌기", text: "소원 빌기" },
+  "pick.sit": { group: "캐릭터 고르기", label: "미리보기 동작: 앉기", text: "앉기" },
+  "pick.nickTitle": { group: "캐릭터 고르기", label: "닉네임 창 제목", text: "닉네임을 정해 주세요" },
+  "pick.nickHolder": { group: "캐릭터 고르기", label: "닉네임 칸 안내 ({n} = 최대 글자 수)", text: "{n}자 이내" },
+  "pick.warn": { group: "캐릭터 고르기", label: "확정 경고 ({name} = 고른 캐릭터, 굵게 보임)", text: "{name} 캐릭터로 정하면 나중에 바꿀 수 없어요." },
+  "pick.choose": { group: "캐릭터 고르기", label: "아래 큰 버튼", text: "이 캐릭터로 정하기" },
+  "pick.errLen": { group: "캐릭터 고르기", label: "오류: 닉네임 길이 ({n} = 최대 글자 수)", text: "닉네임은 1~{n}자로 정해 주세요." },
+  "pick.back": { group: "캐릭터 고르기", label: "버튼: 다시 고르기", text: "다시 고를래요" },
+  "pick.confirm": { group: "캐릭터 고르기", label: "버튼: 확정", text: "확정하기" },
+  "pick.saving": { group: "캐릭터 고르기", label: "버튼: 정하는 중", text: "정하는 중…" },
+  "pick.errSession": { group: "캐릭터 고르기", label: "오류: 입장 정보 없음", text: "입장 정보가 없어요. 처음 화면에서 다시 들어와 주세요." },
+  "pick.errPreset": { group: "캐릭터 고르기", label: "오류: 캐릭터를 안 골랐을 때", text: "캐릭터를 다시 골라 주세요." },
+  "pick.errChar": { group: "캐릭터 고르기", label: "오류: 닉네임에 쓸 수 없는 문자", text: "닉네임에 쓸 수 없는 문자가 있어요." },
+  "pick.errDone": { group: "캐릭터 고르기", label: "오류: 이미 정했음", text: "이미 캐릭터를 정했어요." },
+  "pay.failTitle": { group: "결제 결과", label: "승인 실패 제목", text: "결제를 완료하지 못했어요" },
+  "pay.cancelTitle": { group: "결제 결과", label: "결제창 실패 제목", text: "결제가 완료되지 않았어요" },
+  "pay.retry": { group: "결제 결과", label: "실패 이유를 모를 때", text: "잠시 후 다시 시도해 주세요." },
+  "pay.help": { group: "결제 결과", label: "문의 안내", text: "돈이 빠져나갔는데 그린이 안 들어왔다면 안내소에 문의해 주세요." },
+  "pay.back": { group: "결제 결과", label: "공원으로 돌아가는 버튼", text: "공원으로 돌아가기" },
 } satisfies Record<string, M>;
 
 export type MsgKey = keyof typeof MESSAGES;
@@ -200,4 +247,6 @@ export const fillMsg = (text: string, vars?: MsgVars) => text.replace(/\{(\w+)\}
 // 화면에서 쓰는 값: 관리자가 고친 것(서버가 /api/me 로 보내 줌)이 있으면 그것, 없으면 기본값
 let overrides: Partial<Record<MsgKey, string>> = {};
 export const setMsgOverrides = (o: Partial<Record<MsgKey, string>> | undefined) => { overrides = o ?? {}; };
-export const t = (key: MsgKey, vars?: MsgVars) => fillMsg(overrides[key] || MESSAGES[key].text, vars);
+export const t = (key: MsgKey, vars?: MsgVars) => fillMsg(overrides[key] ?? MESSAGES[key].text, vars);
+/** 서버 화면용: 요청마다 읽은 관리자 문구로 (모듈 전역을 안 건드림) */
+export const msgFrom = (o: Partial<Record<MsgKey, string>>) => (key: MsgKey, vars?: MsgVars) => fillMsg(o[key] ?? MESSAGES[key].text, vars);

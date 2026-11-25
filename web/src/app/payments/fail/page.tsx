@@ -17,5 +17,5 @@ export default async function PaymentFail({ searchParams }: PageProps<"/payments
   if (orderId) await markFailed(orderId, code || "FAILED", message || "결제 실패");
   await logEvent("payment.failed", { orderId: orderId || null, code, message }, { userId: session.user.id, sessionId: session.session.id, ...requestCtx(h) });
   if (code === "PAY_PROCESS_CANCELED") redirect("/park");
-  return <Result title="결제가 완료되지 않았어요" message={message || "잠시 후 다시 시도해 주세요."} />;
+  return <Result title="pay.cancelTitle" message={message} />;
 }

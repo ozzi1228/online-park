@@ -42,7 +42,7 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
     setBusy(product); setError("");
     try {
       const r = await fetch("/api/payments/order", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ product }) });
-      if (!r.ok) throw new Error(r.status === 503 ? "결제 설정이 아직 안 됐어요" : "주문을 만들지 못했어요");
+      if (!r.ok) throw new Error(msg(r.status === 503 ? "wallet.noKey" : "wallet.orderFail"));
       const o = await r.json() as { orderId: string; amount: number; orderName: string; customerKey: string; clientKey: string };
       const toss = await loadTossPayments(o.clientKey);
       await toss.payment({ customerKey: o.customerKey }).requestPayment({
@@ -50,21 +50,21 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
         successUrl: `${location.origin}/payments/success`, failUrl: `${location.origin}/payments/fail`,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "결제를 시작하지 못했어요");
+      setError(e instanceof Error ? e.message : msg("wallet.startFail"));
       setBusy(null);
     }
   };
   return (
     <section role="dialog" aria-label="내 지갑" className={card}>
       <div className="mb-3 flex items-center">
-        <h2 className="text-lg">내 지갑</h2>
+        <h2 className="text-lg">{msg("wallet.title")}</h2>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
-      <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
-      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mats.length ? me.items.mats.map((c) => MAT_COLOR_NAMES[c]).join("·") : "없음"} · 츄르 {me.items.churu}개 · 낚싯대 {me.items.rod ? `${me.items.rod}번 남음` : "없음"}</p>
+      <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">{msg("shop.green", { n: "" }).trim()}</span></p>
+      <p className="mt-1 text-sm opacity-70">{msg("wallet.bag", { notes: me.items.noteSheets, mats: me.items.mats.length ? me.items.mats.map((c) => MAT_COLOR_NAMES[c]).join("·") : msg("wallet.none"), churu: me.items.churu, rod: me.items.rod ? msg("wallet.rodLeft", { n: me.items.rod }) : msg("wallet.none") })}</p>
       {me.isGuest ? <GuestNote /> : (
         <>
-          <h3 className="mb-2 mt-4 text-sm opacity-70">충전하기 (1그린 = 1원)</h3>
+          <h3 className="mb-2 mt-4 text-sm opacity-70">{msg("wallet.chargeTitle")}</h3>
           <div className="grid grid-cols-3 gap-2">
             {me.charge.map((c) => (
               <button key={c.product} disabled={!!busy || !me.paymentsReady} onClick={() => charge(c.product)}
@@ -107,7 +107,7 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
   return (
     <section role="dialog" aria-label="매점" className={card}>
       <div className="mb-3 flex items-center">
-        <h2 className="text-lg">매점</h2>
+        <h2 className="text-lg">{msg("shop.title")}</h2>
         <span className="ml-3 inline-flex items-center gap-1 text-sm tabular-nums opacity-70"><GreenCoin /> {fmt(me.green)}</span>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
@@ -125,7 +125,7 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
               )}
             </div>
             <button disabled={busy || it.disabled} onClick={() => buy(it.id)}
-              className="shrink-0 rounded-full bg-sakura px-4 py-1.5 text-sm text-white disabled:opacity-50">{fmt(it.price)}그린</button>
+              className="shrink-0 rounded-full bg-sakura px-4 py-1.5 text-sm text-white disabled:opacity-50">{msg("shop.green", { n: fmt(it.price) })}</button>
           </li>
         ))}
       </ul>

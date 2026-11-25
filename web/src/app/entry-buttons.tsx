@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { setMsgOverrides, t as msg, type MsgKey } from "@/content/messages";
 import { ShareButton } from "./share-button";
 
 // 로고만 있는 작은 동그라미 (각 서비스 로그인 버튼 가이드의 심볼 + 바탕색)
@@ -23,7 +24,8 @@ const LOGOS: Record<string, { name: string; bg: string; icon: React.ReactNode }>
     </svg>) },
 };
 
-export function EntryButtons({ providers, guest = false }: { providers: string[]; guest?: boolean }) {
+export function EntryButtons({ providers, guest = false, messages }: { providers: string[]; guest?: boolean; messages: Partial<Record<MsgKey, string>> }) {
+  setMsgOverrides(messages); // 관리자가 고친 글자
   const [busy, setBusy] = useState(false);
   // 소셜 로그인 화면에서 '뒤로'로 돌아오면 브라우저가 누른 상태 그대로 화면을 되살림 → 다시 누를 수 있게
   useEffect(() => {
@@ -39,33 +41,33 @@ export function EntryButtons({ providers, guest = false }: { providers: string[]
     if (guest) { enter(); return; } // 이미 비회원으로 들어와 있음
     setBusy(true); setError("");
     const { error } = await authClient.signIn.anonymous();
-    if (error) { setBusy(false); setError("입장하지 못했어요. 잠시 후 다시 시도해 주세요."); return; }
+    if (error) { setBusy(false); setError(msg("home.guestFail")); return; }
     enter();
   };
   const social = async (provider: string) => {
     setBusy(true); setError("");
     const { error } = await authClient.signIn.social({ provider, callbackURL: "/park" });
-    if (error) { setBusy(false); setError("로그인 화면을 열지 못했어요. 잠시 후 다시 시도해 주세요."); }
+    if (error) { setBusy(false); setError(msg("home.loginFail")); }
   };
 
   return (
     <div className="flex w-full max-w-xs flex-col gap-3">
       <button onClick={asGuest} disabled={busy}
         className="rounded-full bg-sakura py-3.5 text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)] active:translate-y-0.5 active:shadow-none disabled:opacity-60">
-        {guest ? "비회원으로 계속 둘러보기" : "비회원으로 둘러보기"}
+        {msg(guest ? "home.guestAgain" : "home.guest")}
       </button>
-      {providers.length > 0 && <p className="mt-2 text-center text-sm opacity-70">회원은 그린으로 노트·소원 기능을 쓸 수 있어요</p>}
+      {providers.length > 0 && <p className="mt-2 text-center text-sm opacity-70">{msg("home.memberNote")}</p>}
       {providers.length > 0 && (
         <div className="flex justify-center gap-4">
           {providers.map((p) => (
-            <button key={p} onClick={() => social(p)} disabled={busy} aria-label={`${LOGOS[p]?.name ?? p}로 시작`} title={`${LOGOS[p]?.name ?? p}로 시작`}
+            <button key={p} onClick={() => social(p)} disabled={busy} aria-label={msg("home.social", { name: LOGOS[p]?.name ?? p })} title={msg("home.social", { name: LOGOS[p]?.name ?? p })}
               className={`grid size-12 place-items-center rounded-full shadow-sm transition active:scale-95 disabled:opacity-60 ${LOGOS[p]?.bg ?? "bg-white"}`}>
               {LOGOS[p]?.icon ?? p}
             </button>
           ))}
         </div>
       )}
-      <ShareButton />
+      <ShareButton messages={messages} />
       {error && <p role="alert" className="text-center text-sm text-red-600">{error}</p>}
     </div>
   );

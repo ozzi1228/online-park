@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { auth, enabledProviders } from "@/lib/auth";
+import { getMessageOverrides } from "@/lib/content";
+import { msgFrom } from "@/content/messages";
 import { EntryButtons } from "./entry-buttons";
 import { ShareButton } from "./share-button";
 
@@ -22,16 +24,16 @@ export default function Home() {
 }
 
 async function EntryAction() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const [session, messages] = await Promise.all([auth.api.getSession({ headers: await headers() }), getMessageOverrides()]);
   // 비회원으로 둘러본 사람도 여기서 로그인하면 캐릭터 그대로 회원이 됨
-  if (!session || session.user.isAnonymous) return <EntryButtons providers={enabledProviders} guest={!!session} />;
+  if (!session || session.user.isAnonymous) return <EntryButtons providers={enabledProviders} guest={!!session} messages={messages} />;
   return (
     <div className="flex w-full max-w-xs flex-col gap-3">
       <Link href="/park"
         className="w-full rounded-full bg-sakura py-3.5 text-center text-lg text-white shadow-[0_3px_0_var(--color-sakura-deep)]">
-        공원 입장하기
+        {msgFrom(messages)("home.enter")}
       </Link>
-      <ShareButton />
+      <ShareButton messages={messages} />
     </div>
   );
 }

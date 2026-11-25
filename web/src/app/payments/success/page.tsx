@@ -17,5 +17,5 @@ export default async function PaymentSuccess({ searchParams }: PageProps<"/payme
   await logEvent(r.ok ? "payment.confirmed" : "payment.failed", r.ok ? { orderId: one(q.orderId), amount: r.amount, already: r.already } : { orderId: one(q.orderId), message: r.message },
     { userId: session.user.id, sessionId: session.session.id, ...requestCtx(h) });
   if (r.ok) redirect(`/park?charged=${r.amount}`);
-  return <Result title="결제를 완료하지 못했어요" message={r.message} />;
+  return <Result title="pay.failTitle" message={r.message} />;
 }
