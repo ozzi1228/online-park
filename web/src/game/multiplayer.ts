@@ -33,6 +33,8 @@ export class Multiplayer {
   private sendAt = 0;
   private disposed = false;
   private lastSent = { x: NaN, z: NaN, yaw: NaN, walking: false };
+  private lastMe: { x: number; z: number; yaw: number } | undefined;
+  private retries = 0; private retryTimer: ReturnType<typeof setTimeout> | undefined; private connecting = false;
   status: NetStatus = { online: false, count: 1 };
   onStatus?: (s: NetStatus) => void;
   /** 누가 나에게 쪽지를 건넸을 때 */
@@ -51,6 +53,8 @@ export class Multiplayer {
   constructor(private scene: THREE.Scene) {}
 
   async connect(resume?: { x: number; z: number; yaw: number }) {
+    if (this.connecting || this.room || this.disposed) return;
+    this.connecting = true;
     try {
       const res = await fetch("/api/realtime/token", { cache: "no-store" });
       if (!res.ok) throw new Error(`token ${res.status}`);
@@ -58,7 +62,7 @@ export class Multiplayer {
       const room = await new Client(url).joinOrCreate<NetState>("park", { token, resume });
       if (this.disposed) { room.leave(); return; } // 접속하는 사이 화면이 닫혔으면 바로 나감
       this.room = room;
-      room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); });
+      room.onLeave(() => { if (this.disposed) return; this.room = null; this.setStatus(false); this.clear(); this.retry(); });
       room.onMessage("noteReceived", (m: { from?: string }) => this.onNote?.(String(m?.from ?? "누군가")));
       room.onMessage("treeChanged", () => this.onTreeChanged?.());
       room.onMessage("matAsked", (m: { from?: string; nickname?: string }) => this.onMatAsk?.(String(m?.from), String(m?.nickname ?? "누군가")));
@@ -69,12 +73,22 @@ export class Multiplayer {
         const o = this.others.get(String(m?.id));
         if (o && isGesture(m?.kind)) playGesture(o.char, m.kind, this.t);
       });
+      this.retries = 0;
       this.setStatus(true);
     } catch (e) {
       if (this.disposed) return;
-      console.warn("[multiplayer] 혼자 모드로 계속해요:", e);
+      console.warn("[multiplayer] 혼자 모드로 계속하고 다시 접속해 볼게요:", e);
       this.setStatus(false);
+      this.retry();
+    } finally {
+      this.connecting = false;
     }
+  }
+  /** 연결이 끊기면(서버 재시작·배포, 휴대폰 잠깐 끊김) 2·4·8…최대 30초 간격으로 계속 다시 접속. 지금 있는 자리에서 이어감 */
+  private retry() {
+    if (this.disposed || this.retryTimer) return;
+    const wait = Math.min(30, 2 ** ++this.retries) * 1000;
+    this.retryTimer = setTimeout(() => { this.retryTimer = undefined; void this.connect(this.lastMe); }, wait);
   }
 
   private setStatus(online: boolean) {
@@ -96,7 +110,7 @@ export class Multiplayer {
   }
 
   update(t: number, dt: number, me: { x: number; z: number; yaw: number; walking: boolean }) {
-    this.t = t;
+    this.t = t; this.lastMe = { x: me.x, z: me.z, yaw: me.yaw };
     const room = this.room;
     if (!room?.state.players) return;
     // 보내기: 초당 12번까지, 바뀐 게 있을 때만 (가만히 있으면 2초마다 생존 신호)
@@ -205,5 +219,5 @@ export class Multiplayer {
   /** 앉기·소원 동작을 다른 사람에게 알림 */
   sendAnim(a: "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }
 
-  dispose() { this.disposed = true; this.room?.leave(); this.room = null; this.clear(); }
+  dispose() { this.disposed = true; clearTimeout(this.retryTimer); this.room?.leave(); this.room = null; this.clear(); }
 }
