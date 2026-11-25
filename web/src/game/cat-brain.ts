@@ -3,6 +3,8 @@
 import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from "./park-map";
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
+/** 고양이(무늬 번호) 이름: 관리자 화면용 (cat.ts LOOKS 순서와 같게) */
+export const CAT_COATS = ["치즈 태비", "고등어 태비", "하양 오드아이", "크림", "삼색이", "턱시도"] as const;
 /** flee = 놀라서 후다닥, content = 쓰다듬어지며 눈 지그시, rub = 다리에 부비부비, come = 부르면 옴, eat = 츄르 할짝, follow = 졸졸 따라옴 (사람에게 반응) */
 export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump" | "flee" | "content" | "rub" | "come" | "eat" | "follow" | "watch" | "crouch" | "roll" | "pounce";
 /** 낚싯대 놀이 단계: watch = 깃털을 눈으로 좇음, crouch = 엉덩이 씰룩, pounce = 덮침, roll = 신나서 뒹굴, end = 그만 */

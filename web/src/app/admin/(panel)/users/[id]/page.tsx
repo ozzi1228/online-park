@@ -3,14 +3,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { account, eventLog, greenLedger, notes, petalCatches, user } from "@/db/schema";
+import { account, catBonds, eventLog, greenLedger, notes, petalCatches, user } from "@/db/schema";
+import { CAT_COATS } from "@/game/cat-brain";
+import { effective, heartsOf } from "@/lib/cat-hearts";
+import { getSettings, kstDate } from "@/lib/settings";
 import { NoteView } from "@/app/park/note";
 import type { Strokes } from "@/lib/notes-shared";
 import { eventLabel } from "@/lib/event-labels";
 import { kst } from "@/lib/format";
 import { PRESETS } from "@/game/presets";
 import { DeleteTreeNoteButton, DeleteUserButton } from "./delete-button";
-import { forceLogout, grantGreen } from "./actions";
+import { forceLogout, grantGreen, setCatScore } from "./actions";
 
 // 문의 대응용: 한 사람의 모든 것 (계정, 캐릭터, 그린, 운세꽃잎, 행동 타임라인)
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
@@ -25,13 +28,15 @@ export default async function UserDetail({ params, searchParams }: PageProps<"/a
   const ids = [id, ...linked.map((l) => String((l.data as { guestId?: string }).guestId)).filter(Boolean)];
   const idMatch = or(...ids.map((x) => eq(eventLog.userId, x)));
 
-  const [accounts, ledger, catches, timeline, noteRows, treeRows] = await Promise.all([
+  const [accounts, ledger, catches, timeline, noteRows, treeRows, bonds, { catBond: rules }] = await Promise.all([
     db.select({ providerId: account.providerId, createdAt: account.createdAt }).from(account).where(eq(account.userId, id)),
     db.select().from(greenLedger).where(eq(greenLedger.userId, id)).orderBy(desc(greenLedger.id)).limit(100),
     db.select().from(petalCatches).where(eq(petalCatches.userId, id)).orderBy(desc(petalCatches.id)).limit(30),
     db.select().from(eventLog).where(idMatch).orderBy(desc(eventLog.id)).limit(300),
     db.select().from(notes).where(and(ne(notes.kind, "tree"), or(eq(notes.authorId, id), eq(notes.recipientId, id)))).orderBy(desc(notes.id)).limit(12),
     db.select().from(notes).where(and(eq(notes.kind, "tree"), eq(notes.authorId, id))).orderBy(desc(notes.id)).limit(12),
+    db.select().from(catBonds).where(eq(catBonds.userId, id)),
+    getSettings(),
   ]);
   const balance = ledger.reduce((s, r) => s + r.amount, 0);
   const box = "rounded-2xl bg-white p-4 ring-1 ring-black/5";
@@ -120,6 +125,40 @@ export default async function UserDetail({ params, searchParams }: PageProps<"/a
           </ul>
         </section>
       )}
+
+      <section id="cats" className={box}>
+        <h2 className="mb-2 font-bold">고양이 호감도 <span className="text-sm font-normal opacity-60">지금 값 = 저장값에서 안 만난 날만큼 뺀 값 · 사용자에겐 하트만 보여요</span></h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs opacity-60">
+              <tr><th className="py-1 pr-3">고양이</th><th className="pr-3">지어 준 이름</th><th className="pr-3">호감도</th><th className="pr-3">하트</th><th className="pr-3">마지막으로 만남</th><th className="pr-3">츄르</th><th className="pr-3">질투</th><th>직접 정하기</th></tr>
+            </thead>
+            <tbody>
+              {CAT_COATS.map((coat, cat) => {
+                const b = bonds.find((x) => x.cat === cat), now = b ? effective(b, rules) : null;
+                return (
+                  <tr key={cat} className="border-t border-black/5">
+                    <td className="py-1.5 pr-3">{coat}</td>
+                    <td className="pr-3">{b?.name ?? <span className="opacity-40">—</span>}</td>
+                    <td className="pr-3 tabular-nums">{now === null ? <span className="opacity-40">아직 안 만남</span> : <>{Math.round(now)}{b && Math.round(b.score) !== Math.round(now) && <span className="opacity-50"> (저장 {Math.round(b.score)})</span>}</>}</td>
+                    <td className="pr-3 text-sakura-deep">{"♥".repeat(heartsOf(now ?? rules.start, rules))}<span className="opacity-30">{"♥".repeat(5 - heartsOf(now ?? rules.start, rules))}</span></td>
+                    <td className="pr-3 text-xs opacity-70">{b ? kst(b.lastAt).slice(0, 16) : ""}</td>
+                    <td className="pr-3 text-xs opacity-70">{b?.fedAt ? (kstDate(b.fedAt.getTime()) === kstDate() ? "오늘 줌" : kst(b.fedAt).slice(5, 10)) : ""}</td>
+                    <td className="pr-3 text-xs opacity-70">{b?.jealousAt ? kst(b.jealousAt).slice(5, 16) : ""}</td>
+                    <td>
+                      <form action={setCatScore} className="flex gap-1">
+                        <input type="hidden" name="id" value={u.id} /><input type="hidden" name="cat" value={cat} />
+                        <input name="score" type="number" min={0} max={100} step={1} required defaultValue={now === null ? "" : Math.round(now)} aria-label={`${coat} 호감도`} className="w-16 rounded-lg bg-cream px-2 py-0.5 ring-1 ring-black/10" />
+                        <button className="rounded-full px-2 text-xs ring-1 ring-black/10 hover:bg-black/5">저장</button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className={box}>
         <h2 className="mb-2 font-bold">타임라인 <span className="text-sm font-normal opacity-60">최근 {timeline.length}건</span></h2>

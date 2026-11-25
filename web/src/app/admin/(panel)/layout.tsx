@@ -9,6 +9,7 @@ const NAV = [
   ["/admin/logs", "로그"],
   ["/admin/users", "유저"],
   ["/admin/notes", "쪽지"],
+  ["/admin/cats", "고양이"],
   ["/admin/inquiries", "문의"],
   ["/admin/payments", "결제"],
   ["/admin/settings", "운영 설정"],

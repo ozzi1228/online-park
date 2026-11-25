@@ -5,7 +5,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { eventLog, greenLedger, inquiries, inventory, notes, orders, petalCatches, session, user } from "@/db/schema";
+import { catBonds, eventLog, greenLedger, inquiries, inventory, notes, orders, petalCatches, session, user } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin";
 import { logEvent, requestCtx } from "@/lib/log";
 
@@ -25,6 +25,7 @@ export async function deleteUser(form: FormData) {
       orders: await n(tx.delete(orders).where(inArray(orders.userId, ids)).returning({ id: orders.id })),
       items: await n(tx.delete(inventory).where(inArray(inventory.userId, ids)).returning({ id: inventory.userId })),
       inquiries: await n(tx.delete(inquiries).where(inArray(inquiries.userId, ids)).returning({ id: inquiries.id })),
+      catBonds: await n(tx.delete(catBonds).where(inArray(catBonds.userId, ids)).returning({ id: catBonds.cat })),
       logs: await n(tx.delete(eventLog).where(inArray(eventLog.userId, ids)).returning({ id: eventLog.id })),
       users: await n(tx.delete(user).where(inArray(user.id, ids)).returning({ id: user.id })), // 세션·로그인 연결은 함께 지워짐(cascade)
     };
@@ -71,4 +72,17 @@ export async function forceLogout(form: FormData) {
   const n = (await db.delete(session).where(eq(session.userId, id)).returning({ id: session.id })).length;
   await logEvent("admin.user.logged_out", { userId: id, sessions: n }, requestCtx(await headers()));
   redirect(`/admin/users/${encodeURIComponent(id)}?loggedOut=${n}`);
+}
+
+/** 고양이 호감도 직접 정하기 (문의 대응·시험용). 0~100, '마지막으로 만난 때'도 지금으로 → 안 만나서 깎이는 계산이 새로 시작 */
+export async function setCatScore(form: FormData) {
+  await requireAdmin();
+  const id = String(form.get("id") ?? ""), cat = Number(form.get("cat")), score = Number(form.get("score"));
+  const back = `/admin/users/${encodeURIComponent(id)}`;
+  if (!id || !Number.isInteger(cat) || cat < 0 || cat > 5 || !Number.isFinite(score)) redirect(`${back}?cat=bad`);
+  const v = Math.max(0, Math.min(100, Math.round(score)));
+  await db.insert(catBonds).values({ userId: id, cat, score: v })
+    .onConflictDoUpdate({ target: [catBonds.userId, catBonds.cat], set: { score: v, lastAt: new Date() } });
+  await logEvent("admin.cat.score_set", { userId: id, cat, score: v }, requestCtx(await headers()));
+  redirect(`${back}?cat=${cat}#cats`);
 }
