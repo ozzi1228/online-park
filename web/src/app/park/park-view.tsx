@@ -620,9 +620,11 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const r = Math.max(20, Math.abs(rect.top + (1 - ts.y) / 2 * rect.height - hy));
       const dx = (ptr.x - hx) / r, dy = (ptr.y - hy) / r, near = Math.hypot(dx, dy * 0.8) < 1.7;
       const touching = ptr.inside && (ptr.down || !coarse) && near;
-      // 손이 있는 곳(월드): 머리 높이에서 화면을 마주 보는 판 위
+      // 손이 있는 곳(월드): 고양이 얼굴 앞 0.6m(카메라 쪽)에서 화면을 마주 보는 판 위
+      // (머리를 지나는 판으로 하면 손이 얼굴 정면일 때 볼 곳이 머리 속이 돼서 고양이가 엉뚱하게 옆을 봄)
       petRay.setFromCamera(new THREE.Vector2(((ptr.x - rect.left) / rect.width) * 2 - 1, -((ptr.y - rect.top) / rect.height) * 2 + 1), camera);
-      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), head);
+      const toCam = camera.getWorldDirection(new THREE.Vector3()).negate();
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(toCam, head.clone().addScaledVector(toCam, 0.6));
       const at = petRay.ray.intersectPlane(plane, new THREE.Vector3()) ?? head;
       P.v.pet = { at: { x: at.x, y: at.y, z: at.z }, dx: THREE.MathUtils.clamp(dx, -1, 1), dy: THREE.MathUtils.clamp(dy, -1, 1), touching };
       // 문지르면 고로롱 (아주 친한 고양이만), 한참 안 만지면 끝
