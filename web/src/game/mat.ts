@@ -76,6 +76,14 @@ function matTexture(color: MatColor) {
   return t;
 }
 
+/** 메뉴에 띄울 돗자리 미리보기 그림 (3D에 깔리는 것과 같은 무늬) */
+const previews = new Map<MatColor, string>();
+export function matPreview(color: MatColor) {
+  let u = previews.get(color);
+  if (!u) { u = (matTexture(color).image as HTMLCanvasElement).toDataURL("image/png"); previews.set(color, u); }
+  return u;
+}
+
 export function makeMat(color: MatColor = "pink") {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(MAT_W, MAT_D), new THREE.MeshToonMaterial({ map: matTexture(color), gradientMap: toonGradient() }));
   m.geometry.rotateX(-Math.PI / 2);

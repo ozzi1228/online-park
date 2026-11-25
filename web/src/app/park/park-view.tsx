@@ -20,7 +20,7 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { LoadingScreen } from "./loading-screen";
-import { makeMat, matAnim, matCenter, matFits, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
+import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
@@ -73,7 +73,8 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
   return Math.max(best, 1.0);
 }
 
-type MenuItem = { label: string; run?: () => void };
+/** tile: 글 대신 그림 칸으로 (돗자리 미리보기 그림 주소, "none" = 돗자리 없이 ✕) */
+type MenuItem = { label: string; run?: () => void; tile?: string };
 type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
@@ -514,8 +515,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           const mats = meRef.current?.items.mats ?? [];
           if (groundY(pos.x, pos.z) > 0) return [{ label: "드러눕기", run: () => actions.current!.sit() }];
           if (!mats.length || !matFits(pos.x, pos.z, yaw)) return [{ label: "여기 앉기", run: () => actions.current!.sit() }];
-          return [...mats.map((c) => ({ label: `${MAT_COLOR_NAMES[c]} 돗자리 깔고 앉기`, run: () => actions.current!.sit(c) })),
-            { label: "돗자리 없이 앉기", run: () => actions.current!.sit(null) }];
+          return [...mats.map((c) => ({ label: `${MAT_COLOR_NAMES[c]} 돗자리 깔고 앉기`, tile: matPreview(c), run: () => actions.current!.sit(c) })),
+            { label: "돗자리 없이 앉기", tile: "none", run: () => actions.current!.sit(null) }];
         })()
         : [{ label: "여기선 앉을 수 없어요" }]));
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
@@ -813,17 +814,37 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
 
-      {menu && (
-        <ul role="menu" className="absolute z-10 min-w-36 overflow-hidden rounded-2xl bg-cream text-sm shadow-lg ring-1 ring-sakura/30"
-          style={{ left: Math.min(menu.x, (typeof window !== "undefined" ? innerWidth : 400) - 160), top: Math.max(menu.y - 12, 8) }}>
-          {menu.items.map((it) => (
-            <li key={it.label}>
-              <button role="menuitem" disabled={!it.run} onClick={() => { it.run?.(); setMenu(null); }}
-                className="block w-full px-4 py-2.5 text-left hover:bg-sakura/20 disabled:opacity-50">{it.label}</button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {menu && (() => {
+        const tiles = menu.items.filter((i) => i.tile), rows = menu.items.filter((i) => !i.tile), w = tiles.length ? 236 : 160;
+        return (
+          <div role="menu" className="absolute z-10 min-w-36 overflow-hidden rounded-2xl bg-cream text-sm shadow-lg ring-1 ring-sakura/30"
+            style={{ left: Math.min(menu.x, (typeof window !== "undefined" ? innerWidth : 400) - w), top: Math.max(menu.y - 12, 8) }}>
+            {tiles.length > 0 && ( // 돗자리 고르기: 가진 돗자리 그림 + ✕(돗자리 없이)
+              <div className="grid grid-cols-3 gap-2 p-2.5">
+                {tiles.map((it) => (
+                  <button key={it.label} role="menuitem" aria-label={it.label} title={it.label} onClick={() => { it.run?.(); setMenu(null); }}
+                    className="grid aspect-[1.57] w-[66px] place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-black/10 hover:ring-2 hover:ring-sakura-deep">
+                    {it.tile === "none"
+                      ? <span aria-hidden className="text-xl leading-none text-ink/50">✕</span>
+                      // eslint-disable-next-line @next/next/no-img-element -- 캔버스로 그린 그림(data URL)이라 next/image 를 쓸 수 없음
+                      : <img src={it.tile} alt="" className="size-full object-cover" />}
+                  </button>
+                ))}
+              </div>
+            )}
+            {rows.length > 0 && (
+              <ul className={tiles.length ? "border-t border-sakura/20" : ""}>
+                {rows.map((it) => (
+                  <li key={it.label}>
+                    <button role="menuitem" disabled={!it.run} onClick={() => { it.run?.(); setMenu(null); }}
+                      className="block w-full px-4 py-2.5 text-left hover:bg-sakura/20 disabled:opacity-50">{it.label}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
 
       {fortune && (
         <section role="dialog" aria-label="오늘의 운세" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[22rem] -translate-y-1/2 flex-col items-center gap-4 rounded-3xl bg-cream/97 px-6 py-6 text-center shadow-xl ring-1 ring-sakura/20">
