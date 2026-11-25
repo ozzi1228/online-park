@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Room, defineRoom, defineServer, type Client } from "colyseus";
 import { schema, t, type SchemaType } from "@colyseus/schema";
 import { COLLIDERS, PLAYER_R, SPAWN, move, overlaps, resolve, type Collider } from "../../web/src/game/park-map.ts";
-import { CatColony, type CatConfig } from "../../web/src/game/cat-brain.ts";
+import { CatColony, type CatConfig, type CatReaction } from "../../web/src/game/cat-brain.ts";
 
 const SECRET = process.env.REALTIME_SECRET;
 if (!SECRET) throw new Error("REALTIME_SECRET 이 필요해요 (.env 참고)");
@@ -73,7 +73,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
     if (b.busy) { here.forEach((c) => send(c.sid, "busy")); return; }
     const ok = here.filter((c) => c.comes), top = Math.max(-1, ...ok.map((c) => c.score)), best = ok.filter((c) => c.score === top);
     const win = best[Math.floor(Math.random() * best.length)];
-    if (win) { const p = this.state.players.get(win.sid)!; b.react("come", { x: p.x, z: p.z }); }
+    if (win) b.react("come", this.state.players.get(win.sid)!);
     const winner = win ? this.state.players.get(win.sid)?.nickname ?? "" : "";
     for (const c of here) send(c.sid, c === win ? "came" : c.comes ? "other" : "ignored", winner);
   }
@@ -176,11 +176,12 @@ class ParkRoom extends Room<{ state: ParkState }> {
     },
     // 고양이를 쓰다듬었을 때의 반응 (반응 종류는 웹 서버가 호감도로 정해 줌. 화면에 보이는 것뿐이라 거리·횟수만 확인)
     catPet: (client: Client, m: { cat?: unknown; kind?: unknown }) => {
-      const p = this.state.players.get(client.sessionId), now = Date.now();
-      if (!p || (this.petAt.get(client.sessionId) ?? 0) > now - 800) return;
+      const p = this.state.players.get(client.sessionId), now = Date.now(), huff = m?.kind === "huff";
+      if (!p || (!huff && (this.petAt.get(client.sessionId) ?? 0) > now - 800)) return; // 질투는 여러 마리가 한꺼번에
       const b = this.cats.brains.find((x) => x.s.look === m?.cat);
-      if (!b || b.busy || Math.hypot(b.s.x - p.x, b.s.z - p.z) > 4) return;
-      if (m?.kind === "flee" || m?.kind === "content" || m?.kind === "rub") { b.react(m.kind, { x: p.x, z: p.z }); this.petAt.set(client.sessionId, now); }
+      if (!b || b.busy || Math.hypot(b.s.x - p.x, b.s.z - p.z) > (huff ? 12 : 4)) return;
+      // 사람 위치는 살아 있는 값(p)을 넘김 → 따라다니기·부비부비가 사람이 움직여도 따라감
+      if (m?.kind === "flee" || m?.kind === "content" || m?.kind === "rub" || m?.kind === "eat" || huff) { b.react(m.kind as CatReaction, p); if (!huff) this.petAt.set(client.sessionId, now); }
     },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);

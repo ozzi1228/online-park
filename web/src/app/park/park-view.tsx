@@ -20,6 +20,7 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { LoadingScreen } from "./loading-screen";
+import { churuIcon } from "@/game/item-icons";
 import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
@@ -74,7 +75,7 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 }
 
 /** tile: 글 대신 그림 칸으로 (돗자리 미리보기 그림 주소, "none" = 돗자리 없이 ✕). head: 맨 위 제목 줄 (고양이 이름·하트) */
-type MenuItem = { label: string; run?: () => void; tile?: string; head?: boolean };
+type MenuItem = { label: string; run?: () => void; tile?: string; head?: boolean; badge?: string; dim?: boolean };
 type CatBonds = { rules: { nameHearts: number; petStayHearts: number }; cats: { cat: number; hearts: number; name: string | null }[] };
 const heartText = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
 /** 받침이 있는 이름인지 (크림빵이 / 설기가, 크림빵아 / 설기야) */
@@ -563,11 +564,34 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       sayRef.current(r.outcome === "flee" ? "깜짝 놀라서 도망갔어요" : r.outcome === "rub" ? "고로롱… 다리에 부비부비해요 ♥" : "가만히 쓰다듬어지고 있어요 ♥");
       refreshBonds.current();
     };
+    const feedCat = async (v: CatView) => {
+      setMenu(null);
+      const cat = v.catLook;
+      if (catDist(v) > 3) { sayRef.current("조금 더 가까이 가 볼까요?"); return; }
+      // 가까이(질투 거리 안)에서 지켜본 다른 고양이들 → 서버가 정든 고양이만 골라 질투시킴
+      const saw = catViews.filter((o) => o !== v && o.pos && catDist(o) < 8).map((o) => o.catLook);
+      const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "feed", saw }) })
+        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; jealous?: number[] }>).catch(() => null);
+      const name = bondsRef.current?.cats[cat]?.name;
+      if (!r?.ok) { sayRef.current(r?.reason === "full" ? "배불러서 고개를 홱 돌려요" : r?.reason === "no_churu" ? "츄르가 없어요" : "츄르를 주지 못했어요"); return; }
+      const react = (c: number, k: CatReaction) => mp.online ? mp.catPet(c, k) : soloCats.brains.find((b) => b.s.look === c)?.react(k, pos);
+      react(cat, "eat");
+      sayRef.current(`${name ? nameGa(name) : "고양이가"} 츄르를 할짝할짝 먹어요 ♥`);
+      for (const j of r.jealous ?? []) react(j, "huff");
+      if (r.jealous?.length) {
+        const jn = bondsRef.current?.cats[r.jealous[0]]?.name;
+        setTimeout(() => sayRef.current(`${jn ? nameGa(jn) : "다른 고양이가"} 보고 있다가 삐졌어요 😾`), 2400);
+      }
+      refreshMe.current(); refreshBonds.current();
+    };
     const catTap = (v: CatView, tap: Tap) => {
       if (!tap.menu && !coarse) { void petCat(v); return; } // PC 좌클릭 = 바로 쓰다듬기
       const b = bondsRef.current, me = b?.cats[v.catLook], hearts = me?.hearts ?? 0, canName = !!b && hearts >= b.rules.nameHearts;
       const items: MenuItem[] = [{ label: `${me?.name ?? "고양이"}  ${heartText(hearts)}`, head: true }];
       if (coarse) items.push({ label: "쓰다듬기", run: () => void petCat(v) });
+      const churu = meRef.current?.items.churu ?? 0;
+      items.push({ label: churu ? `츄르 주기 (${churu}개)` : "츄르가 없어요 (매점에서 살 수 있어요)", tile: churuIcon(), badge: String(churu), dim: !churu,
+        run: churu ? () => void feedCat(v) : () => sayRef.current("츄르는 매점에서 살 수 있어요") });
       items.push(canName
         ? { label: me?.name ? "이름 바꿔 주기" : "이름 지어 주기", run: () => { setMenu(null); setNameFor({ cat: v.catLook, name: me?.name ?? "" }); } }
         : { label: `하트 ${b?.rules.nameHearts ?? 3}개가 되면 이름을 지어 줄 수 있어요` });
@@ -902,15 +926,17 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
 
       {menu && (() => {
-        const tiles = menu.items.filter((i) => i.tile), rows = menu.items.filter((i) => !i.tile), w = tiles.length ? 236 : 160;
+        const heads = menu.items.filter((i) => i.head), tiles = menu.items.filter((i) => i.tile), rows = menu.items.filter((i) => !i.tile && !i.head), w = tiles.length ? 236 : 160;
         return (
           <div role="menu" className="absolute z-10 min-w-36 overflow-hidden rounded-2xl bg-cream text-sm shadow-lg ring-1 ring-sakura/30"
             style={{ left: Math.max(8, Math.min(menu.x, (typeof window !== "undefined" ? innerWidth : 400) - w)), top: Math.max(menu.y - 12, 8) }}>
-            {tiles.length > 0 && ( // 돗자리 고르기: 가진 돗자리 그림 + ✕(돗자리 없이)
+            {heads.map((it) => <p key={it.label} className="whitespace-pre border-b border-sakura/20 bg-sakura/10 px-4 py-2 font-bold text-sakura-deep">{it.label}</p>)}
+            {tiles.length > 0 && ( // 그림 칸: 돗자리 고르기(가진 돗자리 + ✕), 고양이에게 줄 물건(츄르 등)
               <div className="grid grid-cols-3 gap-2 p-2.5">
                 {tiles.map((it) => (
                   <button key={it.label} role="menuitem" aria-label={it.label} title={it.label} onClick={() => { it.run?.(); setMenu(null); }}
-                    className="grid aspect-[1.57] w-[66px] place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-black/10 hover:ring-2 hover:ring-sakura-deep">
+                    className={`relative grid aspect-[1.57] w-[66px] place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-black/10 hover:ring-2 hover:ring-sakura-deep ${it.dim ? "opacity-40 grayscale" : ""}`}>
+                    {it.badge && <span className="absolute bottom-0.5 right-1 rounded-full bg-ink/70 px-1.5 text-[10px] leading-4 text-white">{it.badge}</span>}
                     {it.tile === "none"
                       ? <span aria-hidden className="text-xl leading-none text-ink/50">✕</span>
                       // eslint-disable-next-line @next/next/no-img-element -- 캔버스로 그린 그림(data URL)이라 next/image 를 쓸 수 없음
@@ -921,9 +947,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             )}
             {rows.length > 0 && (
               <ul className={tiles.length ? "border-t border-sakura/20" : ""}>
-                {rows.map((it) => it.head ? (
-                  <li key={it.label} className="whitespace-pre border-b border-sakura/20 bg-sakura/10 px-4 py-2 font-bold text-sakura-deep">{it.label}</li>
-                ) : (
+                {rows.map((it) => (
                   <li key={it.label}>
                     <button role="menuitem" disabled={!it.run} onClick={() => { it.run?.(); setMenu(null); }}
                       className="block w-full px-4 py-2.5 text-left hover:bg-sakura/20 disabled:opacity-50">{it.label}</button>

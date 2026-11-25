@@ -20,6 +20,8 @@ export const DEFAULTS = {
     notebookPrice: 10,    // 벚꽃잎 노트 1권 (그린)
     notebookSheets: 30,   // 노트 1권 장수
     matPrice: 10,         // 돗자리 (한 번 사면 계속 사용)
+    churuPrice: 10,       // 츄르 한 묶음 (고양이 간식)
+    churuPack: 3,         // 한 묶음에 든 츄르 수
   },
   fountain: {
     coinPrice: 10,        // 분수에 동전 던지기 (그린)
@@ -52,6 +54,12 @@ export const DEFAULTS = {
     decayPerDay: 2,       // 하루에 깎이는 호감도
     callMaxPct: 80,       // 부르면 올 확률 = 호감도 × 이 값 / 100 (호감도 100이면 이 %)
     callCooldownSec: 30,  // 한 사람이 다시 부를 수 있는 간격
+    feedGain: 8,          // 츄르를 먹으면 오르는 호감도
+    fullMin: 3,           // 한 번 먹은 고양이는 몇 분 동안 배불러함 (모든 사람 공통)
+    jealousLoss: 3,       // 질투: 내가 다른 고양이에게 츄르·놀이를 해 주는 걸 본 고양이에게서 깎이는 호감도
+    jealousMin: 50,       // 이 호감도 이상인(정든) 고양이만 질투함
+    jealousRangeM: 8,     // 이 거리 안에서 본 고양이만
+    jealousCooldownMin: 10, // 같은 고양이는 몇 분에 한 번만 질투
   },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
@@ -94,6 +102,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       notebookPrice: { label: "벚꽃잎 노트 가격", unit: "그린", min: 0, max: 100000 },
       notebookSheets: { label: "노트 1권 장수", unit: "장", min: 1, max: 1000 },
       matPrice: { label: "돗자리 가격", unit: "그린", min: 0, max: 100000 },
+      churuPrice: { label: "츄르 한 묶음 가격", unit: "그린", min: 0, max: 100000 },
+      churuPack: { label: "츄르 한 묶음 개수", unit: "개", min: 1, max: 100 },
     },
   },
   fountain: {
@@ -142,6 +152,12 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       decayPerDay: { label: "하루에 깎이는 호감도", unit: "점", min: 0, max: 20 },
       callMaxPct: { label: "부르면 올 확률 (호감도 100일 때)", unit: "%", min: 0, max: 100 },
       callCooldownSec: { label: "다시 부를 수 있는 간격", unit: "초", min: 0, max: 3600 },
+      feedGain: { label: "츄르를 먹으면 오르는 호감도", unit: "점", min: 0, max: 50 },
+      fullMin: { label: "츄르 먹고 배불러하는 시간", unit: "분", min: 0, max: 1440 },
+      jealousLoss: { label: "질투로 깎이는 호감도", unit: "점", min: 0, max: 50 },
+      jealousMin: { label: "질투하는 고양이 (이 호감도 이상)", unit: "점", min: 0, max: 100 },
+      jealousRangeM: { label: "질투하는 거리 (이 안에서 본 고양이)", unit: "m", min: 0, max: 100 },
+      jealousCooldownMin: { label: "같은 고양이 질투 간격", unit: "분", min: 0, max: 1440 },
     },
   },
   controls: {

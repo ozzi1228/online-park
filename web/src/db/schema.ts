@@ -107,6 +107,8 @@ export const catBonds = pgTable("cat_bonds", {
   lastAt: now(),                      // 마지막으로 교류한 때 (오래 안 만나면 깎이는 기준)
   pettedAt: timestamp({ withTimezone: true }), // 쓰다듬기로 마지막에 오른 때
   calledAt: timestamp({ withTimezone: true }), // 마지막으로 부른 때 (연달아 불러 확률을 채우지 못하게)
+  fedAt: timestamp({ withTimezone: true }),    // 이 사람이 마지막으로 츄르를 준 때 (고양이가 배부른지는 모든 사람 것 중 가장 최근으로)
+  jealousAt: timestamp({ withTimezone: true }), // 마지막으로 질투한 때
 }, (t) => [uniqueIndex().on(t.userId, t.cat)]);
 
 export const petalCatches = pgTable("petal_catches", {

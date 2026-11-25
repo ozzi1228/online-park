@@ -1,8 +1,8 @@
 // 고양이 호감도: 사람 × 고양이마다 0~100. 계산은 숫자로, 사람에게는 하트 개수만 보냄.
 // 오래 안 만나면 깎이는 건 매일 돌리지 않고, 읽을 때 "마지막으로 만난 뒤 지난 날"만큼 빼서 계산함.
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, max, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { catBonds } from "@/db/schema";
+import { catBonds, inventory } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
 import { CAT_LOOKS } from "@/game/cat-brain";
 import { clamp, effective, heartsOf } from "@/lib/cat-hearts";
@@ -63,6 +63,36 @@ export async function callCat(userId: string, cat: number) {
   await db.update(catBonds).set({ calledAt: new Date() }).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
   const ticket = signForRealtime({ kind: "catCall", uid: userId, cat, score, comes, exp: Date.now() + 15_000 });
   return { ok: true, comes, ticket } as const;
+}
+
+/** 질투: 내가 다른 고양이를 챙기는 걸 본(가까이 있던) 정든 고양이들은 호감도가 조금 깎임. 깎인 고양이 번호를 돌려줌 */
+async function jealousy(userId: string, cat: number, saw: number[]) {
+  const { catBond: r } = await getSettings();
+  const others = [...new Set(saw.filter((c) => isCat(c) && c !== cat))];
+  if (!others.length || r.jealousLoss <= 0) return [];
+  const rows = await db.select().from(catBonds).where(and(eq(catBonds.userId, userId), inArray(catBonds.cat, others)));
+  const out: number[] = [];
+  for (const row of rows) {
+    const score = effective(row, r);
+    if (score < r.jealousMin || (row.jealousAt && Date.now() - row.jealousAt.getTime() < r.jealousCooldownMin * 60_000)) continue;
+    await save(userId, row.cat, score - r.jealousLoss, { jealousAt: new Date() });
+    out.push(row.cat);
+  }
+  return out;
+}
+
+/** 츄르 주기: 츄르 1개를 쓰고 호감도가 오름. 한 번 먹은 고양이는 잠깐 배불러함(누가 줬든). saw = 가까이서 본 다른 고양이들 */
+export async function feed(userId: string, cat: number, saw: number[]) {
+  const { catBond: r } = await getSettings();
+  const [{ last }] = await db.select({ last: max(catBonds.fedAt) }).from(catBonds).where(eq(catBonds.cat, cat));
+  if (last && Date.now() - last.getTime() < r.fullMin * 60_000) return { ok: false, reason: "full" } as const;
+  const used = await db.update(inventory).set({ qty: sql`${inventory.qty} - 1` })
+    .where(and(eq(inventory.userId, userId), eq(inventory.item, "churu"), sql`${inventory.qty} > 0`)).returning({ qty: inventory.qty });
+  if (!used.length) return { ok: false, reason: "no_churu" } as const;
+  const [row] = await db.select().from(catBonds).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  const score = clamp(effective(row, r) + r.feedGain);
+  await save(userId, cat, score, { fedAt: new Date() });
+  return { ok: true, hearts: heartsOf(score, r), churuLeft: used[0].qty, jealous: await jealousy(userId, cat, saw) } as const;
 }
 
 /** 이름 지어 주기 (하트가 넉넉할 때만). 1~8자, 제어문자·꺾쇠 빼고 */

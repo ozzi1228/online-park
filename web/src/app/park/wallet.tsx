@@ -7,8 +7,8 @@ import { MAT_COLORS, MAT_COLOR_NAMES, MAT_SWATCH, type MatColor } from "@/lib/ma
 export type MeInfo = {
   isGuest: boolean;
   green: number;
-  items: { noteSheets: number; mat: boolean; mats: MatColor[] };
-  shop: { notebookPrice: number; notebookSheets: number; matPrice: number };
+  items: { noteSheets: number; mat: boolean; mats: MatColor[]; churu: number };
+  shop: { notebookPrice: number; notebookSheets: number; matPrice: number; churuPrice: number; churuPack: number };
   charge: { product: string; amount: number }[];
   paymentsReady: boolean;
   unreadNotes: number;
@@ -58,7 +58,7 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
       <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
-      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mats.length ? me.items.mats.map((c) => MAT_COLOR_NAMES[c]).join("·") : "없음"}</p>
+      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mats.length ? me.items.mats.map((c) => MAT_COLOR_NAMES[c]).join("·") : "없음"} · 츄르 {me.items.churu}개</p>
       {me.isGuest ? <GuestNote /> : (
         <>
           <h3 className="mb-2 mt-4 text-sm opacity-70">충전하기 (1그린 = 1원)</h3>
@@ -85,17 +85,18 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
   const [error, setError] = useState("");
   const [color, setColor] = useState<MatColor>(() => MAT_COLORS.find((c) => !me.items.mats.includes(c)) ?? "pink");
   const owned = (c: MatColor) => me.items.mats.includes(c), allMats = MAT_COLORS.every(owned);
-  const buy = async (item: "notebook" | "mat") => {
+  const buy = async (item: "notebook" | "mat" | "churu") => {
     setBusy(true); setError("");
     const r = await fetch("/api/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item, color }) })
       .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
     setBusy(false);
     if (r?.ok && item === "mat") setColor(MAT_COLORS.find((c) => c !== color && !owned(c)) ?? color);
-    if (r?.ok) onBought(item === "notebook" ? `벚꽃잎 노트를 샀어요 (+${me.shop.notebookSheets}장)` : `${MAT_COLOR_NAMES[color]} 돗자리를 샀어요! 잔디밭에서 앉을 때 골라서 깔 수 있어요`);
+    if (r?.ok) onBought(item === "notebook" ? `벚꽃잎 노트를 샀어요 (+${me.shop.notebookSheets}장)` : item === "churu" ? `츄르를 샀어요 (+${me.shop.churuPack}개) · 고양이를 우클릭해서 줄 수 있어요` : `${MAT_COLOR_NAMES[color]} 돗자리를 샀어요! 잔디밭에서 앉을 때 골라서 깔 수 있어요`);
     else setError(r?.reason === "insufficient" ? "그린이 모자라요" : r?.reason === "owned" ? "그 색 돗자리는 이미 있어요" : "살 수 없었어요");
   };
   const items = [
     { id: "notebook" as const, name: "벚꽃잎 노트", desc: `${me.shop.notebookSheets}장 · 손글씨 쪽지용`, price: me.shop.notebookPrice, disabled: false },
+    { id: "churu" as const, name: "츄르", desc: `${me.shop.churuPack}개 한 묶음 · 고양이 간식 (지금 ${me.items.churu}개)`, price: me.shop.churuPrice, disabled: false },
     { id: "mat" as const, name: "돗자리", desc: allMats ? "다섯 색을 모두 갖고 있어요" : owned(color) ? `${MAT_COLOR_NAMES[color]}은 이미 있어요` : `${MAT_COLOR_NAMES[color]} · 색마다 한 장씩 모을 수 있어요`, price: me.shop.matPrice, disabled: owned(color) },
   ];
   return (

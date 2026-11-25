@@ -31,6 +31,8 @@ export const EVENT_LABELS: Record<string, string> = {
   "cat.pet": "고양이 쓰다듬기",
   "cat.named": "고양이 이름 지음",
   "cat.call": "고양이 부르기",
+  "cat.fed": "고양이 츄르",
+  "cat.feed_refused": "고양이 츄르 실패",
   "cat.call_refused": "고양이 부르기 실패",
   "cat.name_refused": "고양이 이름 짓기 실패",
   "fountain.refused": "분수 동전 실패",

@@ -103,6 +103,14 @@ function buildCat(L: Look) {
 }
 const at3 = <T extends THREE.Object3D>(m: T, x: number, y: number, z: number) => (m.position.set(x, y, z), m);
 
+let heartTex: THREE.CanvasTexture | null = null;
+function heartTexture() {
+  if (heartTex) return heartTex;
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const x = c.getContext("2d")!; x.fillStyle = "#ff7aa2";
+  x.beginPath(); x.moveTo(32, 54); x.bezierCurveTo(4, 34, 8, 8, 32, 20); x.bezierCurveTo(56, 8, 60, 34, 32, 54); x.fill();
+  heartTex = new THREE.CanvasTexture(c); heartTex.colorSpace = THREE.SRGBColorSpace; return heartTex;
+}
 const turn = (a: number, b: number, k: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * k;
 
 /** 고양이 그리기: 두뇌(서버 또는 내 브라우저)가 정한 위치·행동을 부드럽게 따라가며 자세를 만듦 */
@@ -113,6 +121,23 @@ export class CatView {
   private pose = { stretch: 0, sit: 0, groom: 0, gait: 0 };
   /** 내가 지어 준 이름표 (내 화면에만) */
   private label: THREE.Sprite | null = null; private labelText = "";
+  private lick = 0;
+  /** 머리 위로 몽글몽글 올라가는 하트 (츄르 먹을 때·부비부비할 때) */
+  private heartPool: { s: THREE.Sprite; t: number }[] = []; private nextHeart = 0;
+  private hearts(t: number, dt: number, on: boolean) {
+    if (on && t > this.nextHeart) {
+      this.nextHeart = t + 0.45;
+      let h = this.heartPool.find((p) => p.t < 0);
+      if (!h) { h = { s: new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTexture(), transparent: true, depthWrite: false })), t: -1 }; this.heartPool.push(h); this.scene.add(h.s); }
+      h.t = 0; h.s.visible = true; h.s.position.set(this.x + (Math.random() - 0.5) * 0.25, this.y + 0.45, this.z + (Math.random() - 0.5) * 0.25);
+    }
+    for (const h of this.heartPool) {
+      if (h.t < 0) continue;
+      h.t += dt; h.s.position.y += dt * 0.45; h.s.position.x += Math.sin(h.t * 4) * dt * 0.08;
+      const k = h.t / 1.6; h.s.scale.setScalar(0.16 + k * 0.08); h.s.material.opacity = 1 - k;
+      if (k >= 1) { h.t = -1; h.s.visible = false; }
+    }
+  }
   constructor(private scene: THREE.Scene) {}
   get pos() { return this.cat ? { x: this.x, y: this.y, z: this.z } : null; }
   get catLook() { return this.look; }
@@ -143,11 +168,11 @@ export class CatView {
     const k = 1 - Math.exp(-dt * 10), px = this.x, pz = this.z;
     this.x += (s.x - this.x) * k; this.z += (s.z - this.z) * k; this.y += (s.y - this.y) * k;
     this.yaw = turn(this.yaw, s.yaw, k);
-    const walking = (s.act === "walk" || s.act === "leave" || s.act === "flee" || s.act === "rub" || s.act === "come") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
+    const walking = (s.act === "walk" || s.act === "leave" || s.act === "flee" || s.act === "rub" || s.act === "come" || s.act === "follow") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
     const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
-      : s.act === "sit" || s.act === "look" || s.act === "content" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
+      : s.act === "sit" || s.act === "look" || s.act === "content" || s.act === "eat" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
     // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)
-    let lookAt: number | null = s.act === "look" || s.act === "content" || s.act === "rub" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
+    let lookAt: number | null = s.act === "look" || s.act === "content" || s.act === "rub" || s.act === "eat" || s.act === "follow" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
     if (lookAt === null && !walking && Math.hypot(me.x - this.x, me.z - this.z) < 4) lookAt = Math.atan2(me.x - this.x, me.z - this.z);
     const rel = lookAt === null ? 0 : THREE.MathUtils.clamp(Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw)), -1.1, 1.1);
 
@@ -171,7 +196,9 @@ export class CatView {
       else rx += -1.0 * P.sit + 0.25 * P.stretch;
       g.rotation.x = rx;
     });
-    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch, this.headYaw, 0.2 * P.groom);
+    this.lick += ((s.act === "eat" ? 1 : 0) - this.lick) * pk; // 츄르: 고개를 숙여 할짝할짝
+    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12), this.headYaw, 0.2 * P.groom);
+    this.hearts(t, dt, s.act === "eat" || s.act === "rub");
     c.tail.forEach((sg, i) => { // 걸을 땐 꼬리를 세우고 살랑, 앉으면 옆으로 감음
       const up = i === 0 ? (walking ? -0.35 : -1.2 + 0.6 * P.sit) : 0;
       sg.rotation.x = up + (i ? (walking ? -0.12 : 0.18 * P.sit) : 0);
@@ -182,5 +209,5 @@ export class CatView {
     const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면 지그시
     const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
   }
-  dispose() { this.setName(null); this.clear(); }
+  dispose() { this.setName(null); this.clear(); for (const h of this.heartPool) { this.scene.remove(h.s); h.s.material.dispose(); } this.heartPool = []; }
 }
