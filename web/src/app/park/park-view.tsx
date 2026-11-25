@@ -145,6 +145,9 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   /** 쓰다듬기 화면: 손 모양이 따라다님 (x, y = 화면 위치, on = 고양이에 닿았는지) */
   const [petUi, setPetUi] = useState<{ x: number; y: number; on: boolean; seen: boolean } | null>(null);
   const petPtr = useRef({ x: 0, y: 0, inside: false, down: false, moved: 0, stop: false });
+  const handRef = useRef<SVGSVGElement>(null);
+  /** 손 그림을 누른 자리에 바로 옮김 (화면 다시 그리기를 기다리지 않음 → 손가락을 안 늦게 따라옴) */
+  const moveHand = (x: number, y: number) => { const h = handRef.current; if (h) { h.style.left = `${x}px`; h.style.top = `${y}px`; } };
   const squeeze = useRef({ held: false, burst: 0, stop: false });
   const aim = useRef({ on: false, sx: 0, sy: 0, x: 0, y: 0, shoot: false, cancel: false });
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
@@ -1267,15 +1270,15 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       )}
       {petUi && (
         <div className="absolute inset-0 z-20 cursor-none touch-none select-none"
-          onPointerEnter={(e) => Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true })}
+          onPointerEnter={(e) => { Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true }); moveHand(e.clientX, e.clientY); }}
           onPointerLeave={() => { petPtr.current.inside = false; petPtr.current.down = false; }}
-          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true, down: true }); }}
-          onPointerMove={(e) => { const p = petPtr.current; p.moved += Math.hypot(e.clientX - p.x, e.clientY - p.y); Object.assign(p, { x: e.clientX, y: e.clientY, inside: true }); }}
+          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true, down: true }); moveHand(e.clientX, e.clientY); }}
+          onPointerMove={(e) => { const p = petPtr.current; p.moved += Math.hypot(e.clientX - p.x, e.clientY - p.y); Object.assign(p, { x: e.clientX, y: e.clientY, inside: true }); moveHand(e.clientX, e.clientY); }}
           onPointerUp={() => { petPtr.current.down = false; if (touch) petPtr.current.inside = false; }}
           onPointerCancel={() => { petPtr.current.down = false; }}>
-          {petUi.seen && ( // 내 손: 손가락 쪽이 위, 고양이에 닿으면 살짝 눌러 쓰다듬는 모양
-            <svg viewBox="0 0 64 72" aria-hidden className="pointer-events-none absolute size-20 -translate-x-1/2 -translate-y-[35%] drop-shadow transition-transform duration-150"
-              style={{ left: petUi.x, top: petUi.y, transform: `translate(-50%,-35%) rotate(${petUi.on ? -14 : -4}deg) scale(${petUi.on ? 0.92 : 1})` }}>
+          {( // 내 손: 누른 자리가 손바닥 한가운데 (닿았는지 판정하는 점과 같은 곳). 위치는 moveHand 가 바로 옮김, 고양이에 닿으면 살짝 눌러 쓰다듬는 모양
+            <svg ref={handRef} viewBox="0 0 64 72" aria-hidden className={`pointer-events-none absolute left-1/2 top-2/3 size-20 drop-shadow transition-transform duration-150 ${petUi.seen ? "" : "invisible"}`}
+              style={{ transformOrigin: "53% 62%", transform: `translate(-53%,-62%) rotate(${petUi.on ? -14 : -4}deg) scale(${petUi.on ? 0.92 : 1})` }}>
               <path d="M18 66 C8 56 6 44 9 36 L12 22 C13 17 19 17 20 22 L21 30 L22 12 C23 6 30 6 31 12 L31 28 L33 9 C34 3 41 3 42 9 L41 29 L44 14 C45 8 52 9 52 15 L49 36 C53 33 58 34 59 39 C58 45 52 52 46 58 C42 63 38 67 32 68 Z"
                 fill="#ffe3d3" stroke="#c98d7a" strokeWidth="2.2" strokeLinejoin="round" />
               <path d="M24 46 Q30 50 38 47" fill="none" stroke="#e5ab97" strokeWidth="1.6" strokeLinecap="round" />
