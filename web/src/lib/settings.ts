@@ -64,7 +64,7 @@ export const DEFAULTS = {
     jealousRangeM: 8,     // 이 거리 안에서 본 고양이만
     jealousCooldownMin: 10, // 같은 고양이는 몇 분에 한 번만 질투
     playGain: 5,          // 낚싯대로 놀아 줘서 사냥에 성공하면 오르는 호감도
-    petStrokeSec: 4,      // 손으로 이만큼(초) 문질러 주면 쓰다듬기가 저절로 끝남
+    petStrokeSec: 10,     // 손으로 이만큼(초) 문질러 주면 쓰다듬기가 저절로 끝남
     petIdleSec: 6,        // 이만큼(초) 손을 안 대면 쓰다듬기가 끝남
   },
   controls: {

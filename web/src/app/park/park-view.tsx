@@ -659,7 +659,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       // 충분히 문질러 주면 저절로 끝 (관리자 설정 초), 한참 손을 안 대도 끝
       if (rubbing) P.stroke += dt;
       const rules = bondsRef.current?.rules;
-      if (P.stroke >= (rules?.petStrokeSec ?? 4)) { audio.purr(); endPet(msg("pet.done")); return; }
+      if (P.stroke >= (rules?.petStrokeSec ?? 10)) { audio.purr(); endPet(msg("pet.done")); return; }
       if (P.idle > (rules?.petIdleSec ?? 6)) { endPet(msg("pet.done")); return; }
       if (Math.floor(P.t * 20) !== Math.floor((P.t - dt) * 20)) setPetUi({ x: ptr.x, y: ptr.y, on: touching, seen: ptr.inside });
     };
