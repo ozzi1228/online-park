@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { signForRealtime } from "@/lib/realtime-sign";
 import { auth } from "@/lib/auth";
 
 // 실시간 서버 입장권: 1분짜리, 서버끼리만 아는 비밀값으로 서명 (realtime/src/index.ts 의 verify 와 짝)
@@ -11,12 +11,9 @@ export async function GET(req: Request) {
   const user = session?.user;
   if (!user?.characterLockedAt || !user.characterPreset) return new Response(null, { status: 401 });
 
-  const body = Buffer.from(JSON.stringify({
-    uid: user.id, preset: user.characterPreset, nickname: user.nickname ?? "", exp: Date.now() + 60_000,
-  })).toString("base64url");
-  const sig = createHmac("sha256", secret).update(body).digest("base64url");
+  const token = signForRealtime({ uid: user.id, preset: user.characterPreset, nickname: user.nickname ?? "", exp: Date.now() + 60_000 });
   // 다른 기기(휴대폰)에서 접속했으면 실시간 서버 주소도 그 기기가 부른 호스트로 (localhost는 그 기기 자신이라)
   const ws = new URL(url), host = req.headers.get("host")?.split(":")[0];
   if ((ws.hostname === "localhost" || ws.hostname === "127.0.0.1") && host && host !== "localhost" && host !== "127.0.0.1") ws.hostname = host;
-  return Response.json({ token: `${body}.${sig}`, url: ws.toString().replace(/\/$/, "") }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ token, url: ws.toString().replace(/\/$/, "") }, { headers: { "cache-control": "no-store" } });
 }

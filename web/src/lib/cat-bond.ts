@@ -6,6 +6,7 @@ import { catBonds } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
 import { CAT_LOOKS } from "@/game/cat-brain";
 import { clamp, effective, heartsOf } from "@/lib/cat-hearts";
+import { signForRealtime } from "@/lib/realtime-sign";
 
 type Row = typeof catBonds.$inferSelect;
 export const isCat = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < CAT_LOOKS;
@@ -47,6 +48,21 @@ export async function pet(userId: string, cat: number): Promise<{ outcome: PetOu
   if (gained) score = clamp(score + r.petGain);
   await save(userId, cat, score, gained ? { pettedAt: new Date() } : {});
   return { outcome, hearts: heartsOf(score, r), gained };
+}
+
+/** 부르기: 이름을 지어 줬고 하트가 넉넉한 고양이만. 올지 말지(확률)는 여기서 굴리고, 결과를 서명해서 실시간 서버에 넘김
+ *  (실시간 서버는 그 순간 부른 사람들 중 온다고 나온 사람끼리 호감도를 비교해 가장 높은 사람에게 보냄) */
+export async function callCat(userId: string, cat: number) {
+  const { catBond: r } = await getSettings();
+  const [row] = await db.select().from(catBonds).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  const score = effective(row, r);
+  if (!row?.name || heartsOf(score, r) < r.nameHearts) return { ok: false, reason: "not_close" } as const;
+  const wait = row.calledAt ? r.callCooldownSec * 1000 - (Date.now() - row.calledAt.getTime()) : 0;
+  if (wait > 0) return { ok: false, reason: "cooldown", waitSec: Math.ceil(wait / 1000) } as const;
+  const comes = Math.random() * 100 < score * r.callMaxPct / 100;
+  await db.update(catBonds).set({ calledAt: new Date() }).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  const ticket = signForRealtime({ kind: "catCall", uid: userId, cat, score, comes, exp: Date.now() + 15_000 });
+  return { ok: true, comes, ticket } as const;
 }
 
 /** 이름 지어 주기 (하트가 넉넉할 때만). 1~8자, 제어문자·꺾쇠 빼고 */

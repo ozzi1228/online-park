@@ -42,6 +42,8 @@ export class Multiplayer {
   /** 누가 내 돗자리에 같이 앉고 싶어할 때 / 내가 물어본 데 대답이 왔을 때 */
   onMatAsk?: (from: string, nickname: string) => void;
   onMatAnswer?: (ok: boolean, owner: string, ownerId: string) => void;
+  /** 고양이를 부른 결과: came(나에게 옴) · other(다른 사람에게 감, to=그 사람) · ignored(못 들은 척) · busy · gone */
+  onCatCall?: (cat: number, result: string, to: string) => void;
   private t = 0;
 
   constructor(private scene: THREE.Scene) {}
@@ -59,6 +61,7 @@ export class Multiplayer {
       room.onMessage("treeChanged", () => this.onTreeChanged?.());
       room.onMessage("matAsked", (m: { from?: string; nickname?: string }) => this.onMatAsk?.(String(m?.from), String(m?.nickname ?? "누군가")));
       room.onMessage("matAnswered", (m: { ok?: boolean; owner?: string; id?: string }) => this.onMatAnswer?.(m?.ok === true, String(m?.owner ?? "누군가"), String(m?.id)));
+      room.onMessage("catCallResult", (m: { cat?: number; result?: string; to?: string }) => this.onCatCall?.(Number(m?.cat), String(m?.result), String(m?.to ?? "")));
       room.onMessage("gesture", (m: { id?: string; kind?: unknown }) => {
         const o = this.others.get(String(m?.id));
         if (o && isGesture(m?.kind)) playGesture(o.char, m.kind, this.t);
@@ -184,6 +187,7 @@ export class Multiplayer {
   answerMat(to: string, ok: boolean) { this.room?.send("matAnswer", { to, ok }); }
   sendGesture(kind: Gesture) { this.room?.send("gesture", kind); }
   catPet(cat: number, kind: CatReaction) { this.room?.send("catPet", { cat, kind }); }
+  catCall(ticket: string) { this.room?.send("catCall", { ticket }); }
 
   /** 앉기·소원 동작을 다른 사람에게 알림 */
   sendAnim(a: "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie") { this.room?.send("anim", a); }

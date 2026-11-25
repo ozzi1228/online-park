@@ -77,6 +77,10 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 type MenuItem = { label: string; run?: () => void; tile?: string; head?: boolean };
 type CatBonds = { rules: { nameHearts: number; petStayHearts: number }; cats: { cat: number; hearts: number; name: string | null }[] };
 const heartText = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
+/** 받침이 있는 이름인지 (크림빵이 / 설기가, 크림빵아 / 설기야) */
+const batchim = (name: string) => { const c = name.charCodeAt(name.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0; };
+const nameI = (name: string) => name + (batchim(name) ? "이" : "");      // 크림빵이 부르기 / 설기 부르기
+const nameGa = (name: string) => name + (batchim(name) ? "이" : "가");   // 크림빵이 / 설기가
 type Menu = { x: number; y: number; items: MenuItem[] };
 type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
@@ -508,7 +512,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
-    const openMenu = (tap: Tap, onlyActionable = false) => {
+    const openMenu = (tap: Tap, onlyActionable = false, onMe = false) => {
       const sheets = meRef.current?.items.noteSheets ?? 0;
       const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
         : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
@@ -517,6 +521,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
+      if (onMe) items.unshift(...callItems()); // 내 캐릭터를 누르면: 이름 지어 준 고양이 부르기
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? (() => {
@@ -568,6 +573,40 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         : { label: `하트 ${b?.rules.nameHearts ?? 3}개가 되면 이름을 지어 줄 수 있어요` });
       setMenu({ x: tap.x, y: tap.y, items });
     };
+    // ---------- 고양이 부르기: 내 캐릭터 우클릭 → 이름 지어 준(오늘 공원에 있는) 고양이 ----------
+    const pickMe = (tap: Tap, rect: DOMRect) => {
+      if (!me.root.visible) return false;
+      screen.set(pos.x, footY + 0.8, pos.z).project(camera);
+      return screen.z < 1 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 70;
+    };
+    const catsHere = () => new Set((mp.online ? mp.cats() : soloCats.states).filter((c) => c.active).map((c) => c.look));
+    const callItems = (): MenuItem[] => {
+      const b = bondsRef.current, named = b?.cats.filter((c) => c.name) ?? [], here = catsHere();
+      if (!b || !named.length) return [{ label: "이름을 지어 준 고양이를 부를 수 있어요" }];
+      const today = named.filter((c) => here.has(c.cat));
+      if (!today.length) return [{ label: "이름 지어 준 고양이가 오늘은 공원에 없어요" }];
+      return today.map((c) => c.hearts >= b.rules.nameHearts
+        ? { label: `${nameI(c.name!)} 부르기`, run: () => void callCat(c.cat, c.name!) }
+        : { label: `${c.name} · 요즘 서먹해요` });
+    };
+    const callCat = async (cat: number, name: string) => {
+      setMenu(null);
+      const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "call" }) })
+        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; waitSec?: number; comes?: boolean; ticket?: string }>).catch(() => null);
+      if (!r?.ok) { sayRef.current(r?.reason === "cooldown" ? `조금 뒤에 다시 불러 볼까요? (${r.waitSec}초)` : "지금은 부를 수 없어요"); return; }
+      playGesture(me, "wave", st.now); mp.sendGesture("wave");
+      sayRef.current(`${name}${batchim(name) ? "아" : "야"}~ 🐾`);
+      if (mp.online && r.ticket) mp.catCall(r.ticket);
+      else setTimeout(() => { // 혼자일 땐 바로 판정
+        if (r.comes) soloCats.brains.find((x) => x.s.look === cat)?.react("come", { x: pos.x, z: pos.z });
+        mp.onCatCall?.(cat, r.comes ? "came" : "ignored", "");
+      }, 1500);
+    };
+    mp.onCatCall = (cat, result, to) => {
+      const name = bondsRef.current?.cats[cat]?.name ?? "고양이";
+      sayRef.current(result === "came" ? `${nameGa(name)} 쪼르르 달려와요 ♥` : result === "other" ? `${nameGa(name)} ${to}님에게 갔어요`
+        : result === "ignored" ? `${nameGa(name)} 못 들은 척해요` : result === "busy" ? `${nameGa(name)} 지금 다른 데 정신이 팔려 있어요` : `${nameGa(name)} 어디 갔나 봐요`);
+    };
     const handleTap = (tap: Tap, rect: DOMRect) => {
       if (tree.pending) { // 사다리 위: 누른 가지 사이에 쪽지 미리보기
         const p = treeNotes.canopyPoint(camera, rect, tap.x, tap.y);
@@ -576,7 +615,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       const cv = pickCat(tap, rect);
       if (cv) { catTap(cv, tap); return; }
-      if (tap.menu) { openMenu(tap); return; }
+      if (tap.menu) { openMenu(tap, false, pickMe(tap, rect)); return; }
       if (nearTree() || Math.hypot(pos.x - WISH_TREE.x, pos.z - WISH_TREE.z) < 14) { // 나무에 달린 쪽지 보기
         const n = treeNotes.pick(camera, rect, tap.x, tap.y);
         if (n) { setMenu(null); setTreeDetail(n); logClient("tree.view", { noteId: n.id }); return; }

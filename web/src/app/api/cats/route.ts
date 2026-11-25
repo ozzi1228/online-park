@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { logEvent, requestCtx } from "@/lib/log";
-import { isCat, myBonds, nameCat, pet } from "@/lib/cat-bond";
+import { callCat, isCat, myBonds, nameCat, pet } from "@/lib/cat-bond";
 
 const session = (req: Request) => auth.api.getSession({ headers: req.headers });
 
@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   return Response.json(await myBonds(s.user.id), { headers: { "cache-control": "no-store" } });
 }
 
-/** 고양이에게 하기: { cat, act: "pet" } 쓰다듬기 · { cat, act: "name", name } 이름 지어 주기 */
+/** 고양이에게 하기: { cat, act: "pet" } 쓰다듬기 · { cat, act: "call" } 부르기 · { cat, act: "name", name } 이름 지어 주기 */
 export async function POST(req: Request) {
   const s = await session(req);
   if (!s) return new Response(null, { status: 401 });
@@ -21,6 +21,11 @@ export async function POST(req: Request) {
   if (body.act === "pet") {
     const r = await pet(s.user.id, body.cat);
     await logEvent("cat.pet", { cat: body.cat, ...r }, ctx);
+    return Response.json(r);
+  }
+  if (body.act === "call") {
+    const r = await callCat(s.user.id, body.cat);
+    await logEvent(r.ok ? "cat.call" : "cat.call_refused", { cat: body.cat, ...(r.ok ? { comes: r.comes } : { reason: r.reason }) }, ctx);
     return Response.json(r);
   }
   if (body.act === "name" && typeof body.name === "string") {

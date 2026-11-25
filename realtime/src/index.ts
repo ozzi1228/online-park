@@ -35,17 +35,23 @@ const ParkState = schema({ players: t.map(Player), cats: t.array(Cat) }, "ParkSt
 type ParkState = SchemaType<typeof ParkState>;
 
 type Auth = { uid: string; preset: string; nickname: string; exp: number };
+type CallTicket = { kind: "catCall"; uid: string; cat: number; score: number; comes: boolean; exp: number };
 
-/** 웹앱이 발급한 입장권 검증: base64url(json).base64url(hmac) */
-function verify(token: unknown): Auth {
+/** 웹앱이 서명한 값 검증: base64url(json).base64url(hmac) (입장권, 고양이 부르기 결과) */
+function verifySigned<T extends { exp: number }>(token: unknown): T {
   if (typeof token !== "string") throw new Error("no token");
   const [body, sig] = token.split(".");
   const expect = createHmac("sha256", SECRET!).update(body).digest();
   const got = Buffer.from(sig ?? "", "base64url");
   if (got.length !== expect.length || !timingSafeEqual(got, expect)) throw new Error("bad token");
-  const auth = JSON.parse(Buffer.from(body, "base64url").toString()) as Auth;
-  if (auth.exp < Date.now()) throw new Error("expired");
-  return auth;
+  const v = JSON.parse(Buffer.from(body, "base64url").toString()) as T;
+  if (v.exp < Date.now()) throw new Error("expired");
+  return v;
+}
+function verify(token: unknown): Auth {
+  const a = verifySigned<Auth & { kind?: string }>(token);
+  if (a.kind) throw new Error("not an entry token"); // 고양이 부르기 결과를 입장권으로 쓰지 못하게
+  return a;
 }
 
 class ParkRoom extends Room<{ state: ParkState }> {
@@ -55,7 +61,22 @@ class ParkRoom extends Room<{ state: ParkState }> {
   private budget = new Map<string, number>(); // 움직여도 되는 남은 거리 (속도 검사)
 
   private cats = new CatColony(); // 늘 공원에 있는 고양이들 (서로 다른 무늬)
-  private petAt = new Map<string, number>();
+  private petAt = new Map<string, number>(); private ticketAt = new Map<string, number>();
+  /** 고양이별로 1.5초 동안 모은 부르기 → 온다고 나온 사람 중 호감도가 가장 높은 사람에게 (같으면 무작위) */
+  private calls = new Map<number, { sid: string; score: number; comes: boolean }[]>();
+  private resolveCalls(cat: number) {
+    const list = this.calls.get(cat) ?? []; this.calls.delete(cat);
+    const b = this.cats.brains.find((x) => x.s.look === cat);
+    const here = list.filter((c) => this.state.players.has(c.sid));
+    const send = (sid: string, result: string, to = "") => this.clients.find((c) => c.sessionId === sid)?.send("catCallResult", { cat, result, to });
+    if (!b) { here.forEach((c) => send(c.sid, "gone")); return; }
+    if (b.busy) { here.forEach((c) => send(c.sid, "busy")); return; }
+    const ok = here.filter((c) => c.comes), top = Math.max(-1, ...ok.map((c) => c.score)), best = ok.filter((c) => c.score === top);
+    const win = best[Math.floor(Math.random() * best.length)];
+    if (win) { const p = this.state.players.get(win.sid)!; b.react("come", { x: p.x, z: p.z }); }
+    const winner = win ? this.state.players.get(win.sid)?.nickname ?? "" : "";
+    for (const c of here) send(c.sid, c === win ? "came" : c.comes ? "other" : "ignored", winner);
+  }
 
   onCreate() {
     const st = new ParkState(); this.setState(st);
@@ -142,6 +163,17 @@ class ParkRoom extends Room<{ state: ParkState }> {
     gesture: (client: Client, kind: unknown) => {
       if (kind === "wave" || kind === "shake" || kind === "stomp" || kind === "cheer") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
     },
+    // 고양이 부르기: 웹앱이 굴린 결과(서명됨)를 1.5초 동안 모아서 판정
+    catCall: (client: Client, m: { ticket?: unknown }) => {
+      let t: CallTicket;
+      try { t = verifySigned<CallTicket>(m?.ticket); } catch { return; }
+      if (t.kind !== "catCall" || t.uid !== this.uids.get(client.sessionId) || t.exp <= (this.ticketAt.get(client.sessionId) ?? 0)) return;
+      this.ticketAt.set(client.sessionId, t.exp); // 같은 결과를 다시 보내 여러 번 부르지 못하게
+      const list = this.calls.get(t.cat);
+      if (list) { if (!list.some((c) => c.sid === client.sessionId)) list.push({ sid: client.sessionId, score: t.score, comes: t.comes }); return; }
+      this.calls.set(t.cat, [{ sid: client.sessionId, score: t.score, comes: t.comes }]);
+      this.clock.setTimeout(() => this.resolveCalls(t.cat), 1500);
+    },
     // 고양이를 쓰다듬었을 때의 반응 (반응 종류는 웹 서버가 호감도로 정해 줌. 화면에 보이는 것뿐이라 거리·횟수만 확인)
     catPet: (client: Client, m: { cat?: unknown; kind?: unknown }) => {
       const p = this.state.players.get(client.sessionId), now = Date.now();
@@ -159,7 +191,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.last.delete(client.sessionId); this.uids.delete(client.sessionId); this.budget.delete(client.sessionId); this.petAt.delete(client.sessionId);
+    this.last.delete(client.sessionId); this.uids.delete(client.sessionId); this.budget.delete(client.sessionId); this.petAt.delete(client.sessionId); this.ticketAt.delete(client.sessionId);
     console.log(`[leave] ${p?.nickname} (${this.state.players.size}명)`);
   }
 }

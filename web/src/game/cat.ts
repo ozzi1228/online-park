@@ -143,7 +143,7 @@ export class CatView {
     const k = 1 - Math.exp(-dt * 10), px = this.x, pz = this.z;
     this.x += (s.x - this.x) * k; this.z += (s.z - this.z) * k; this.y += (s.y - this.y) * k;
     this.yaw = turn(this.yaw, s.yaw, k);
-    const walking = (s.act === "walk" || s.act === "leave" || s.act === "flee" || s.act === "rub") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
+    const walking = (s.act === "walk" || s.act === "leave" || s.act === "flee" || s.act === "rub" || s.act === "come") && Math.hypot(this.x - px, this.z - pz) > dt * 0.15;
     const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
       : s.act === "sit" || s.act === "look" || s.act === "content" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
     // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)

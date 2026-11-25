@@ -50,6 +50,8 @@ export const DEFAULTS = {
     dislikePenalty: 1,
     decayAfterDays: 3,    // 이만큼 안 만나면 그다음 날부터
     decayPerDay: 2,       // 하루에 깎이는 호감도
+    callMaxPct: 80,       // 부르면 올 확률 = 호감도 × 이 값 / 100 (호감도 100이면 이 %)
+    callCooldownSec: 30,  // 한 사람이 다시 부를 수 있는 간격
   },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
@@ -138,6 +140,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       dislikePenalty: { label: "그때 깎이는 호감도", unit: "점", min: 0, max: 20 },
       decayAfterDays: { label: "안 만나면 깎이기 시작 (며칠 뒤)", unit: "일", min: 1, max: 60 },
       decayPerDay: { label: "하루에 깎이는 호감도", unit: "점", min: 0, max: 20 },
+      callMaxPct: { label: "부르면 올 확률 (호감도 100일 때)", unit: "%", min: 0, max: 100 },
+      callCooldownSec: { label: "다시 부를 수 있는 간격", unit: "초", min: 0, max: 3600 },
     },
   },
   controls: {

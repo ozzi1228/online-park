@@ -106,6 +106,7 @@ export const catBonds = pgTable("cat_bonds", {
   name: text(),                       // 이 사람이 지어 준 이름
   lastAt: now(),                      // 마지막으로 교류한 때 (오래 안 만나면 깎이는 기준)
   pettedAt: timestamp({ withTimezone: true }), // 쓰다듬기로 마지막에 오른 때
+  calledAt: timestamp({ withTimezone: true }), // 마지막으로 부른 때 (연달아 불러 확률을 채우지 못하게)
 }, (t) => [uniqueIndex().on(t.userId, t.cat)]);
 
 export const petalCatches = pgTable("petal_catches", {

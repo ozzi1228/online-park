@@ -4,8 +4,8 @@ import { BENCH_SEATS, BENCH_TOP, BOUNDS, COLLIDERS, canSit, groundY, move } from
 
 export const CAT_LOOKS = 6; // cat.ts의 무늬 종류 수
 /** flee = 놀라서 후다닥, content = 쓰다듬어지며 눈 지그시, rub = 다리에 부비부비 (사람에게 반응) */
-export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump" | "flee" | "content" | "rub";
-export type CatReaction = "flee" | "content" | "rub";
+export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "look" | "jump" | "flee" | "content" | "rub" | "come";
+export type CatReaction = "flee" | "content" | "rub" | "come";
 export type CatConfig = { enabled: number; count: number };
 /** 화면이 그리는 데 필요한 것 (서버가 모두에게 보내는 값) */
 export type CatState = { active: boolean; look: number; x: number; y: number; z: number; yaw: number; act: CatAct; lx: number; lz: number };
@@ -18,7 +18,8 @@ type Act =
   | { k: "leave" }
   | { k: "flee"; dur: number; who: P }
   | { k: "content"; dur: number; who: P }
-  | { k: "rub"; dur: number; who: P; a: number };
+  | { k: "rub"; dur: number; who: P; a: number }
+  | { k: "come"; dur: number; who: P };
 
 const RAIL = { z: BOUNDS.minZ - 0.25, y: 0.94, minX: -60, maxX: 60 };
 /** 고양이 몸 반 길이: 이만큼 떨어져서 지나가야 머리·꼬리가 나무·벤치·가로등에 박히지 않음 */
@@ -57,6 +58,7 @@ export class CatBrain {
     this.queue = [];
     if (kind === "flee") { if (this.onRail || this.onBench) this.queue.push(this.hopDown()); this.queue.push({ k: "flee", dur: 2.4, who }); }
     else if (kind === "content") this.queue.push({ k: "content", dur: 4, who });
+    else if (kind === "come") { if (this.onRail || this.onBench) this.queue.push(this.hopDown()); this.queue.push({ k: "come", dur: 15, who }); } // 불렀을 때: 종종걸음으로 와서 앞에 앉음
     else { // 다가와서 다리에 몸을 비비며 한 바퀴 반
       if (this.onRail || this.onBench) this.queue.push(this.hopDown());
       this.queue.push({ k: "rub", dur: 6, who, a: Math.atan2(s.x - who.x, s.z - who.z) }); // 다가가는 것부터 (막혀도 포기하지 않고 비빌 자리로)
@@ -64,7 +66,9 @@ export class CatBrain {
     this.cur = null;
   }
   /** 지금 사람과 하는 중인지 (쓰다듬기 반응 중엔 다른 사람이 끼어들지 않게) */
-  get busy() { const k = this.cur?.k; return k === "content" || k === "rub"; }
+  get busy() { const k = this.cur?.k; return k === "content" || k === "rub" || k === "come" || this.calledUntil > this.t; }
+  /** 부름을 받고 와서 앉아 있는 동안 (다른 사람이 데려가지 못하게) */
+  private calledUntil = 0;
   private hopDown(): Act {
     const f = BENCH_SEATS.find((b) => Math.hypot(b.x - this.s.x, b.z - this.s.z) < 0.4);
     return { k: "jump", tx: f ? f.fx : this.s.x, ty: 0, tz: f ? f.fz : this.s.z + 0.8, dur: 0.45 };
@@ -159,6 +163,15 @@ export class CatBrain {
         break;
       }
       case "content": s.lx = a.who.x; s.lz = a.who.z; if (this.actT > a.dur) this.cur = null; break;
+      case "come": { // 부른 사람 앞 0.7m 까지 종종걸음 (막혀도 비켜 가며), 도착하면 마주 보고 앉음
+        const d0 = Math.hypot(s.x - a.who.x, s.z - a.who.z) || 1, tx = a.who.x + (s.x - a.who.x) / d0 * 0.7, tz = a.who.z + (s.z - a.who.z) / d0 * 0.7;
+        const dx = tx - s.x, dz = tz - s.z, dist = Math.hypot(dx, dz);
+        if (dist < 0.12 || this.actT > a.dur) { this.cur = { k: "look", dur: 5, who: a.who }; this.actT = 0; this.calledUntil = this.t + 5; break; }
+        s.yaw = turn(s.yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * 8));
+        const step = Math.min(dist, 1.5 * dt), r = move(s.x, s.z, s.x + Math.sin(s.yaw) * step, s.z + Math.cos(s.yaw) * step, CAT_R, COLLIDERS);
+        s.x = r.x; s.z = r.z; s.y = groundY(s.x, s.z);
+        break;
+      }
       case "rub": { // 사람 발치로 와서 천천히 돌며 옆구리를 비빔 (머리는 사람 쪽)
         const tx = a.who.x + Math.sin(a.a) * 0.42, tz = a.who.z + Math.cos(a.a) * 0.42, dx = tx - s.x, dz = tz - s.z, dist = Math.hypot(dx, dz);
         if (dist > 0.12) { s.yaw = turn(s.yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * 8)); } // 아직 오는 중
