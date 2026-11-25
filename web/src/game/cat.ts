@@ -203,7 +203,7 @@ export class CatView {
     const relAll = lookAt === null ? 0 : Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw));
     const rel = THREE.MathUtils.clamp(relAll, -1.1, 1.1);
     // 위아래: 볼 곳이 머리보다 높으면 올려다봄 (+ = 위)
-    const headY = this.y + 0.42, up = F && !this.pet ? Math.atan2(F.y - headY, Math.max(0.15, Math.hypot(F.x - this.x, F.z - this.z))) : 0; // 쓰다듬을 땐 위아래는 손 닿은 자리(턱·정수리)로
+    const headY = this.y + 0.42, up = F && !this.pet?.touching ? Math.atan2(F.y - headY, Math.max(0.15, Math.hypot(F.x - this.x, F.z - this.z))) : 0; // 쓰다듬을 땐 위아래는 손 닿은 자리(턱·정수리)로
 
     // 자세
     const pk = 1 - Math.exp(-dt * 6), P = this.pose;
@@ -278,9 +278,32 @@ export class CatView {
     });
     // 눈 깜빡임 (그루밍 중엔 지그시)
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
-    const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || knead > 0 || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면·배 보이고 꼼지락댈 땐 지그시
+    const shut = P.groom > 0.5 || (s.act === "content" && !this.pet) || s.act === "rub" || knead > 0 || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면·배 보이고 꼼지락댈 땐 지그시
     const glad = this.happy > 0.35, want = glad ? c.happyFace : shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
     c.pupils.visible = !shut && !glad;
   }
   dispose() { this.setName(null); this.clear(); for (const h of this.heartPool) { this.scene.remove(h.s); h.s.material.dispose(); } this.heartPool = []; }
+}
+
+/** 관리자 화면용 고양이 그림: 무늬마다 앉은 모습을 한 장씩 (렌더러 하나로 찍고 이미지로) */
+export function renderCatThumbnails(size = 200): string[] {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(size, size);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight("#ffffff", "#e8d8d0", 2.2));
+  const sun = new THREE.DirectionalLight("#ffffff", 1.6); sun.position.set(2, 4, 3); scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 20);
+  camera.position.set(0.55, 0.55, 1.45); camera.lookAt(0, 0.3, 0);
+  const out = LOOKS.map((L) => {
+    const c = buildCat(L);
+    c.body.rotation.x = -0.55; c.body.position.set(0, 0.03, -0.06); // 앉은 자세
+    c.legs.forEach((g, i) => { g.rotation.x = i < 2 ? 0.55 : -1.0; });
+    c.root.rotation.y = 0.35; scene.add(c.root);
+    renderer.render(scene, camera);
+    const url = renderer.domElement.toDataURL("image/png");
+    scene.remove(c.root); c.root.traverse((o) => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    return url;
+  });
+  renderer.dispose(); renderer.forceContextLoss();
+  return out;
 }

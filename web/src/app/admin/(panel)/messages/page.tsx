@@ -3,6 +3,7 @@ import { MESSAGES, type MsgKey } from "@/content/messages";
 import { getMessageOverrides } from "@/lib/content";
 import { resetMessages, saveMessages } from "./actions";
 import { SaveButton } from "../../save-button";
+import { TextTabs } from "../text-tabs";
 
 export const instant = false; // 관리자 화면은 항상 요청 때 최신 데이터로
 
@@ -14,8 +15,9 @@ export default async function Messages({ searchParams }: PageProps<"/admin/messa
   const groups = [...new Set(keys.map((k) => MESSAGES[k].group))];
   return (
     <div className="flex flex-col gap-4">
+      <TextTabs now="messages" />
       <div>
-        <h1 className="text-2xl">안내 멘트</h1>
+        <h1 className="text-2xl">공원 안 안내 멘트</h1>
         <p className="mt-1 text-sm opacity-60">공원 안에서 뜨는 안내·메뉴 글자예요. 고친 칸만 바뀌고, 비워 두면 회색 기본 문구로 돌아가요.
           {"{이름}"}처럼 중괄호로 된 자리는 그때그때 채워지니 지우지 마세요. 저장하면 사용자가 공원에 다시 들어올 때부터 바뀌어요. (고친 것 {Object.keys(o).length}개)</p>
       </div>

@@ -9,6 +9,16 @@ const draw = (key: string, w: number, h: number, paint: (x: CanvasRenderingConte
   return u ?? "";
 };
 
+/** 벚꽃잎 노트: 분홍 표지에 벚꽃 한 송이, 스프링 */
+export const notebookIcon = () => draw("notebook", 132, 84, (x) => {
+  x.fillStyle = "#f7b6c8"; x.strokeStyle = "#d9869e"; x.lineWidth = 2;
+  x.beginPath(); x.roundRect(38, 8, 60, 70, 6); x.fill(); x.stroke();
+  x.fillStyle = "#fff6f8"; x.fillRect(46, 14, 46, 58);
+  for (let i = 0; i < 6; i++) { x.strokeStyle = "#8a7a80"; x.lineWidth = 2; x.beginPath(); x.arc(40, 16 + i * 11, 4, 0.5 * Math.PI, 1.5 * Math.PI); x.stroke(); }
+  for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 - Math.PI / 2; x.fillStyle = "#f39ab4"; x.beginPath(); x.ellipse(69 + Math.cos(a) * 8, 43 + Math.sin(a) * 8, 7, 5, a, 0, 7); x.fill(); }
+  x.fillStyle = "#f6c94a"; x.beginPath(); x.arc(69, 43, 3, 0, 7); x.fill();
+});
+
 /** 낚싯대: 대각선 막대 + 늘어진 줄 + 분홍 깃털 */
 export const rodIcon = () => draw("rod", 132, 84, (x) => {
   x.lineCap = "round";

@@ -78,7 +78,7 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 
 /** tile: 글 대신 그림 칸으로 (돗자리 미리보기 그림 주소, "none" = 돗자리 없이 ✕). head: 맨 위 제목 줄 (고양이 이름·하트) */
 type MenuItem = { label: string; run?: () => void; tile?: string; head?: boolean; badge?: string; dim?: boolean };
-type CatBonds = { rules: { nameHearts: number; petStayHearts: number }; cats: { cat: number; hearts: number; name: string | null }[] };
+type CatBonds = { rules: { nameHearts: number; petStayHearts: number; petStrokeSec?: number; petIdleSec?: number }; cats: { cat: number; hearts: number; name: string | null }[] };
 const heartText = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
 /** 받침이 있는 이름인지 (크림빵이 / 설기가, 크림빵아 / 설기야) */
 const batchim = (name: string) => { const c = name.charCodeAt(name.length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0; };
@@ -594,12 +594,12 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       if (st.sitting) stand();
       const p = v.pos!; yaw = camYaw = Math.atan2(p.x - pos.x, p.z - pos.z);
       st.petAt = { ...p }; st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // playAt: 몸이 카메라 쪽으로 돌지 않게
-      petting = { v, cat, purr: r.outcome === "rub", t: 0, idle: 0, purrAt: 0, done: false };
+      petting = { v, cat, purr: r.outcome === "rub", t: 0, idle: 0, stroke: 0, purrAt: 0, done: false };
       petPtr.current = { x: innerWidth / 2, y: innerHeight / 2, inside: false, down: false, moved: 0, stop: false };
       setPetUi({ x: innerWidth / 2, y: innerHeight * 0.7, on: false, seen: false });
       sayRef.current(msg("pet.hint"));
     };
-    let petting: null | { v: CatView; cat: number; purr: boolean; t: number; idle: number; purrAt: number; done: boolean } = null;
+    let petting: null | { v: CatView; cat: number; purr: boolean; t: number; idle: number; stroke: number; purrAt: number; done: boolean } = null;
     const endPet = (why: string) => {
       if (!petting || petting.done) return;
       const p = petting; p.done = true; petting = null; p.v.pet = null;
@@ -629,7 +629,11 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const rubbing = touching && ptr.moved > 6; ptr.moved = 0;
       P.idle = touching ? 0 : P.idle + dt;
       if (P.purr && rubbing && P.t > P.purrAt) { audio.purr(); P.purrAt = P.t + 2.6; }
-      if (P.idle > 12) { endPet(msg("pet.done")); return; }
+      // 충분히 문질러 주면 저절로 끝 (관리자 설정 초), 한참 손을 안 대도 끝
+      if (rubbing) P.stroke += dt;
+      const rules = bondsRef.current?.rules;
+      if (P.stroke >= (rules?.petStrokeSec ?? 4)) { audio.purr(); endPet(msg("pet.done")); return; }
+      if (P.idle > (rules?.petIdleSec ?? 6)) { endPet(msg("pet.done")); return; }
       if (Math.floor(P.t * 20) !== Math.floor((P.t - dt) * 20)) setPetUi({ x: ptr.x, y: ptr.y, on: touching, seen: ptr.inside });
     };
     // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
@@ -641,6 +645,19 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       if (mp.online) mp.catPet(f.cat, "eatEnd"); else soloCats.brains.find((b) => b.s.look === f.cat)?.react("eatEnd", pos);
       churu.visible = false; setSqueezeUi(null); st.playAt = null; camYaw = yaw;
       sayRef.current(why);
+    };
+    // 옆에서 보는 카메라 자리: 나무 기둥이 가리지 않는 쪽을 고름 (오른쪽·왼쪽 옆을 먼저, 막히면 조금씩 돌려 봄)
+    const clearSide = (c: { x: number; z: number }, face: number) => {
+      // 카메라가 설 자리(3.4m 뒤)가 벚나무 꽃 덩어리 안이면(기둥에서 2.6m 안) 꽃잎에 파묻혀 안 보임 → 그런 쪽도 피함
+      const inCrown = (a: number) => COLLIDERS.some((k) => k.t === "c" && k.r >= 0.4 && Math.hypot(c.x - Math.sin(a) * 3.4 - k.x, c.z - Math.cos(a) * 3.4 - k.z) < 2.6);
+      let best = face + 1.4, score = -1;
+      for (const off of [1.4, -1.4, 1.0, -1.0, 1.8, -1.8, 0.6, -0.6, 2.4, -2.4, 3.1]) {
+        const a = face + off, r = cameraRoom(c.x, c.z, -Math.sin(a), -Math.cos(a), 3.8), crown = inCrown(a);
+        if (r >= 3.7 && !crown) return a;
+        const sc = r - (crown ? 2 : 0);
+        if (sc > score) { score = sc; best = a; }
+      }
+      return best;
     };
     const feedCat = async (v: CatView) => {
       setMenu(null);
@@ -654,7 +671,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const react = (c: number, k: CatReaction) => mp.online ? mp.catPet(c, k) : soloCats.brains.find((b) => b.s.look === c)?.react(k, pos);
       react(cat, "eat");
       if (st.sitting) stand();
-      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 1.4; pitch = 0.1; // 옆에서 나와 고양이를 같이
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = clearSide({ x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }, yaw); pitch = 0.1; // 옆에서 나와 고양이를 같이 (나무에 안 가리는 쪽)
       st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
       feeding = { v, cat, paste: 1, pulse: 0, done: false }; churu.visible = true; squeeze.current = { held: false, burst: 0, stop: false };
       setSqueezeUi({ paste: 1 });
@@ -705,7 +722,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         .then((x) => x.json() as Promise<{ ok: boolean; usesLeft?: number; hearts?: number }>).catch(() => null);
       if (!r?.ok) { sayRef.current(msg("rod.none")); return; }
       if (st.sitting) stand();
-      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 1.4; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = clearSide({ x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }, yaw); pitch = 0; // 몸은 고양이 쪽, 카메라는 옆에서 (나·깃털·고양이가 다 보이게, 나무에 안 가리는 쪽)
       st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
       // 친한 고양이일수록 흥미가 빨리 참 (하트 하나에 15%씩)
       play = { v, cat: v.catLook, interest: 0.15, phase: "watch", phaseT: 0, catches: 0, t: 0, side: 0, dist: 1.2, speed: 0, idleT: 0, readyT: 0, crouchFor: 1,

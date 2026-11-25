@@ -6,6 +6,7 @@ import { getFortunes, getGuide, guideToText } from "@/lib/content";
 import { kst } from "@/lib/format";
 import { resetFortunes, resetGuide, saveFortunes, saveGuide } from "./actions";
 import { SaveButton } from "../../save-button";
+import { TextTabs } from "../text-tabs";
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
@@ -23,8 +24,9 @@ export default async function ContentPage({ searchParams }: PageProps<"/admin/co
 
   return (
     <div className="flex flex-col gap-4">
+      <TextTabs now="content" />
       <div>
-        <h1 className="text-2xl">안내 문구</h1>
+        <h1 className="text-2xl">안내소·운세 문구</h1>
         <p className="mt-1 text-sm opacity-60">공원 안내소에서 안내원이 보여주는 소개·팁·사용법이에요. 저장하면 바로 반영돼요.
           {row ? ` (마지막 수정 ${kst(row.updatedAt)})` : " (지금은 기본 문구)"}</p>
       </div>

@@ -64,6 +64,8 @@ export const DEFAULTS = {
     jealousRangeM: 8,     // 이 거리 안에서 본 고양이만
     jealousCooldownMin: 10, // 같은 고양이는 몇 분에 한 번만 질투
     playGain: 5,          // 낚싯대로 놀아 줘서 사냥에 성공하면 오르는 호감도
+    petStrokeSec: 4,      // 손으로 이만큼(초) 문질러 주면 쓰다듬기가 저절로 끝남
+    petIdleSec: 6,        // 이만큼(초) 손을 안 대면 쓰다듬기가 끝남
   },
   controls: {
     walkSpeedCm: 300,     // 걷기 빠르기 (cm/초). 서버도 6m/초까지는 받아줌
@@ -166,6 +168,8 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       jealousRangeM: { label: "질투하는 거리 (이 안에서 본 고양이)", unit: "m", min: 0, max: 100 },
       jealousCooldownMin: { label: "같은 고양이 질투 간격", unit: "분", min: 0, max: 1440 },
       playGain: { label: "낚싯대 사냥 성공하면 오르는 호감도", unit: "점", min: 0, max: 50 },
+      petStrokeSec: { label: "쓰다듬기: 이만큼 문지르면 저절로 끝남", unit: "초", min: 1, max: 120 },
+      petIdleSec: { label: "쓰다듬기: 이만큼 손을 안 대면 끝남", unit: "초", min: 1, max: 120 },
     },
   },
   controls: {

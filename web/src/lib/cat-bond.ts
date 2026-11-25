@@ -16,7 +16,7 @@ export async function myBonds(userId: string) {
   const { catBond: r } = await getSettings();
   const rows = await db.select().from(catBonds).where(eq(catBonds.userId, userId));
   return {
-    rules: { nameHearts: r.nameHearts, petStayHearts: r.petStayHearts },
+    rules: { nameHearts: r.nameHearts, petStayHearts: r.petStayHearts, petStrokeSec: r.petStrokeSec, petIdleSec: r.petIdleSec },
     cats: Array.from({ length: CAT_LOOKS }, (_, cat) => {
       const row = rows.find((x) => x.cat === cat);
       return { cat, hearts: heartsOf(effective(row, r), r), name: row?.name ?? null };

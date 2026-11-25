@@ -159,6 +159,18 @@ export const MESSAGES = {
   "rod.stopBtn": { group: "고양이", label: "놀이 그만하기 버튼", text: "그만하기" },
 
   // ---------- 매점 ----------
+  "item.notebook.name": { group: "매점 물품", label: "노트 이름", text: "벚꽃잎 노트" },
+  "item.notebook.desc": { group: "매점 물품", label: "노트 설명 ({n} = 한 권 장수)", text: "{n}장 · 손글씨 쪽지용" },
+  "item.churu.name": { group: "매점 물품", label: "츄르 이름", text: "츄르" },
+  "item.churu.desc": { group: "매점 물품", label: "츄르 설명 ({n} = 한 묶음 개수)", text: "{n}개 한 묶음 · 고양이 간식" },
+  "item.rod.name": { group: "매점 물품", label: "낚싯대 이름", text: "낚싯대 장난감" },
+  "item.rod.desc": { group: "매점 물품", label: "낚싯대 설명 ({n} = 놀 수 있는 횟수)", text: "깃털 달린 고양이 장난감 · {n}번 놀면 부러져요" },
+  "item.mat.name": { group: "매점 물품", label: "돗자리 이름", text: "돗자리" },
+  "item.mat.desc": { group: "매점 물품", label: "돗자리 설명 ({color} = 고른 색)", text: "{color} · 색마다 한 장씩 모을 수 있어요" },
+  "shop.haveChuru": { group: "매점", label: "매점: 가진 츄르 ({n})", text: "지금 {n}개" },
+  "shop.haveRod": { group: "매점", label: "매점: 가진 낚싯대 ({n} = 남은 횟수)", text: "지금 낚싯대: {n}번 더 놀 수 있어요" },
+  "shop.allMats": { group: "매점", label: "매점: 돗자리를 다 가졌을 때", text: "다섯 색을 모두 갖고 있어요" },
+  "shop.haveMat": { group: "매점", label: "매점: 이미 가진 색 ({color})", text: "{color}은 이미 있어요" },
   "shop.boughtNote": { group: "매점", label: "노트를 샀을 때 ({n} = 장수)", text: "벚꽃잎 노트를 샀어요 (+{n}장)" },
   "shop.boughtChuru": { group: "매점", label: "츄르를 샀을 때 ({n} = 개수)", text: "츄르를 샀어요 (+{n}개) · 고양이를 눌러서 줄 수 있어요" },
   "shop.boughtRod": { group: "매점", label: "낚싯대를 샀을 때", text: "낚싯대를 샀어요! 고양이를 눌러서 놀아 줄 수 있어요" },

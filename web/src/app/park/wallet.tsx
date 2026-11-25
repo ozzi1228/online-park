@@ -99,10 +99,10 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
     else setError(msg(r?.reason === "insufficient" ? "shop.noGreen" : r?.reason === "owned" ? (item === "rod" ? "shop.ownedRod" : "shop.ownedMat") : "shop.fail"));
   };
   const items = [
-    { id: "notebook" as const, name: "벚꽃잎 노트", desc: `${me.shop.notebookSheets}장 · 손글씨 쪽지용`, price: me.shop.notebookPrice, disabled: false },
-    { id: "churu" as const, name: "츄르", desc: `${me.shop.churuPack}개 한 묶음 · 고양이 간식 (지금 ${me.items.churu}개)`, price: me.shop.churuPrice, disabled: false },
-    { id: "rod" as const, name: "낚싯대 장난감", desc: me.items.rod ? `지금 낚싯대: ${me.items.rod}번 더 놀 수 있어요` : `깃털 달린 고양이 장난감 · ${me.shop.rodUses}번 놀면 부러져요`, price: me.shop.rodPrice, disabled: me.items.rod > 0 },
-    { id: "mat" as const, name: "돗자리", desc: allMats ? "다섯 색을 모두 갖고 있어요" : owned(color) ? `${MAT_COLOR_NAMES[color]}은 이미 있어요` : `${MAT_COLOR_NAMES[color]} · 색마다 한 장씩 모을 수 있어요`, price: me.shop.matPrice, disabled: owned(color) },
+    { id: "notebook" as const, name: msg("item.notebook.name"), desc: msg("item.notebook.desc", { n: me.shop.notebookSheets }), price: me.shop.notebookPrice, disabled: false },
+    { id: "churu" as const, name: msg("item.churu.name"), desc: `${msg("item.churu.desc", { n: me.shop.churuPack })} (${msg("shop.haveChuru", { n: me.items.churu })})`, price: me.shop.churuPrice, disabled: false },
+    { id: "rod" as const, name: msg("item.rod.name"), desc: me.items.rod ? msg("shop.haveRod", { n: me.items.rod }) : msg("item.rod.desc", { n: me.shop.rodUses }), price: me.shop.rodPrice, disabled: me.items.rod > 0 },
+    { id: "mat" as const, name: msg("item.mat.name"), desc: allMats ? msg("shop.allMats") : owned(color) ? msg("shop.haveMat", { color: MAT_COLOR_NAMES[color] }) : msg("item.mat.desc", { color: MAT_COLOR_NAMES[color] }), price: me.shop.matPrice, disabled: owned(color) },
   ];
   return (
     <section role="dialog" aria-label="매점" className={card}>
