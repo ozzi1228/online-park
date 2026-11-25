@@ -5,7 +5,7 @@ import { toonGradient } from "./character";
 import { groundY, onPath } from "./park-map";
 import { MAT_COLORS, type MatColor } from "@/lib/mat-colors";
 
-export const MAT_W = 2.2, MAT_D = 1.4, SEAT_GAP = 0.85; // 두 자리 사이 거리
+export const MAT_W = 2.7, MAT_D = 1.7, SEAT_GAP = 1.0; // 두 자리 사이 거리
 
 /** 캐릭터 기준 오른쪽 방향 */
 const right = (yaw: number) => ({ x: -Math.cos(yaw), z: Math.sin(yaw) });
