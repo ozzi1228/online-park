@@ -572,7 +572,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (!r?.outcome) return;
       if (mp.online) mp.catPet(cat, r.outcome); else soloCats.brains.find((b) => b.s.look === cat)?.react(r.outcome, { x: pos.x, z: pos.z });
       if (r.outcome === "rub") { audio.purr(); setTimeout(() => audio.purr(), 2600); }
-      sayRef.current(r.outcome === "flee" ? "깜짝 놀라서 도망갔어요" : r.outcome === "rub" ? "고로롱… 다리에 부비부비해요 ♥" : "가만히 쓰다듬어지고 있어요 ♥");
+      sayRef.current(r.outcome === "flee" ? "깜짝 놀라서 도망갔어요" : r.outcome === "rub" ? "다리에 부비부비해요 🐱" : "가만히 쓰다듬어지고 있어요 ♥");
       refreshBonds.current();
     };
     // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
@@ -621,7 +621,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       churu.update(hand, tip, f.paste, f.pulse); churuTip.copy(tip);
       st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
       if (Math.floor(st.now * 10) !== Math.floor((st.now - dt) * 10)) setSqueezeUi({ paste: f.paste });
-      if (f.paste <= 0) { audio.purr(); endFeed(`${(() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : "고양이가"; })()} 싹싹 다 먹었어요 ♥ 고로롱`); }
+      if (f.paste <= 0) { audio.purr(); endFeed(`${(() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : "고양이가"; })()} 싹싹 다 먹었어요 🐱`); }
     };
 
     // ---------- 낚싯대 놀이 ----------
