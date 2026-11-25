@@ -43,12 +43,17 @@ function coatTexture(L: Look, head: boolean) {
     }
   });
 }
-/** 얼굴: 반짝이는 큰 눈 + 분홍 코 + ω 입 */
-function faceTex(L: Look, closed: boolean) {
+/** 얼굴: 반짝이는 큰 눈 + 분홍 코 + ω 입. happy = 쓰다듬어질 때 (눈을 ^^ 로 감고 볼이 발그레) */
+function faceTex(L: Look, closed: boolean, happy = false) {
   return canvas(256, 192, (x) => {
     x.lineCap = "round";
+    if (happy) { // 볼 발그레
+      x.fillStyle = "rgba(255,120,150,0.45)";
+      for (const s of [-1, 1]) { x.beginPath(); x.ellipse(128 + s * 62, 118, 17, 10, 0, 0, 7); x.fill(); }
+    }
     for (const [s, col] of [[-1, L.eyeL], [1, L.eyeR]] as const) {
       const ex = 128 + s * 50, ey = 92;
+      if (happy) { x.strokeStyle = "#3a2a26"; x.lineWidth = 6; x.beginPath(); x.arc(ex, ey + 6, 15, 1.15 * Math.PI, 1.85 * Math.PI); x.stroke(); continue; } // ^ ^
       if (closed) { x.strokeStyle = "#3a2a26"; x.lineWidth = 6; x.beginPath(); x.arc(ex, ey - 6, 16, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
       x.fillStyle = "#2b2124"; x.beginPath(); x.ellipse(ex, ey, 26, 28, 0, 0, 7); x.fill();
       x.fillStyle = col; x.beginPath(); x.ellipse(ex, ey + 2, 21, 23, 0, 0, 7); x.fill(); // 동공·반짝임은 따로(pupilTex) → 보는 쪽으로 굴러감
@@ -86,7 +91,7 @@ function buildCat(L: Look) {
   head.add(skull);
   const muzzle = part(new THREE.SphereGeometry(0.07, 16, 12).scale(1.3, 0.8, 0.8), L.white > 0 || L.patch || L.base === WHITE ? WHITE : L.base, 0);
   muzzle.position.set(0, -0.05, 0.085); head.add(muzzle); // 얼굴 그림(코·입)이 위로 보이게 살짝 안쪽
-  const open = faceTex(L, false), shut = faceTex(L, true);
+  const open = faceTex(L, false), shut = faceTex(L, true), happyFace = faceTex(L, false, true);
   const faceMat = new THREE.MeshToonMaterial({ map: open, gradientMap: toonGradient(), transparent: true, depthWrite: false });
   const face = new THREE.Mesh(new THREE.SphereGeometry(0.158, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.08, 0.95, 1), faceMat);
   face.renderOrder = 2; head.add(face);
@@ -112,7 +117,7 @@ function buildCat(L: Look) {
     tail.push(seg); parent = seg;
   }
   root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
-  return { root, body, head, legs, tail, faceMat, open, shut, pupils, pupilMat, pupilNarrow, pupilWide };
+  return { root, body, head, legs, tail, faceMat, open, shut, happyFace, pupils, pupilMat, pupilNarrow, pupilWide };
 }
 const at3 = <T extends THREE.Object3D>(m: T, x: number, y: number, z: number) => (m.position.set(x, y, z), m);
 
@@ -155,6 +160,9 @@ export class CatView {
   get pos() { return this.cat ? { x: this.x, y: this.y, z: this.z } : null; }
   /** 내 화면에서 바로 볼 곳 (낚싯대 깃털·츄르): 서버를 기다리지 않고 매 장면 따라감. 위아래로도 */
   focus: { x: number; y: number; z: number } | null = null;
+  /** 내 손으로 쓰다듬는 중: at = 손이 있는 곳(월드), dy = 머리 가운데 기준 손 높이(-1 정수리 ~ +1 턱), dx = 좌우(-1~1, 화면 기준), touching = 닿아 있는지 */
+  pet: { at: { x: number; y: number; z: number }; dx: number; dy: number; touching: boolean } | null = null;
+  private happy = 0; private nuzzle = { pitch: 0, roll: 0, x: 0, y: 0 };
   private headPitch = 0; private eyeX = 0; private eyeY = 0;
   get catLook() { return this.look; }
   setName(name: string | null) {
@@ -188,14 +196,14 @@ export class CatView {
     const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
       : s.act === "sit" || s.act === "look" || s.act === "content" || s.act === "eat" || s.act === "watch" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
     // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)
-    const F = this.focus;
+    const F = this.focus ?? (this.pet ? this.pet.at : null);
     let lookAt: number | null = F ? Math.atan2(F.x - this.x, F.z - this.z)
       : s.act === "look" || s.act === "content" || s.act === "rub" || s.act === "eat" || s.act === "follow" || s.act === "watch" || s.act === "crouch" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
     if (lookAt === null && !walking && Math.hypot(me.x - this.x, me.z - this.z) < 4) lookAt = Math.atan2(me.x - this.x, me.z - this.z);
     const relAll = lookAt === null ? 0 : Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw));
     const rel = THREE.MathUtils.clamp(relAll, -1.1, 1.1);
     // 위아래: 볼 곳이 머리보다 높으면 올려다봄 (+ = 위)
-    const headY = this.y + 0.42, up = F ? Math.atan2(F.y - headY, Math.max(0.15, Math.hypot(F.x - this.x, F.z - this.z))) : 0;
+    const headY = this.y + 0.42, up = F && !this.pet ? Math.atan2(F.y - headY, Math.max(0.15, Math.hypot(F.x - this.x, F.z - this.z))) : 0; // 쓰다듬을 땐 위아래는 손 닿은 자리(턱·정수리)로
 
     // 자세
     const pk = 1 - Math.exp(-dt * 6), P = this.pose;
@@ -250,6 +258,15 @@ export class CatView {
     });
     this.lick += ((s.act === "eat" ? 1 : 0) - this.lick) * pk; // 츄르: 고개를 숙여 할짝할짝
     c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12) - this.headPitch - 0.5 * onBack, this.headYaw * (1 - lying), 0.2 * P.groom); // 등을 대면 고개를 뒤로 젖혀 거꾸로 쳐다봄
+    // 쓰다듬기: 손이 닿으면 기분 좋은 얼굴로 손 쪽에 머리를 부빔. 턱을 만지면 고개를 들고, 정수리를 만지면 숙이고, 옆을 만지면 그쪽 볼을 기울여 비빔
+    const pt = this.pet, touch = !!pt?.touching;
+    this.happy += ((touch ? 1 : 0) - this.happy) * (1 - Math.exp(-dt * (touch ? 6 : 2)));
+    const nk = 1 - Math.exp(-dt * 7), N = this.nuzzle;
+    N.pitch += ((touch ? (pt!.dy > 0 ? -0.6 * pt!.dy : -0.45 * pt!.dy) : 0) - N.pitch) * nk; // 턱(+) → 고개 들기(-), 정수리(-) → 숙이기(+)
+    N.roll += ((touch ? -pt!.dx * 0.35 + Math.sin(t * 5) * 0.08 : 0) - N.roll) * nk;          // 옆 → 그쪽으로 볼을 기울임 (살랑살랑 비빔)
+    N.x += ((touch ? -pt!.dx * 0.035 : 0) - N.x) * nk; N.y += ((touch ? -pt!.dy * 0.02 : 0) - N.y) * nk; // 손 쪽으로 머리를 살짝 내밂
+    c.head.rotation.x += N.pitch; c.head.rotation.z += N.roll;
+    c.head.position.set(N.x, 0.4 + N.y, 0.22 + 0.03 * this.happy);
     // 눈동자 층을 옮겨 보는 쪽으로 굴림 (홍채 밖으로 안 나갈 만큼만). 사냥할 땐 동공이 동그랗게 커짐
     c.pupilMat.map = s.act === "crouch" || s.act === "pounce" || (F && s.act === "watch") ? c.pupilWide : c.pupilNarrow;
     c.pupilMat.map.offset.set(-this.eyeX * 0.045, -this.eyeY * 0.05);
@@ -262,8 +279,8 @@ export class CatView {
     // 눈 깜빡임 (그루밍 중엔 지그시)
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
     const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || knead > 0 || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면·배 보이고 꼼지락댈 땐 지그시
-    const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
-    c.pupils.visible = !shut;
+    const glad = this.happy > 0.35, want = glad ? c.happyFace : shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
+    c.pupils.visible = !shut && !glad;
   }
   dispose() { this.setName(null); this.clear(); for (const h of this.heartPool) { this.scene.remove(h.s); h.s.material.dispose(); } this.heartPool = []; }
 }

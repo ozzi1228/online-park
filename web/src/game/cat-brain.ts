@@ -10,7 +10,7 @@ export type CatAct = "walk" | "leave" | "idle" | "sit" | "stretch" | "groom" | "
 /** 낚싯대 놀이 단계: watch = 깃털을 눈으로 좇음, crouch = 엉덩이 씰룩, pounce = 덮침, roll = 신나서 뒹굴, end = 그만 */
 export type PlayPhase = "watch" | "crouch" | "pounce" | "roll" | "end";
 /** huff = 질투: 흘끗 보고 꼬리 휙, 가 버림 */
-export type CatReaction = "flee" | "content" | "rub" | "come" | "eat" | "eatEnd" | "huff";
+export type CatReaction = "flee" | "content" | "rub" | "come" | "eat" | "eatEnd" | "pet" | "petEnd" | "huff";
 export type CatConfig = { enabled: number; count: number };
 /** 화면이 그리는 데 필요한 것 (서버가 모두에게 보내는 값) */
 export type CatState = { active: boolean; look: number; x: number; y: number; z: number; yaw: number; act: CatAct; lx: number; lz: number };
@@ -65,6 +65,7 @@ export class CatBrain {
   /** 사람이 쓰다듬었을 때: 하던 걸 멈추고 바로 반응 (벤치·난간 위면 그 자리에서) */
   react(kind: CatReaction, who: P) {
     const s = this.s;
+    if (kind === "petEnd") { if (this.cur?.k === "content") this.cur = null; return; } // 다 쓰다듬었으면 하던 일로
     if (kind === "eatEnd") { // 츄르를 다 짰으면 그만 먹고 부비부비 → 졸졸 (하던 순서는 그대로, 아직 오는 중이면 먹기만 건너뜀)
       const a = this.cur;
       if (a?.k === "eat") this.cur = null;
@@ -74,6 +75,7 @@ export class CatBrain {
     this.queue = [];
     if (kind === "flee") { if (this.onRail || this.onBench) this.queue.push(this.hopDown()); this.queue.push({ k: "flee", dur: 2.4, who }); }
     else if (kind === "content") this.queue.push({ k: "content", dur: 4, who });
+    else if (kind === "pet") this.queue.push({ k: "content", dur: 40, who }); // 내 손으로 쓰다듬는 동안 그 자리(벤치 위여도)에 앉아서 기다림 (petEnd 까지)
     else if (kind === "eat") { // 츄르: 와서 앞에 앉아 할짝할짝 → 다리에 부비 → 잠깐 졸졸 따라다님
       if (this.onRail || this.onBench) this.queue.push(this.hopDown());
       this.queue.push({ k: "come", dur: 15, who, near: 0.55, next: [{ k: "eat", dur: 40, who }, { k: "rub", dur: 2.6, who, a: 0 }, { k: "follow", dur: 20, who }] });

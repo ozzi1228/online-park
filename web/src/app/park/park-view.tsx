@@ -139,6 +139,9 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   const toyDrag = useRef({ on: false, x: 0, y: 0, dx: 0, dy: 0, stop: false });
   /** 츄르 짜 주기 화면: 남은 양 0~1 */
   const [squeezeUi, setSqueezeUi] = useState<{ paste: number } | null>(null);
+  /** 쓰다듬기 화면: 손 모양이 따라다님 (x, y = 화면 위치, on = 고양이에 닿았는지) */
+  const [petUi, setPetUi] = useState<{ x: number; y: number; on: boolean; seen: boolean } | null>(null);
+  const petPtr = useRef({ x: 0, y: 0, inside: false, down: false, moved: 0, stop: false });
   const squeeze = useRef({ held: false, burst: 0, stop: false });
   const aim = useRef({ on: false, sx: 0, sy: 0, x: 0, y: 0, shoot: false, cancel: false });
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
@@ -228,6 +231,8 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     const st = { sitting: false, onMat: false, matColor: "pink" as MatColor,
       /** 돗자리에 앉아 있으면(내 것이든 같이 앉았든) 그 돗자리 가운데 → 카메라가 뒤에서 둘을 같이 보여 줌 */
       matAt: null as { x: number; z: number } | null,
+      /** 쓰다듬는 고양이 자리 (카메라가 가까이 내려가 고양이 얼굴을 보여 줌) */
+      petAt: null as { x: number; y: number; z: number } | null,
       /** 낚싯대 놀이 중: 나와 고양이 사이 (카메라가 뒤에서 둘을 같이 보여 줌) */
       playAt: null as { x: number; z: number } | null, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
       /** 정자에 드러누움 (누운 몸 방향) */
@@ -240,7 +245,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let baseFov = 60, firstPerson = false, zoomK = 1, camBack = 0; // camBack: 지금 카메라가 내 뒤로 떨어진 거리(부드럽게 따라감) // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
-    let matView = 0, lastMatAt = { x: 0, z: 0 }; // 돗자리에 앉으면 1인칭 대신 뒤에서 둘이 같이 앉은 모습이 보이게 (0~1 부드럽게)
+    let matView = 0, lastMatAt = { x: 0, z: 0 }, petView = 0, lastPetAt = { x: 0, y: 0, z: 0 }; // 돗자리에 앉으면 1인칭 대신 뒤에서 둘이 같이 앉은 모습이 보이게 (0~1 부드럽게)
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
       // 뒤에서 보는 시점: 내 머리 뒤 조금 위에서, 내가 보는 쪽을 봄 → 화면 가운데 아래에 내 캐릭터가 살짝 보임
@@ -272,6 +277,15 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         eye.lerp(me3, f);
         look.lerp(me3.clone().add(new THREE.Vector3(fx * vc, -Math.sin(vp), fz * vc).multiplyScalar(6)), f);
         if (matView > 0.3) firstPerson = false;
+      }
+      // 쓰다듬기: 고양이 앞 1.3m, 눈높이보다 조금 위에서 고양이 얼굴을 내려다봄 (내 손이 들어갈 자리)
+      if (st.petAt) lastPetAt = st.petAt;
+      petView += ((st.petAt ? 1 : 0) - petView) * 0.08;
+      if (petView > 0.001) {
+        const c = lastPetAt, toMe = Math.atan2(at.x - c.x, at.z - c.z), f = petView * petView * (3 - 2 * petView);
+        eye.lerp(new THREE.Vector3(c.x + Math.sin(toMe) * 1.25, c.y + 0.85, c.z + Math.cos(toMe) * 1.25), f);
+        look.lerp(new THREE.Vector3(c.x, c.y + 0.32, c.z), f);
+        if (petView > 0.3) firstPerson = true; // 내 몸은 숨김 (손만 보이게)
       }
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
         // 정면이 막혀 있으면(사다리·나무 앞 등) 비스듬한 쪽에서 — 너무 가까이 붙어 얼굴만 크게 나오지 않게
@@ -572,10 +586,51 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "pet" }) })
         .then((x) => x.json() as Promise<{ outcome: CatReaction }>).catch(() => null);
       if (!r?.outcome) return;
-      if (mp.online) mp.catPet(cat, r.outcome); else soloCats.brains.find((b) => b.s.look === cat)?.react(r.outcome, { x: pos.x, z: pos.z });
-      if (r.outcome === "rub") { audio.purr(); setTimeout(() => audio.purr(), 2600); }
-      sayRef.current(msg(r.outcome === "flee" ? "cat.flee" : r.outcome === "rub" ? "cat.rub" : "cat.content"));
       refreshBonds.current();
+      const react = (k: CatReaction) => mp.online ? mp.catPet(cat, k) : soloCats.brains.find((b) => b.s.look === cat)?.react(k, pos);
+      if (r.outcome === "flee") { react("flee"); sayRef.current(msg("cat.flee")); return; }
+      // 친한 고양이: 그 자리에 앉아 기다리고, 내 손으로 직접 쓰다듬음 (아주 친하면 고로롱)
+      react("pet");
+      if (st.sitting) stand();
+      const p = v.pos!; yaw = camYaw = Math.atan2(p.x - pos.x, p.z - pos.z);
+      st.petAt = { ...p }; st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // playAt: 몸이 카메라 쪽으로 돌지 않게
+      petting = { v, cat, purr: r.outcome === "rub", t: 0, idle: 0, purrAt: 0, done: false };
+      petPtr.current = { x: innerWidth / 2, y: innerHeight / 2, inside: false, down: false, moved: 0, stop: false };
+      setPetUi({ x: innerWidth / 2, y: innerHeight * 0.7, on: false, seen: false });
+      sayRef.current(msg("pet.hint"));
+    };
+    let petting: null | { v: CatView; cat: number; purr: boolean; t: number; idle: number; purrAt: number; done: boolean } = null;
+    const endPet = (why: string) => {
+      if (!petting || petting.done) return;
+      const p = petting; p.done = true; petting = null; p.v.pet = null;
+      if (mp.online) mp.catPet(p.cat, "petEnd"); else soloCats.brains.find((b) => b.s.look === p.cat)?.react("petEnd", pos);
+      st.petAt = null; st.playAt = null; setPetUi(null);
+      sayRef.current(why);
+    };
+    const petRay = new THREE.Raycaster();
+    const updatePet = (dt: number, walking: boolean, rect: DOMRect) => {
+      if (!petting || petting.done) return;
+      const P = petting, ptr = petPtr.current, cp = P.v.pos;
+      if (walking || ptr.stop || !cp || catDist(P.v) > 4) { endPet(msg(ptr.stop ? "pet.done" : "pet.away")); return; }
+      P.t += dt;
+      // 고양이 머리 자리와 크기를 화면 위에서: 손이 머리 근처(반지름 1.7배 안)면 닿은 것
+      const head = new THREE.Vector3(cp.x, cp.y + 0.42, cp.z), top = head.clone().add(new THREE.Vector3(0, 0.16, 0));
+      const hs = head.clone().project(camera), ts = top.clone().project(camera);
+      const hx = rect.left + (hs.x + 1) / 2 * rect.width, hy = rect.top + (1 - hs.y) / 2 * rect.height;
+      const r = Math.max(20, Math.abs(rect.top + (1 - ts.y) / 2 * rect.height - hy));
+      const dx = (ptr.x - hx) / r, dy = (ptr.y - hy) / r, near = Math.hypot(dx, dy * 0.8) < 1.7;
+      const touching = ptr.inside && (ptr.down || !coarse) && near;
+      // 손이 있는 곳(월드): 머리 높이에서 화면을 마주 보는 판 위
+      petRay.setFromCamera(new THREE.Vector2(((ptr.x - rect.left) / rect.width) * 2 - 1, -((ptr.y - rect.top) / rect.height) * 2 + 1), camera);
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), head);
+      const at = petRay.ray.intersectPlane(plane, new THREE.Vector3()) ?? head;
+      P.v.pet = { at: { x: at.x, y: at.y, z: at.z }, dx: THREE.MathUtils.clamp(dx, -1, 1), dy: THREE.MathUtils.clamp(dy, -1, 1), touching };
+      // 문지르면 고로롱 (아주 친한 고양이만), 한참 안 만지면 끝
+      const rubbing = touching && ptr.moved > 6; ptr.moved = 0;
+      P.idle = touching ? 0 : P.idle + dt;
+      if (P.purr && rubbing && P.t > P.purrAt) { audio.purr(); P.purrAt = P.t + 2.6; }
+      if (P.idle > 12) { endPet(msg("pet.done")); return; }
+      if (Math.floor(P.t * 20) !== Math.floor((P.t - dt) * 20)) setPetUi({ x: ptr.x, y: ptr.y, on: touching, seen: ptr.inside });
     };
     // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
     let feeding: null | { v: CatView; cat: number; paste: number; pulse: number; done: boolean } = null;
@@ -958,6 +1013,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       coin.update(dt);
       updatePlay(dt, walking);
       updateFeed(dt, walking);
+      updatePet(dt, walking, renderer.domElement.getBoundingClientRect());
 
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(msg("npc.greet", { npc: NPC_NAME })); }
@@ -1163,6 +1219,27 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
           </div>
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { toyDrag.current.stop = true; setTimeout(() => setPlayUi(null), 400); }}
             className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">{msg("rod.stopBtn")}</button>
+        </div>
+      )}
+      {petUi && (
+        <div className="absolute inset-0 z-20 cursor-none touch-none select-none"
+          onPointerEnter={(e) => Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true })}
+          onPointerLeave={() => { petPtr.current.inside = false; petPtr.current.down = false; }}
+          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} Object.assign(petPtr.current, { x: e.clientX, y: e.clientY, inside: true, down: true }); }}
+          onPointerMove={(e) => { const p = petPtr.current; p.moved += Math.hypot(e.clientX - p.x, e.clientY - p.y); Object.assign(p, { x: e.clientX, y: e.clientY, inside: true }); }}
+          onPointerUp={() => { petPtr.current.down = false; if (touch) petPtr.current.inside = false; }}
+          onPointerCancel={() => { petPtr.current.down = false; }}>
+          {petUi.seen && ( // 내 손: 손가락 쪽이 위, 고양이에 닿으면 살짝 눌러 쓰다듬는 모양
+            <svg viewBox="0 0 64 72" aria-hidden className="pointer-events-none absolute size-20 -translate-x-1/2 -translate-y-[35%] drop-shadow transition-transform duration-150"
+              style={{ left: petUi.x, top: petUi.y, transform: `translate(-50%,-35%) rotate(${petUi.on ? -14 : -4}deg) scale(${petUi.on ? 0.92 : 1})` }}>
+              <path d="M18 66 C8 56 6 44 9 36 L12 22 C13 17 19 17 20 22 L21 30 L22 12 C23 6 30 6 31 12 L31 28 L33 9 C34 3 41 3 42 9 L41 29 L44 14 C45 8 52 9 52 15 L49 36 C53 33 58 34 59 39 C58 45 52 52 46 58 C42 63 38 67 32 68 Z"
+                fill="#ffe3d3" stroke="#c98d7a" strokeWidth="2.2" strokeLinejoin="round" />
+              <path d="M24 46 Q30 50 38 47" fill="none" stroke="#e5ab97" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          )}
+          <p className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto w-fit rounded-full bg-cream/90 px-4 py-1.5 text-center text-sm">{msg(touch ? "pet.panelTouch" : "pet.panel")}</p>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { petPtr.current.stop = true; setTimeout(() => setPetUi(null), 400); }}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 cursor-pointer rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">{msg("pet.stopBtn")}</button>
         </div>
       )}
       {squeezeUi && (
