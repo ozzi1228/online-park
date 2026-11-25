@@ -24,7 +24,7 @@ import { makeMat, matAnim, matFits, paintMat, placeMat } from "@/game/mat";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
 import { LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
-import { CoinGame, launchVelocity } from "@/game/coin-game";
+import { CoinGame, type Shot, launchVelocity } from "@/game/coin-game";
 import { fountainTargets } from "@/game/fountain";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
@@ -391,6 +391,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (coin.busy) return;
       if (st.sitting) stand();
       yaw = camYaw = Math.atan2(FOUNTAIN.x - pos.x, FOUNTAIN.z - pos.z); pitch = -0.12; // 분수 꼭대기 접시가 보이게
+      const f = meRef.current?.fountain; if (f) coin.setRings(f.bullPct / 100, f.midPct / 100);
       st.aiming = true; setCoinAim(true); coin.showTarget(true);
       logClient("fountain.aim", {});
     };
@@ -398,23 +399,34 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const { pull, vel } = aimShot();
       if (pull < 0.08) { coin.preview(null); return; } // 살짝 건드린 건 다시 조준
       const from = hand(); stopAim();
-      const r = await fetch("/api/fountain", { method: "POST" }).then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
+      // 떨어질 곳·보상은 서버가 같은 식으로 다시 계산해서 정함 (화면 판정만 믿으면 보상을 속일 수 있어서)
+      const r = await fetch("/api/fountain", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ from: { x: from.x, y: from.y, z: from.z }, vel: { x: vel.x, y: vel.y, z: vel.z } }) })
+        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; shot: Shot; reward: number; capped: boolean }>).catch(() => null);
       if (!r?.ok) { sayRef.current(r?.reason === "insufficient" ? "그린이 모자라요" : "동전을 던지지 못했어요"); return; }
-      coin.launch(from, vel); audio.jingle(); refreshMe.current();
+      coinReward = { reward: r.reward, capped: r.capped };
+      coin.launch(from, vel, r.shot); audio.jingle();
     };
-    coin.onLand = (kind, at) => {
-      logClient("fountain.result", { hit: kind === "dish" });
+    let coinReward = { reward: 0, capped: false };
+    coin.onLand = (shot, at) => {
+      const kind = shot.kind, { reward, capped } = coinReward;
+      logClient("fountain.result", { hit: kind === "dish", ring: shot.ring });
+      refreshMe.current(); // 보상 받은 그린 반영
       st.coinViewUntil = st.now + (kind === "dish" ? 0 : 1.8); // 빗나가면 떨어진 자리를 잠깐 보여 주고 돌아옴
       if (kind === "ground") { sayRef.current("앗, 분수 밖으로 날아갔어요"); return; }
       audio.plop();
       if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current("아깝다! 맨 위 접시를 비껴갔어요"); return; }
-      // 성공: 발 동동 → 소원 (과녁·궤적 점은 바로 치움)
-      coin.hideGuides();
-      playGesture(me, "stomp", st.now); mp.sendGesture("stomp"); st.faceCam = true; st.wishUntil = st.now + 1.8 + WISH_SEC;
-      sayRef.current("쏙! 들어갔어요 🎉");
-      setTimeout(() => { audio.chime(); st.stompUntil = 0; }, 1800);
-      setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), (1.8 + WISH_SEC) * 1000);
-      st.stompUntil = st.now + 1.8;
+      // 성공 (과녁·궤적 점은 바로 치움). 정중앙은 만세+펄쩍 & 큰 불꽃, 나머지는 발 동동 & 작은 불꽃 → 그다음 소원
+      const bull = shot.ring === "bull", sec = bull ? 2.6 : 1.8;
+      coin.hideGuides(); coin.burst(at, bull);
+      const gesture = bull ? "cheer" : "stomp";
+      playGesture(me, gesture, st.now); mp.sendGesture(gesture); st.faceCam = true; st.wishUntil = st.now + sec + WISH_SEC;
+      const got = reward > 0 ? ` +${reward}그린` : capped ? " (오늘 보상은 다 받았어요)" : "";
+      sayRef.current(bull ? `정중앙! 🎯${got}` : shot.ring === "mid" ? `쏙! 가운데 칸 🎉${got}` : `쏙! 들어갔어요 🎉${got}`);
+      if (bull) { audio.chime(); setTimeout(() => audio.chime(), 350); }
+      setTimeout(() => { audio.chime(); st.stompUntil = 0; }, sec * 1000);
+      setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), (sec + WISH_SEC) * 1000);
+      st.stompUntil = st.now + sec;
     };
     // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
     treeApi.current = {
@@ -820,6 +832,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/90 px-4 py-1.5 text-center text-sm">
             아래로 당겨 세기를, 좌우로 방향을 정하고 놓으면 튕겨요 · 맨 위 작은 접시에 넣어 보세요
           </p>
+          {me?.fountain && (
+            <p className="pointer-events-none absolute inset-x-4 top-28 mx-auto flex w-fit items-center gap-3 rounded-full bg-cream/90 px-4 py-1 text-xs tabular-nums">
+              <span><i className="mr-1 inline-block size-2.5 rounded-full bg-[#ff5a5f]" />정중앙 {me.fountain.rewardBull}</span>
+              <span><i className="mr-1 inline-block size-2.5 rounded-full bg-[#ffb347]" />가운데 {me.fountain.rewardMid}</span>
+              <span><i className="mr-1 inline-block size-2.5 rounded-full bg-[#fff1a8] ring-1 ring-black/10" />바깥 {me.fountain.rewardOuter}</span>
+              <span className="opacity-60">그린</span>
+            </p>
+          )}
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { aim.current.cancel = true; }}
             className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
         </div>

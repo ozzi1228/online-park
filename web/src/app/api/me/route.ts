@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     charge: await chargeOptions(),
     paymentsReady: paymentsReady(),
     fountainPrice: fountain.coinPrice,
+    fountain: { rewardOuter: fountain.rewardOuter, rewardMid: fountain.rewardMid, rewardBull: fountain.rewardBull, midPct: fountain.midPct, bullPct: fountain.bullPct },
     sound,
     controls,
     cat,

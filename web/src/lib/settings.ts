@@ -23,6 +23,12 @@ export const DEFAULTS = {
   },
   fountain: {
     coinPrice: 10,        // 분수에 동전 던지기 (그린)
+    rewardOuter: 5,       // 맨 위 접시 바깥 칸에 들어가면 (그린)
+    rewardMid: 10,        // 가운데 칸
+    rewardBull: 20,       // 정중앙
+    midPct: 60,           // 가운데 칸 = 접시 반지름의 몇 %까지
+    bullPct: 25,          // 정중앙 = 접시 반지름의 몇 %까지
+    rewardDailyCap: 100,  // 한 사람이 하루에 받을 수 있는 보상 합계 (0 = 제한 없음)
   },
   wishTree: {
     notesPerUserDaily: 5, // 한 사람이 하루에 달 수 있는 소원 쪽지 수
@@ -77,7 +83,15 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
   },
   fountain: {
     title: "분수",
-    fields: { coinPrice: { label: "동전 한 번 가격", unit: "그린", min: 0, max: 100000 } },
+    fields: {
+      coinPrice: { label: "동전 한 번 가격", unit: "그린", min: 0, max: 100000 },
+      rewardOuter: { label: "접시 바깥 칸 보상", unit: "그린", min: 0, max: 100000 },
+      rewardMid: { label: "가운데 칸 보상", unit: "그린", min: 0, max: 100000 },
+      rewardBull: { label: "정중앙 보상", unit: "그린", min: 0, max: 100000 },
+      midPct: { label: "가운데 칸 크기 (접시 반지름의)", unit: "%", min: 5, max: 95 },
+      bullPct: { label: "정중앙 크기 (접시 반지름의)", unit: "%", min: 1, max: 90 },
+      rewardDailyCap: { label: "하루 보상 한도 (0 = 없음)", unit: "그린", min: 0, max: 1000000 },
+    },
   },
   wishTree: {
     title: "소원나무",

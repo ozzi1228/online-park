@@ -13,6 +13,7 @@ export type MeInfo = {
   paymentsReady: boolean;
   unreadNotes: number;
   fountainPrice: number;
+  fountain: { rewardOuter: number; rewardMid: number; rewardBull: number; midPct: number; bullPct: number };
   sound: { wind: number; water: number; crowd: number; nature: number; sfx: number };
   controls: { walkSpeedCm: number; turnSpeed: number; cameraBackCm: number; cameraSideCm: number };
   cat: { enabled: number; count: number };

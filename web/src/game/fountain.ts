@@ -3,10 +3,10 @@
 import * as THREE from "three";
 import { part, toonGradient } from "./character";
 import type { SkyUniforms } from "./water";
+import { FOUNTAIN_SHAPE } from "./coin-sim";
 
 const STONE = "#ece2d2", STONE_DARK = "#d9ccb8";
-const R_OUT = 3.1, R_IN = 2.82, WATER_Y = 0.48, FLOOR_Y = 0.16;
-const LOWER = { y: 1.0, r: 1.3 }, UPPER = { y: 1.9, r: 0.66 };
+const { R_OUT, R_IN, WATER_Y, FLOOR_Y, LOWER, UPPER } = FOUNTAIN_SHAPE;
 
 /** (반지름, 높이) 단면을 돌려서 만든 돌 모양 */
 const lathe = (pts: [number, number][], seg = 48) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
@@ -104,14 +104,7 @@ const sprite = () => {
 };
 
 /** 동전 게임 판정용: 맨 위 접시(목표)·가운데 접시·아래 수반의 물 높이와 반지름 (월드 좌표, m) */
-export function fountainTargets(at: { x: number; z: number }, scale: number) {
-  return {
-    x: at.x, z: at.z,
-    dish: { y: (UPPER.y + 0.24) * scale, r: (UPPER.r - 0.1) * scale },
-    lower: { y: (LOWER.y + 0.35) * scale, r: (LOWER.r - 0.1) * scale },
-    basin: { y: WATER_Y * scale, r: R_IN * scale },
-  };
-}
+export { fountainTargets } from "./coin-sim";
 
 export function createFountain(at: { x: number; z: number }, scale: number, sky: SkyUniforms) {
   const group = new THREE.Group(); group.position.set(at.x, 0, at.z); group.scale.setScalar(scale);

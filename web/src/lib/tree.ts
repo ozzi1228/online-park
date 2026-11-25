@@ -5,7 +5,10 @@ import { db } from "@/db";
 import { greenLedger, inventory, notes, user } from "@/db/schema";
 import { onCanopy } from "@/game/park-map";
 import type { Strokes } from "@/lib/notes-shared";
-import { getSettings } from "@/lib/settings";
+import { getSettings, kstDate } from "@/lib/settings";
+import { fountainTargets, simulate } from "@/game/coin-sim";
+
+type V3 = { x: number; y: number; z: number };
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -74,15 +77,27 @@ export async function recover(userId: string, id: number) {
   });
 }
 
-/** 분수에 동전: 그린 차감 (사람별 잠금으로 동시에 눌러도 마이너스 불가) */
-export async function tossCoin(userId: string) {
-  const price = (await getSettings()).fountain.coinPrice;
+/** 분수에 동전: 그린 차감 + 서버가 다시 계산한 결과로 보상 (사람별 잠금으로 동시에 눌러도 마이너스 불가)
+ *  맨 위 접시에 들어가면 과녁 칸에 따라 그린을 줌. 하루 보상 합계는 관리자 한도까지 */
+export async function tossCoin(userId: string, from: V3, vel: V3) {
+  const { fountain: f } = await getSettings();
+  const price = f.coinPrice;
+  const shot = simulate(fountainTargets(), from, vel, { bull: f.bullPct / 100, mid: f.midPct / 100 });
+  const want = shot.ring === "bull" ? f.rewardBull : shot.ring === "mid" ? f.rewardMid : shot.ring === "outer" ? f.rewardOuter : 0;
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
     const [{ total }] = await tx.select({ total: sum(greenLedger.amount) }).from(greenLedger).where(eq(greenLedger.userId, userId));
     const balance = Number(total ?? 0);
     if (balance < price) return { ok: false, reason: "insufficient", balance } as const;
     await tx.insert(greenLedger).values({ userId, amount: -price, reason: "fountain", refId: randomUUID() });
-    return { ok: true, balance: balance - price, price } as const;
+    let reward = want;
+    if (reward > 0 && f.rewardDailyCap > 0) {
+      const since = new Date(`${kstDate()}T00:00:00+09:00`);
+      const [{ got }] = await tx.select({ got: sum(greenLedger.amount) }).from(greenLedger)
+        .where(and(eq(greenLedger.userId, userId), eq(greenLedger.reason, "fountain_reward"), gte(greenLedger.createdAt, since)));
+      reward = Math.max(0, Math.min(reward, f.rewardDailyCap - Number(got ?? 0)));
+    }
+    if (reward > 0) await tx.insert(greenLedger).values({ userId, amount: reward, reason: "fountain_reward", refId: randomUUID() });
+    return { ok: true, balance: balance - price + reward, price, shot, reward, capped: reward < want } as const;
   });
 }

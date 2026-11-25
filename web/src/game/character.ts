@@ -81,10 +81,10 @@ export function faceTexture(p: Preset, closed: boolean, grin = false, stern = fa
 
 export type Character = ReturnType<typeof makeChar>;
 export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish" | "lie";
-/** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동 */
-export type Gesture = "wave" | "shake" | "stomp";
-const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8 };
-export const isGesture = (k: unknown): k is Gesture => k === "wave" || k === "shake" || k === "stomp";
+/** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동, cheer = 만세하며 펄쩍펄쩍 (분수 정중앙) */
+export type Gesture = "wave" | "shake" | "stomp" | "cheer";
+const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8, cheer: 2.6 };
+export const isGesture = (k: unknown): k is Gesture => k === "wave" || k === "shake" || k === "stomp" || k === "cheer";
 /** 몸짓 시작 (t = animateChar에 넘기는 시각과 같은 시계) */
 export function playGesture(c: Character, kind: Gesture, t: number) { c.gesture = { kind, t0: t }; }
 
@@ -260,7 +260,12 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
       arm0X = -0.2; arm0Z = -(2.55 + Math.sin(gt * 11) * 0.4) * fade; headX = -0.08; face = "grin";
     } else if (g.kind === "shake") { // 고개 절레절레 + 단호한 얼굴
       headY = Math.sin(gt * 15) * 0.5 * fade; face = "stern";
-    } else if (!seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
+    } else if (g.kind === "cheer" && !seated) { // 만세! 두 팔을 번쩍 들고 흔들며 세 번 펄쩍
+      const hop = Math.max(0, Math.sin(gt * 7.3)), wig = Math.sin(gt * 16) * 0.25;
+      bodyY = hop * 0.38 * fade; legX = -0.55 * hop * fade; leg1X = legX; // 뛰어오르면 무릎을 접음
+      arm0X = -0.15 * fade; armX = arm0X; arm0Z = -(2.85 + wig) * fade - armZ * (1 - fade); arm1Z = (2.85 - wig) * fade + armZ * (1 - fade);
+      headX = -0.18 * fade; face = "grin";
+    } else if (g.kind === "stomp" && !seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
       const st = Math.sin(gt * 18);
       legX = 0.5 * st * fade; leg1X = -legX; bodyY = Math.abs(st) * 0.07 * fade;
       arm0X = arm0X * (1 - fade) - 0.3 * fade; armX = arm0X; arm0Z = -1.2 * fade - armZ * (1 - fade); arm1Z = -arm0Z; face = "grin";
