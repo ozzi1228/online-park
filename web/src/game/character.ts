@@ -162,8 +162,13 @@ export function makeChar(p: Preset) {
     body.add(g); return g;
   });
   // 브이 손가락 (사진 찍을 때만 보임): 손끝에서 두 손가락을 벌려 뻗음
-  const vSign = new THREE.Group(); vSign.position.set(0, -0.36, 0); vSign.visible = false; arms[0].add(vSign);
-  for (const a of [-0.45, 0.45]) { const f = add(cap(0.032, 0.14), p.skin, -Math.sin(a) * 0.08, -0.09, 0.03, vSign); f.rotation.z = a; }
+  // 브이 손가락 (사진 찍을 때만): 두 손을 턱 아래로 모으면 동그란 주먹 위로 짧고 통통한 손가락 두 개씩 쏙
+  //  팔을 앞으로 든 자세에서 팔의 +z 쪽이 위가 되도록 판을 눕혀 둠
+  const vSigns = arms.map((arm) => {
+    const g = new THREE.Group(); g.position.set(0, -0.33, 0); g.rotation.x = Math.PI / 2; g.visible = false; arm.add(g);
+    for (const s of [-1, 1]) { const f = add(cap(0.027, 0.04), p.skin, s * 0.03, 0.075, 0, g); f.rotation.z = -s * 0.42; }
+    return g;
+  });
   // 머리
   const head = new THREE.Group(); head.position.y = H; body.add(head);
   const hy = (y: number) => y - H;
@@ -234,7 +239,7 @@ export function makeChar(p: Preset) {
   if (p.kid) { root.scale.setScalar(0.76); head.scale.setScalar(1.12); }
 
   return {
-    root, body, head, arms, legs, faceMat, texOpen, texClosed, preset: p, vSign,
+    root, body, head, arms, legs, faceMat, texOpen, texClosed, preset: p, vSigns,
     /** 잠깐 하는 몸짓 (손 흔들기·고개 젓기·발 동동) */
     gesture: null as { kind: Gesture; t0: number } | null,
     faces: {} as Partial<Record<"grin" | "stern", THREE.CanvasTexture>>,
@@ -271,7 +276,7 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   if (lie) { legX = 0; armX = 0; armZ = 1.35; bodyY = 0.2; headX = 0; }
   let arm0X = mode === "walk" ? -armX : armX, arm0Z = -armZ, arm1Z = armZ, leg1X = seated ? legX : -legX, headY = 0;
   let face: "grin" | "stern" | null = null, headZ = 0;
-  c.vSign.visible = false;
+  for (const g of c.vSigns) g.visible = false;
   const g = c.gesture, gt = g ? t - g.t0 : 0;
   if (g && (gt < 0 || gt > GESTURE_SEC[g.kind])) c.gesture = null;
   else if (g && mode !== "walk") {
@@ -285,9 +290,10 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
       bodyY = hop * 0.38 * fade; legX = -0.55 * hop * fade; leg1X = legX; // 뛰어오르면 무릎을 접음
       arm0X = -0.15 * fade; armX = arm0X; arm0Z = -(2.85 + wig) * fade - armZ * (1 - fade); arm1Z = (2.85 - wig) * fade + armZ * (1 - fade);
       headX = -0.18 * fade; face = "grin";
-    } else if (g.kind === "v") { // 브이: 한 손을 얼굴 옆으로 들어 손가락 브이, 고개 살짝 갸웃 + 활짝 웃기 (앉아서도)
-      arm0X = -2.65 * fade + arm0X * (1 - fade); arm0Z = -0.5 * fade - armZ * (1 - fade); arm1Z = armZ + 0.25 * fade;
-      headZ = 0.14 * fade; headX = -0.05; face = "grin"; c.vSign.visible = fade > 0.5;
+    } else if (g.kind === "v") { // 브이: 두 손을 턱 아래로 모아 손가락 브이, 고개 살짝 갸웃 + 활짝 웃기 (앉아서도)
+      // 두 팔을 앞으로 들어 손이 턱 아래에서 모이게 (조금 안쪽으로)
+      arm0X = -1.38 * fade + arm0X * (1 - fade); armX = arm0X; arm0Z = 0.45 * fade - armZ * (1 - fade); arm1Z = -0.45 * fade + armZ * (1 - fade);
+      headZ = 0.12 * fade; headX = -0.06; face = "grin"; for (const vg of c.vSigns) vg.visible = fade > 0.5;
     } else if (g.kind === "stomp" && !seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
       const st = Math.sin(gt * 18);
       legX = 0.5 * st * fade; leg1X = -legX; bodyY = Math.abs(st) * 0.07 * fade;
