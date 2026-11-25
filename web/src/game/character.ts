@@ -134,6 +134,17 @@ export function makeChar(p: Preset) {
       add(new THREE.BoxGeometry(0.03, 0.2, 0.02), p.tie, 0.125, 0.63, 0.188).rotation.z = 0.18;
     }
   }
+  if (tt === "durumagi") { // 두루마기: 가슴께부터 무릎 아래까지 내려오는 겉옷 + 흰 깃(오른쪽 위로 여밈) + 허리 세조대(끈)와 술
+    add(new THREE.CylinderGeometry(0.215, 0.315, 0.6, 22), p.top, 0, 0.5, 0);
+    const git = p.inner || "#ffffff";
+    add(new THREE.BoxGeometry(0.055, 0.34, 0.03), git, 0.035, 0.82, 0.168).rotation.set(-0.25, 0, 0.62);
+    add(new THREE.BoxGeometry(0.05, 0.16, 0.03), git, -0.07, 0.9, 0.162).rotation.set(-0.3, 0, -0.5);
+    add(new THREE.BoxGeometry(0.02, 0.5, 0.02), p.top, 0.02, 0.45, 0.25).rotation.x = -0.18; // 앞자락 여밈선 (살짝 그늘)
+    const cord = p.tie || "#9aa0aa";
+    add(new THREE.TorusGeometry(0.222, 0.012, 6, 28), cord, 0, 0.66, 0).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.009, 0.009, 0.36, 6), cord, 0.12, 0.49, 0.2).rotation.z = 0.08;   // 늘어진 끈
+    add(new THREE.ConeGeometry(0.028, 0.1, 10), cord, 0.135, 0.29, 0.21).rotation.z = Math.PI;         // 술
+  }
   if (tt === "overalls") {
     add(new THREE.BoxGeometry(0.22, 0.2, 0.04), p.bottom, 0, 0.66, 0.175);
     for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.26, 0.03), p.bottom, s * 0.08, 0.86, 0.165);
@@ -146,7 +157,7 @@ export function makeChar(p: Preset) {
   }
   const arms = [-1, 1].map((s) => {
     const g = new THREE.Group(); g.position.set(s * 0.25, 0.92, 0);
-    add(cap(tt === "hanbok" ? 0.085 : 0.065, 0.2), p.top, 0, -0.16, 0, g); // 한복은 소매가 넉넉
+    add(cap(tt === "hanbok" || tt === "durumagi" ? 0.085 : 0.065, 0.2), p.top, 0, -0.16, 0, g); // 한복은 소매가 넉넉
     add(sph(0.07), p.skin, 0, -0.33, 0, g);
     body.add(g); return g;
   });
@@ -209,6 +220,11 @@ export function makeChar(p: Preset) {
     hairAt(new THREE.CylinderGeometry(0.6, 0.6, 0.018, 40), 0, 1.6, -0.02, black);
     hairAt(new THREE.CylinderGeometry(0.17, 0.19, 0.27, 28), 0, 1.74, -0.02, black);
     hairAt(new THREE.CylinderGeometry(0.2, 0.2, 0.035, 28), 0, 1.625, -0.02, "#3c3c46"); // 모자 띠
+    for (const s of [-1, 1]) { // 갓끈: 챙에서 턱 아래로 내려와 매고, 앞으로 길게 늘어짐
+      hairAt(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 6), s * 0.27, 1.38, 0.02, black).rotation.z = s * 0.25;
+      hairAt(new THREE.BoxGeometry(0.03, 0.2, 0.012), s * 0.025, 0.86, 0.22, black).rotation.z = s * 0.15; // 턱 아래 매듭에서 가슴으로
+    }
+    for (let i = 0; i < 7; i++) hairAt(sph(0.016), 0.05, 0.97 - i * 0.042, 0.215 + i * 0.006, "#b6643c"); // 구슬 갓끈 (호박빛): 턱 아래에서 가슴으로
   }
   if (p.hat === "beret") hairAt(sph(0.37, 1.05, 0.38, 1.05), 0.03, 1.62, -0.02, hcol).rotation.z = -0.22;
   if (p.ribbon) for (const s of [-1, 1]) hairAt(sph(0.06, 1, 0.8, 0.7), 0.24 + s * 0.07, 1.6, 0.06, p.ribbon);

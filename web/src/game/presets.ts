@@ -8,7 +8,7 @@ export type Preset = {
   skin: string; hair: string;
   style: "short" | "long" | "wavy" | "bob" | "buns" | "pony" | "twotail" | "manbun" | "braid" | "curly" | "slick" | "bald" | "binyeo";
   bangs?: "side" | "none";
-  top: string; topType?: "tee" | "hoodie" | "jacket" | "overalls" | "hanbok"; inner?: string; tie?: string;
+  top: string; topType?: "tee" | "hoodie" | "jacket" | "overalls" | "hanbok" | "durumagi"; inner?: string; tie?: string;
   bottom: string; bottomType?: "pants" | "wide" | "shorts" | "skirt" | "longskirt" | "chima";
   shoes: string;
   collar?: string; scarf?: string; bag?: string;
@@ -17,7 +17,7 @@ export type Preset = {
   hidden?: boolean;
 };
 
-export const TAGS = ["캐주얼", "러블리", "힙", "단정", "댄디", "스포티", "클래식", "꼬마"] as const;
+export const TAGS = ["캐주얼", "러블리", "힙", "단정", "댄디", "스포티", "클래식", "한복", "꼬마"] as const;
 export type Tag = (typeof TAGS)[number];
 
 export const PRESETS: Preset[] = [
@@ -41,6 +41,9 @@ export const PRESETS: Preset[] = [
   { id: "p18", name: "땋은머리 원피스", tags: ["러블리", "클래식"], skin: "#fbe6dc", hair: "#a0522d", style: "braid", top: "#9fd1b5", bottom: "#9fd1b5", bottomType: "longskirt", collar: "#ffffff", shoes: "#8a5a44", eye: "#4a6a4a" },
   { id: "p19", name: "셔츠 크로스백", tags: ["단정"], skin: "#f1ceb4", hair: "#4a4444", style: "short", bangs: "side", top: "#a9c4d9", collar: "#ffffff", bottom: "#7a6a58", shoes: "#4a3a30", bag: "#5a4a40", smile: true },
   { id: "p20", name: "탈색 와이드", tags: ["힙"], skin: "#8d5c3f", hair: "#e8d27a", style: "short", top: "#2f2f35", bottom: "#8a8f6a", bottomType: "wide", shoes: "#ffffff", brow: "#3a2a20" },
+  // 한복: 노란 저고리(흰 동정·깃) + 쪽빛 옷고름 + 분홍 치마, 쪽진 머리에 비녀 / 하늘빛 두루마기 + 흰 바지 + 갓
+  { id: "p21", name: "노랑 저고리 분홍 치마", tags: ["한복", "러블리"], skin: "#fbe2d2", hair: "#2f2626", style: "binyeo", top: "#f6e2a2", topType: "hanbok", inner: "#fdfaf2", tie: "#56628c", collar: "#ffffff", bottom: "#f5a3b0", bottomType: "chima", shoes: "#fdfaf5", pin: "#f2c94c", smile: true },
+  { id: "p22", name: "하늘빛 두루마기 갓", tags: ["한복", "클래식"], skin: "#f1cdb0", hair: "#2a2220", style: "slick", top: "#a9dcef", topType: "durumagi", inner: "#f8f8f4", tie: "#a6adb8", collar: "#ffffff", bottom: "#f6f4ee", bottomType: "wide", shoes: "#2b2b30", hat: "gat" },
 ];
 
 export const visiblePresets = () => PRESETS.filter((p) => !p.hidden);
