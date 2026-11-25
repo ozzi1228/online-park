@@ -577,6 +577,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
     // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
     let feeding: null | { v: CatView; cat: number; paste: number; pulse: number; done: boolean } = null;
+    const churuTip = new THREE.Vector3();
     const endFeed = (why: string) => {
       if (!feeding || feeding.done) return;
       const f = feeding; f.done = true; feeding = null;
@@ -616,7 +617,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const cp = f.v.pos!, toMe = Math.atan2(pos.x - cp.x, pos.z - cp.z);
       const tip = new THREE.Vector3(cp.x + Math.sin(toMe) * 0.2, cp.y + 0.24, cp.z + Math.cos(toMe) * 0.2); // 고양이 입 앞
       const hand = new THREE.Vector3(pos.x + Math.sin(yaw) * 0.35 - Math.cos(yaw) * 0.15, footY + 0.85, pos.z + Math.cos(yaw) * 0.35 + Math.sin(yaw) * 0.15);
-      churu.update(hand, tip, f.paste, f.pulse);
+      churu.update(hand, tip, f.paste, f.pulse); churuTip.copy(tip);
       st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
       if (Math.floor(st.now * 10) !== Math.floor((st.now - dt) * 10)) setSqueezeUi({ paste: f.paste });
       if (f.paste <= 0) { audio.purr(); endFeed(`${(() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : "고양이가"; })()} 싹싹 다 먹었어요 ♥ 고로롱`); }
@@ -971,7 +972,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (!mp.online) { if (meRef.current?.cat) Object.assign(soloCats.cfg, meRef.current.cat); soloCats.update(dt, [{ x: pos.x, z: pos.z }]); cats = soloCats.states; }
       lastCats = cats;
       while (catViews.length < cats.length) catViews.push(new CatView(scene));
-      catViews.forEach((v, i) => { v.update(t, dt, cats[i] ?? null, pos); v.setName(bondsRef.current?.cats[v.catLook]?.name ?? null); });
+      catViews.forEach((v, i) => {
+        v.focus = play && play.v === v ? toy.end : feeding && feeding.v === v ? churuTip : null; // 내 화면에선 깃털·츄르를 매 장면 바로 봄
+        v.update(t, dt, cats[i] ?? null, pos); v.setName(bondsRef.current?.cats[v.catLook]?.name ?? null);
+      });
 
       petal.update(t, dt, { x: pos.x, z: pos.z, yaw }, t < st.wishUntil);
       focus.set(pos.x, 0, pos.z);

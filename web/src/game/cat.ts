@@ -51,10 +51,7 @@ function faceTex(L: Look, closed: boolean) {
       const ex = 128 + s * 50, ey = 92;
       if (closed) { x.strokeStyle = "#3a2a26"; x.lineWidth = 6; x.beginPath(); x.arc(ex, ey - 6, 16, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); continue; }
       x.fillStyle = "#2b2124"; x.beginPath(); x.ellipse(ex, ey, 26, 28, 0, 0, 7); x.fill();
-      x.fillStyle = col; x.beginPath(); x.ellipse(ex, ey + 2, 21, 23, 0, 0, 7); x.fill();
-      x.fillStyle = "#1c1517"; x.beginPath(); x.ellipse(ex, ey + 3, 11, 16, 0, 0, 7); x.fill();
-      x.fillStyle = "#fff"; x.beginPath(); x.arc(ex + 7, ey - 9, 7, 0, 7); x.fill();
-      x.beginPath(); x.arc(ex - 7, ey + 9, 2.6, 0, 7); x.fill();
+      x.fillStyle = col; x.beginPath(); x.ellipse(ex, ey + 2, 21, 23, 0, 0, 7); x.fill(); // 동공·반짝임은 따로(pupilTex) → 보는 쪽으로 굴러감
     }
     x.fillStyle = "#ef8f9f"; x.beginPath(); x.moveTo(120, 124); x.lineTo(136, 124); x.lineTo(128, 133); x.closePath(); x.fill();
     x.strokeStyle = "#5a3a34"; x.lineWidth = 3.5;
@@ -63,6 +60,18 @@ function faceTex(L: Look, closed: boolean) {
     x.beginPath(); x.arc(135, 139, 7, 0.1 * Math.PI, 0.9 * Math.PI); x.stroke();
     x.strokeStyle = "rgba(90,58,52,0.55)"; x.lineWidth = 2; // 수염
     for (const s of [-1, 1]) for (const dy of [-5, 4]) { x.beginPath(); x.moveTo(128 + s * 30, 132 + dy * 0.3); x.lineTo(128 + s * 78, 126 + dy * 1.6); x.stroke(); }
+  });
+}
+
+/** 눈동자 층: 동공 + 반짝임만 (얼굴 위에 겹쳐서 위치를 옮김). wide = 사냥할 때 동그랗게 커진 동공 */
+function pupilTex(wide: boolean) {
+  return canvas(256, 192, (x) => {
+    for (const s of [-1, 1]) {
+      const ex = 128 + s * 50, ey = 95;
+      x.fillStyle = "#1c1517"; x.beginPath(); x.ellipse(ex, ey, wide ? 16 : 10, wide ? 18 : 16, 0, 0, 7); x.fill();
+      x.fillStyle = "#fff"; x.beginPath(); x.arc(ex + 7, ey - 12, 7, 0, 7); x.fill();
+      x.beginPath(); x.arc(ex - 7, ey + 6, 2.6, 0, 7); x.fill();
+    }
   });
 }
 
@@ -81,6 +90,10 @@ function buildCat(L: Look) {
   const faceMat = new THREE.MeshToonMaterial({ map: open, gradientMap: toonGradient(), transparent: true, depthWrite: false });
   const face = new THREE.Mesh(new THREE.SphereGeometry(0.158, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.08, 0.95, 1), faceMat);
   face.renderOrder = 2; head.add(face);
+  const pupilNarrow = pupilTex(false), pupilWide = pupilTex(true);
+  const pupilMat = new THREE.MeshBasicMaterial({ map: pupilNarrow, transparent: true, depthWrite: false });
+  const pupils = new THREE.Mesh(new THREE.SphereGeometry(0.1585, 32, 16, Math.PI / 2 - 0.85, 1.7, 0.36 * Math.PI, 0.36 * Math.PI).scale(1.08, 0.95, 1), pupilMat);
+  pupils.renderOrder = 3; head.add(pupils);
   for (const s of [-1, 1]) { // 귀
     const ear = part(new THREE.ConeGeometry(0.06, 0.11, 4), L.patch && s > 0 ? L.patch : L.base, T); ear.position.set(s * 0.085, 0.13, -0.01); ear.rotation.z = -s * 0.32; head.add(ear);
     const inner = part(new THREE.ConeGeometry(0.035, 0.07, 4), PINK, 0); inner.position.set(s * 0.083, 0.12, 0.02); inner.rotation.z = -s * 0.32; head.add(inner);
@@ -99,7 +112,7 @@ function buildCat(L: Look) {
     tail.push(seg); parent = seg;
   }
   root.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
-  return { root, body, head, legs, tail, faceMat, open, shut };
+  return { root, body, head, legs, tail, faceMat, open, shut, pupils, pupilMat, pupilNarrow, pupilWide };
 }
 const at3 = <T extends THREE.Object3D>(m: T, x: number, y: number, z: number) => (m.position.set(x, y, z), m);
 
@@ -140,6 +153,9 @@ export class CatView {
   }
   constructor(private scene: THREE.Scene) {}
   get pos() { return this.cat ? { x: this.x, y: this.y, z: this.z } : null; }
+  /** 내 화면에서 바로 볼 곳 (낚싯대 깃털·츄르): 서버를 기다리지 않고 매 장면 따라감. 위아래로도 */
+  focus: { x: number; y: number; z: number } | null = null;
+  private headPitch = 0; private eyeX = 0; private eyeY = 0;
   get catLook() { return this.look; }
   setName(name: string | null) {
     if ((name ?? "") === this.labelText) return;
@@ -172,15 +188,26 @@ export class CatView {
     const target = s.act === "stretch" ? { stretch: 1, sit: 0, groom: 0 } : s.act === "groom" ? { stretch: 0, sit: 1, groom: 1 }
       : s.act === "sit" || s.act === "look" || s.act === "content" || s.act === "eat" || s.act === "watch" ? { stretch: 0, sit: 1, groom: 0 } : s.act === "jump" ? { stretch: 0.35, sit: 0, groom: 0 } : { stretch: 0, sit: 0, groom: 0 };
     // 바라보기: 누군가를 빤히 볼 땐 그 사람, 아니면 내가 가까이 오면 나를 (각자 화면에서 자기를 보는 듯)
-    let lookAt: number | null = s.act === "look" || s.act === "content" || s.act === "rub" || s.act === "eat" || s.act === "follow" || s.act === "watch" || s.act === "crouch" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
+    const F = this.focus;
+    let lookAt: number | null = F ? Math.atan2(F.x - this.x, F.z - this.z)
+      : s.act === "look" || s.act === "content" || s.act === "rub" || s.act === "eat" || s.act === "follow" || s.act === "watch" || s.act === "crouch" ? Math.atan2(s.lx - this.x, s.lz - this.z) : null;
     if (lookAt === null && !walking && Math.hypot(me.x - this.x, me.z - this.z) < 4) lookAt = Math.atan2(me.x - this.x, me.z - this.z);
-    const rel = lookAt === null ? 0 : THREE.MathUtils.clamp(Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw)), -1.1, 1.1);
+    const relAll = lookAt === null ? 0 : Math.atan2(Math.sin(lookAt - this.yaw), Math.cos(lookAt - this.yaw));
+    const rel = THREE.MathUtils.clamp(relAll, -1.1, 1.1);
+    // 위아래: 볼 곳이 머리보다 높으면 올려다봄 (+ = 위)
+    const headY = this.y + 0.42, up = F ? Math.atan2(F.y - headY, Math.max(0.15, Math.hypot(F.x - this.x, F.z - this.z))) : 0;
 
     // 자세
     const pk = 1 - Math.exp(-dt * 6), P = this.pose;
     P.stretch += (target.stretch - P.stretch) * pk; P.sit += (target.sit - P.sit) * pk; P.groom += (target.groom - P.groom) * pk;
     P.gait += walking ? dt * (s.act === "flee" ? 20 : 9) : 0; // 도망칠 땐 다다다다
-    this.headYaw += (rel - this.headYaw) * pk;
+    const hk = 1 - Math.exp(-dt * (F ? 9 : 6));
+    this.headYaw += (rel - this.headYaw) * hk;
+    this.headPitch += (THREE.MathUtils.clamp(up, -0.5, 0.7) - this.headPitch) * hk;
+    // 눈동자가 먼저: 고개가 아직 못 따라간 만큼을 눈이 빠르게 메움
+    const ek = 1 - Math.exp(-dt * 18);
+    this.eyeX += (THREE.MathUtils.clamp(relAll - this.headYaw, -0.7, 0.7) - this.eyeX) * ek;
+    this.eyeY += (THREE.MathUtils.clamp(up - this.headPitch, -0.6, 0.6) - this.eyeY) * ek;
     c.root.position.set(this.x, this.y, this.z); c.root.rotation.y = this.yaw;
     // 부비부비: 사람 쪽으로 몸을 기울임 · 뒹굴: 옆으로 누워 데굴데굴
     this.rollK += ((s.act === "roll" ? 1 : 0) - this.rollK) * pk;
@@ -205,7 +232,10 @@ export class CatView {
       g.rotation.x = rx + this.rollK * Math.sin(t * 9 + i) * 0.7 + (front ? 0.5 : -0.4) * this.crouchK + (front ? -2.0 : 0.6) * this.leapK; // 앞발은 앞으로 쭉, 뒷발은 뒤로 박참 // 뒹굴 땐 네 발을 버둥버둥
     });
     this.lick += ((s.act === "eat" ? 1 : 0) - this.lick) * pk; // 츄르: 고개를 숙여 할짝할짝
-    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12), this.headYaw, 0.2 * P.groom);
+    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12) - this.headPitch, this.headYaw, 0.2 * P.groom);
+    // 눈동자 층을 옮겨 보는 쪽으로 굴림 (홍채 밖으로 안 나갈 만큼만). 사냥할 땐 동공이 동그랗게 커짐
+    c.pupilMat.map = s.act === "crouch" || s.act === "pounce" || (F && s.act === "watch") ? c.pupilWide : c.pupilNarrow;
+    c.pupilMat.map.offset.set(-this.eyeX * 0.045, -this.eyeY * 0.05);
     this.hearts(t, dt, s.act === "eat" || s.act === "rub");
     c.tail.forEach((sg, i) => { // 걸을 땐 꼬리를 세우고 살랑, 앉으면 옆으로 감음
       const up = i === 0 ? (walking ? -0.35 : -1.2 + 0.6 * P.sit) : 0;
@@ -216,6 +246,7 @@ export class CatView {
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
     const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면 지그시
     const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
+    c.pupils.visible = !shut;
   }
   dispose() { this.setName(null); this.clear(); for (const h of this.heartPool) { this.scene.remove(h.s); h.s.material.dispose(); } this.heartPool = []; }
 }
