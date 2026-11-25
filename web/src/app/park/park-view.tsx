@@ -243,8 +243,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       matView += ((st.sitting && st.matAt && !st.lying ? 1 : 0) - matView) * 0.07;
       if (matView > 0.001) {
         const c = lastMatAt, D = 3.4, d = THREE.MathUtils.clamp(cameraRoom(c.x, c.z, -fx, -fz, D + 0.4) - 0.3, 1.4, D), f = matView * matView * (3 - 2 * matView);
-        eye.lerp(new THREE.Vector3(c.x - fx * d, at.y + 1.75, c.z - fz * d), f);
-        look.lerp(new THREE.Vector3(c.x + fx * 1.4, at.y + 0.45, c.z + fz * 1.4), f);
+        // 기본은 돗자리를 내려다보는 각도, 위아래로 끌면(pitch) 그 자리에서 하늘·벚꽃 쪽이나 발밑으로 고개를 듦
+        const ey = at.y + 1.75, vp = Math.atan2(ey - (at.y + 0.45), d + 1.4) + pitch, vc = Math.cos(vp);
+        const me3 = new THREE.Vector3(c.x - fx * d, ey, c.z - fz * d);
+        eye.lerp(me3, f);
+        look.lerp(me3.clone().add(new THREE.Vector3(fx * vc, -Math.sin(vp), fz * vc).multiplyScalar(6)), f);
         if (matView > 0.3) firstPerson = false;
       }
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
@@ -363,7 +366,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         const mats = meRef.current?.items.mats ?? [], color = pick === undefined ? mats[0] : pick;
         st.onMat = !!color && mats.includes(color) && matFits(pos.x, pos.z, yaw);
         if (st.onMat && color) {
-          st.matColor = color; st.matAt = matCenter(pos.x, pos.z, yaw);
+          st.matColor = color; st.matAt = matCenter(pos.x, pos.z, yaw); pitch = 0; // 돗자리 시점은 기본 각도에서 시작
           paintMat(mat, color); placeMat(mat, pos.x, pos.z, yaw); mat.visible = true;
           sayRef.current(`${MAT_COLOR_NAMES[color]} 돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요`);
         } else if (color && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
@@ -496,6 +499,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       pos.x = seat.x; pos.z = seat.z; yaw = camYaw = seat.yaw; // 바로 옆이라 서버 이동 판정 안에서 따라옴
       st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true);
       st.matAt = { x: seat.x + Math.cos(seat.yaw) * SEAT_GAP / 2, z: seat.z - Math.sin(seat.yaw) * SEAT_GAP / 2 }; // 내 왼쪽(깐 사람 쪽)으로 반 칸
+      pitch = 0;
       sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
