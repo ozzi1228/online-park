@@ -4,6 +4,8 @@ import { useState } from "react";
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import { MAT_COLORS, MAT_COLOR_NAMES, MAT_SWATCH, type MatColor } from "@/lib/mat-colors";
 import { t as msg, type MsgKey } from "@/content/messages";
+import { churuIcon, notebookIcon, rodIcon } from "@/game/item-icons";
+import { matPreview } from "@/game/mat";
 
 export type MeInfo = {
   isGuest: boolean;
@@ -78,6 +80,38 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
           {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
         </>
       )}
+    </section>
+  );
+}
+
+/** 가방: 가진 물건을 그림과 개수로 */
+export function BagPanel({ me, onClose }: { me: MeInfo; onClose: () => void }) {
+  const it = me.items;
+  const list = [
+    it.noteSheets > 0 && { key: "notebook", img: notebookIcon(), name: msg("item.notebook.name"), n: msg("bag.sheets", { n: it.noteSheets }) },
+    it.churu > 0 && { key: "churu", img: churuIcon(), name: msg("item.churu.name"), n: msg("bag.count", { n: it.churu }) },
+    it.rod > 0 && { key: "rod", img: rodIcon(), name: msg("item.rod.name"), n: msg("bag.uses", { n: it.rod }) },
+    ...it.mats.map((c) => ({ key: `mat:${c}`, img: matPreview(c), name: msg("bag.mat", { color: MAT_COLOR_NAMES[c] }), n: "" })),
+  ].filter((x) => !!x);
+  return (
+    <section role="dialog" aria-label={msg("bag.title")} className={card}>
+      <div className="mb-3 flex items-center">
+        <h2 className="text-lg">{msg("bag.title")}</h2>
+        <span className="ml-3 inline-flex items-center gap-1 text-sm tabular-nums opacity-70"><GreenCoin /> {fmt(me.green)}</span>
+        <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
+      </div>
+      {list.length ? (
+        <ul className="grid grid-cols-3 gap-2">
+          {list.map((x) => (
+            <li key={x.key} className="flex flex-col items-center rounded-2xl bg-white p-2 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element -- 브라우저에서 그린 data URL */}
+              <img src={x.img} alt="" className="h-12 w-full object-contain" />
+              <p className="mt-1 text-xs leading-tight">{x.name}</p>
+              {x.n && <p className="text-sm tabular-nums text-sakura-deep">{x.n}</p>}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="rounded-2xl bg-white px-4 py-3 text-sm opacity-70">{msg("bag.empty")}</p>}
     </section>
   );
 }

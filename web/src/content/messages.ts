@@ -9,6 +9,13 @@ export const MESSAGES = {
   "npc.greet": { group: "공통", label: "안내원 첫인사 ({npc} = 안내원 이름)", text: "{npc}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요" },
   "charge.done": { group: "공통", label: "충전하고 돌아왔을 때 ({amount} = 그린)", text: "{amount}그린이 충전됐어요" },
   "menu.shop": { group: "공통", label: "메뉴: 매점", text: "매점 둘러보기" },
+  "menu.bag": { group: "공통", label: "내 캐릭터 메뉴: 가방 열기", text: "가방 보기" },
+  "bag.title": { group: "공통", label: "가방 창 제목", text: "가방" },
+  "bag.empty": { group: "공통", label: "가방이 비었을 때", text: "아직 가진 물건이 없어요. 매점에서 둘러보세요." },
+  "bag.sheets": { group: "공통", label: "가방: 노트 장수 ({n})", text: "{n}장" },
+  "bag.count": { group: "공통", label: "가방: 개수 ({n})", text: "{n}개" },
+  "bag.uses": { group: "공통", label: "가방: 낚싯대 남은 횟수 ({n})", text: "{n}번 남음" },
+  "bag.mat": { group: "공통", label: "가방: 돗자리 이름 ({color})", text: "{color} 돗자리" },
   "menu.npc": { group: "공통", label: "메뉴: 안내원", text: "안내원과 이야기하기" },
   "loading": { group: "공통", label: "공원 들어갈 때 로딩 화면 글자", text: "입장 중" },
 

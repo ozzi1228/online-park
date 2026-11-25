@@ -33,7 +33,7 @@ import { fountainTargets } from "@/game/fountain";
 import { ParkAudio } from "@/game/audio";
 import { kstHour } from "@/game/sky";
 import { authClient } from "@/lib/auth-client";
-import { GreenCoin, ShopPanel, WalletPanel, type MeInfo } from "./wallet";
+import { BagPanel, GreenCoin, ShopPanel, WalletPanel, type MeInfo } from "./wallet";
 
 const COARSE = "(pointer: coarse)";
 const isCoarse = () => matchMedia(COARSE).matches;
@@ -119,7 +119,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   const [me, setMe] = useState<MeInfo | null>(null);
   const [loaded, setLoaded] = useState(false); // 첫 장면을 그리면 로딩 화면을 걷음
   const meRef = useRef<MeInfo | null>(null);
-  const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | null>(null);
+  const [panel, setPanel] = useState<"wallet" | "shop" | "info" | "inbox" | "bag" | null>(null);
   const panelOpen = useRef(false);
   useEffect(() => { panelOpen.current = panel !== null; }, [panel]);
   const [writeTo, setWriteTo] = useState<{ sessionId: string; uid: string; nickname: string } | null>(null);
@@ -573,7 +573,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         : nearFountain() ? [{ label: msg("menu.coin", { price: meRef.current?.fountainPrice ?? 10 }), run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
-      if (onMe) items.unshift(...callItems()); // 내 캐릭터를 누르면: 이름 지어 준 고양이 부르기
+      if (onMe) items.unshift({ label: msg("menu.bag"), run: () => { refreshMe.current(); setPanel("bag"); } }, ...callItems()); // 내 캐릭터를 누르면: 가방, 이름 지어 준 고양이 부르기
       if (seat) items.push({ label: msg("menu.joinMat", { owner: seat.owner }), run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? (() => {
@@ -934,6 +934,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       }
       // 빈 곳을 톡: 모바일은 내 메뉴(앉기 등)를 열고, 메뉴가 떠 있으면 닫음 (PC는 우클릭)
       // 모바일은 할 수 있는 게 있을 때만 메뉴 (이동하려다 톡 닿을 때마다 "앉을 수 없어요"가 뜨지 않게)
+      if (coarse && !menuOpen.current && pickMe(tap, rect)) { openMenu(tap, false, true); return; } // 휴대폰: 내 캐릭터를 톡 = 내 메뉴(가방·고양이 부르기). 앉아 있어도
       if (coarse && st.sitting) { setMenu(null); if (!askPack()) stand(); return; } // 앉아 있을 때 빈 곳 톡 = 일어나기 (끌면 둘러보기). 돗자리에 손님이 있으면 먼저 물어봄
       if (coarse && !menuOpen.current) { openMenu(tap, true); return; }
       setMenu(null);
@@ -1389,6 +1390,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       )}
       {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
       {panel === "wallet" && me && <WalletPanel me={me} onClose={() => setPanel(null)} />}
+      {panel === "bag" && me && <BagPanel me={me} onClose={() => setPanel(null)} />}
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { audioRef.current?.pop(); sayRef.current(msg); refreshMe.current(); }} />}
 
       {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
