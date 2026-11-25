@@ -21,7 +21,7 @@ import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { LoadingScreen } from "./loading-screen";
 import { churuIcon, rodIcon } from "@/game/item-icons";
-import { CatToy } from "@/game/cat-toy";
+import { CatToy, ChuruStick } from "@/game/cat-toy";
 import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
@@ -133,8 +133,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   /** 동전 게임 조준 중 (화면을 당겼다 놓으면 튕김) */
   const [coinAim, setCoinAim] = useState(false);
   /** 낚싯대 놀이 화면: 흥미 게이지(0~1)·단계·잡은 수 */
-  const [playUi, setPlayUi] = useState<{ interest: number; phase: "watch" | "crouch"; catches: number } | null>(null);
-  const toyDrag = useRef({ on: false, x: 0, dx: 0, stop: false });
+  const [playUi, setPlayUi] = useState<{ interest: number; phase: "watch" | "crouch" | "pounce"; catches: number; speed: number } | null>(null);
+  const toyDrag = useRef({ on: false, x: 0, y: 0, dx: 0, dy: 0, stop: false });
+  /** 츄르 짜 주기 화면: 남은 양 0~1 */
+  const [squeezeUi, setSqueezeUi] = useState<{ paste: number } | null>(null);
+  const squeeze = useRef({ held: false, burst: 0, stop: false });
   const aim = useRef({ on: false, sx: 0, sy: 0, x: 0, y: 0, shoot: false, cancel: false });
   const [treeDetail, setTreeDetail] = useState<TreeNote | null>(null);
   const treeApi = useRef<{ start: (strokes: Strokes, covered: boolean) => void; confirm: () => void; cancel: () => void; refresh: () => void } | null>(null);
@@ -196,6 +199,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     window.addEventListener("pointerdown", wake); window.addEventListener("keydown", wake);
     const coin = new CoinGame(FT); scene.add(coin.group);
     const toy = new CatToy(); scene.add(toy.group);
+    const churu = new ChuruStick(); scene.add(churu.group);
     // 동전 게임 카메라: 조준할 땐 내 뒤 위에서 맨 위 접시를 보고, 날아갈 땐 옆에서 동전을 따라감
     const coinCam = { on: false, eye: new THREE.Vector3(), look: new THREE.Vector3() };
     const refreshTree = async () => {
@@ -571,6 +575,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       sayRef.current(r.outcome === "flee" ? "깜짝 놀라서 도망갔어요" : r.outcome === "rub" ? "고로롱… 다리에 부비부비해요 ♥" : "가만히 쓰다듬어지고 있어요 ♥");
       refreshBonds.current();
     };
+    // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
+    let feeding: null | { v: CatView; cat: number; paste: number; pulse: number; done: boolean } = null;
+    const endFeed = (why: string) => {
+      if (!feeding || feeding.done) return;
+      const f = feeding; f.done = true; feeding = null;
+      if (mp.online) mp.catPet(f.cat, "eatEnd"); else soloCats.brains.find((b) => b.s.look === f.cat)?.react("eatEnd", pos);
+      churu.visible = false; setSqueezeUi(null); st.playAt = null; camYaw = yaw;
+      sayRef.current(why);
+    };
     const feedCat = async (v: CatView) => {
       setMenu(null);
       const cat = v.catLook;
@@ -579,30 +592,51 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const saw = catViews.filter((o) => o !== v && o.pos && catDist(o) < 8).map((o) => o.catLook);
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "feed", saw }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; jealous?: number[] }>).catch(() => null);
-      const name = bondsRef.current?.cats[cat]?.name;
-      if (!r?.ok) { sayRef.current(r?.reason === "full" ? "배불러서 고개를 홱 돌려요" : r?.reason === "no_churu" ? "츄르가 없어요" : "츄르를 주지 못했어요"); return; }
+      if (!r?.ok) { sayRef.current(r?.reason === "full" ? "배불러서 고개를 홱 돌려요" : r?.reason === "today" ? "오늘은 이미 츄르를 줬어요 (내일 또 줄 수 있어요)" : r?.reason === "no_churu" ? "츄르가 없어요" : "츄르를 주지 못했어요"); return; }
       const react = (c: number, k: CatReaction) => mp.online ? mp.catPet(c, k) : soloCats.brains.find((b) => b.s.look === c)?.react(k, pos);
       react(cat, "eat");
-      sayRef.current(`${name ? nameGa(name) : "고양이가"} 츄르를 할짝할짝 먹어요 ♥`);
+      if (st.sitting) stand();
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 0.95; pitch = 0.1; // 옆에서 나와 고양이를 같이
+      feeding = { v, cat, paste: 1, pulse: 0, done: false }; churu.visible = true; squeeze.current = { held: false, burst: 0, stop: false };
+      setSqueezeUi({ paste: 1 });
+      sayRef.current("화면을 꾹꾹 눌러서 츄르를 짜 주세요");
       for (const j of r.jealous ?? []) react(j, "huff");
       if (r.jealous?.length) {
         const jn = bondsRef.current?.cats[r.jealous[0]]?.name;
-        setTimeout(() => sayRef.current(`${jn ? nameGa(jn) : "다른 고양이가"} 보고 있다가 삐졌어요 😾`), 2400);
+        setTimeout(() => sayRef.current(`${jn ? nameGa(jn) : "다른 고양이가"} 보고 있다가 삐졌어요 😾`), 3000);
       }
       refreshMe.current(); refreshBonds.current();
     };
-    // ---------- 낚싯대 놀이: 좌우로 끌어 깃털을 흔들면 흥미가 차오름 → 엉덩이 씰룩일 때 깃털을 멈추면 덮침 → 3번 잡으면 뒹굴뒹굴 ----------
-    // ponytail: 흥미가 오르내리는 빠르기는 코드 값 (손맛 조정용). 운영하며 바꿀 일이 생기면 관리자 설정으로
-    const PLAY = { goodMin: 0.35, goodMax: 2.6, rise: 0.32, tooFast: 0.35, idle: 0.14, still: 0.12, stillNeed: 0.35, crouchMax: 2.6, catches: 3 };
-    let play: null | { v: CatView; cat: number; interest: number; phase: "watch" | "crouch"; phaseT: number; still: number; catches: number; t: number;
-      off: number; lastOff: number; speed: number; idleT: number; sentAt: number; done: boolean; boost: number } = null;
-    const featherAt = () => { // 내 앞 1.3m, 좌우로 off 만큼
-      const f = { x: Math.sin(yaw), z: Math.cos(yaw) }, r = { x: -Math.cos(yaw), z: Math.sin(yaw) }, o = play?.off ?? 0;
-      return new THREE.Vector3(pos.x + f.x * 1.3 + r.x * o, footY + 0.05, pos.z + f.z * 1.3 + r.z * o);
+    const updateFeed = (dt: number, walking: boolean) => {
+      if (!feeding || feeding.done) return;
+      const f = feeding, s = squeeze.current;
+      if (walking || s.stop || !f.v.pos || catDist(f.v) > 6) { endFeed(s.stop ? "츄르를 거뒀어요" : "고양이가 아쉬워해요"); return; }
+      const push = s.burst + (s.held ? 0.16 * dt : 0); s.burst = 0; // 한 번 꾹 = 한 덩이, 누르고 있으면 조금씩 계속
+      f.paste = Math.max(0, f.paste - push); f.pulse = Math.min(1, f.pulse + push * 8) * Math.exp(-dt * 3);
+      const cp = f.v.pos!, toMe = Math.atan2(pos.x - cp.x, pos.z - cp.z);
+      const tip = new THREE.Vector3(cp.x + Math.sin(toMe) * 0.2, cp.y + 0.24, cp.z + Math.cos(toMe) * 0.2); // 고양이 입 앞
+      const hand = new THREE.Vector3(pos.x + Math.sin(yaw) * 0.35 - Math.cos(yaw) * 0.15, footY + 0.85, pos.z + Math.cos(yaw) * 0.35 + Math.sin(yaw) * 0.15);
+      churu.update(hand, tip, f.paste, f.pulse);
+      st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
+      if (Math.floor(st.now * 10) !== Math.floor((st.now - dt) * 10)) setSqueezeUi({ paste: f.paste });
+      if (f.paste <= 0) { audio.purr(); endFeed(`${(() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : "고양이가"; })()} 싹싹 다 먹었어요 ♥ 고로롱`); }
     };
-    const sendPlay = (phase: PlayPhase) => {
+
+    // ---------- 낚싯대 놀이 ----------
+    // 앞뒤·좌우로 끌어 막대를 움직이면 줄 끝 깃털이 살랑살랑 → 적당한 빠르기로 흔들면 흥미가 참
+    // 흥미가 60% 넘으면 고양이가 엉덩이를 씰룩이다 덮침 → 그 순간 확 당기면 놓침(약 올리기, 흥미는 더 오름), 가만있으면 잡힘
+    // 흥미 100%면 피할 수 없음. 3번 잡으면 뒹굴뒹굴
+    // ponytail: 손맛 숫자는 코드 값. 운영하며 자주 바꾸게 되면 관리자 설정으로
+    const PLAY = { goodMin: 0.5, goodMax: 2.4, fast: 3.2, rise: 0.2, tooFast: 0.3, idle: 0.12, ready: 0.6, dodge: 0.55, catches: 3, leap: 0.55 };
+    let play: null | { v: CatView; cat: number; interest: number; phase: "watch" | "crouch" | "pounce"; phaseT: number; catches: number; t: number;
+      side: number; dist: number; speed: number; idleT: number; readyT: number; crouchFor: number; target: THREE.Vector3 | null; dodged: boolean; sure: boolean;
+      last: THREE.Vector3 | null; sentAt: number; done: boolean; boost: number } = null;
+    const toyTip = () => { // 막대 끝: 내 앞 dist m, 좌우 side m, 무릎 높이
+      const f = { x: Math.sin(yaw), z: Math.cos(yaw) }, r = { x: -Math.cos(yaw), z: Math.sin(yaw) }, p = play!;
+      return new THREE.Vector3(pos.x + f.x * p.dist + r.x * p.side, footY + 0.95, pos.z + f.z * p.dist + r.z * p.side);
+    };
+    const sendPlay = (phase: PlayPhase, at = toy.end) => {
       if (!play) return;
-      const at = featherAt();
       if (mp.online) mp.catPlay(play.cat, phase, at.x, at.z); else soloCats.brains.find((b) => b.s.look === play!.cat)?.play(phase, { x: at.x, z: at.z });
     };
     const startPlay = async (v: CatView) => {
@@ -614,11 +648,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (st.sitting) stand();
       const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 0.95; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
       // 친한 고양이일수록 흥미가 빨리 참 (하트 하나에 15%씩)
-      play = { v, cat: v.catLook, interest: 0.15, phase: "watch", phaseT: 0, still: 0, catches: 0, t: 0, off: 0, lastOff: 0, speed: 0, idleT: 0, sentAt: 0, done: false, boost: 1 + (r.hearts ?? 0) * 0.15 };
-      toy.visible = true; toyDrag.current = { on: false, x: 0, dx: 0, stop: false };
-      setPlayUi({ interest: 0.15, phase: "watch", catches: 0 });
-      sendPlay("watch");
-      sayRef.current(r.usesLeft === 0 ? "낚싯대가 많이 낡았어요… 이번이 마지막일지도" : "좌우로 끌어서 깃털을 살랑살랑 흔들어 봐요");
+      play = { v, cat: v.catLook, interest: 0.15, phase: "watch", phaseT: 0, catches: 0, t: 0, side: 0, dist: 1.2, speed: 0, idleT: 0, readyT: 0, crouchFor: 1,
+        target: null, dodged: false, sure: false, last: null, sentAt: 0, done: false, boost: 1 + (r.hearts ?? 0) * 0.15 };
+      toy.visible = true; toyDrag.current = { on: false, x: 0, y: 0, dx: 0, dy: 0, stop: false };
+      setPlayUi({ interest: 0.15, phase: "watch", catches: 0, speed: 0 });
+      sayRef.current(r.usesLeft === 0 ? "낚싯대가 많이 낡았어요… 이번이 마지막일지도" : "끌어서 깃털을 살랑살랑 (앞뒤·좌우)");
       refreshMe.current();
     };
     const endPlay = async (success: boolean, why: string) => {
@@ -636,36 +670,51 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       refreshMe.current(); refreshBonds.current();
     };
     const updatePlay = (dt: number, walking: boolean) => {
-      if (!play || play.done || play.catches >= PLAY.catches) return; // 세 번 잡으면 뒹굴기만 (다시 씰룩이지 않게)
+      if (!play || play.done || play.catches >= PLAY.catches) return; // 세 번 잡으면 뒹굴기만
       const p = play, d = toyDrag.current;
       if (walking || d.stop || !p.v.pos || catDist(p.v) > 9) { void endPlay(false, d.stop ? "낚싯대를 내려놓았어요" : "고양이와 놀기를 그만뒀어요"); return; }
       p.t += dt; p.phaseT += dt;
-      p.off = THREE.MathUtils.clamp(p.off + d.dx, -1.1, 1.1); d.dx = 0;
-      // 깃털 빠르기: 끄는 신호가 매 장면마다 오지는 않아서 순간값은 들쭉날쭉 → 0.2초쯤으로 고르게
-      p.speed += (Math.abs(p.off - p.lastOff) / Math.max(dt, 1e-3) - p.speed) * (1 - Math.exp(-dt * 5)); p.lastOff = p.off;
-      const speed = p.speed;
-      if (p.phase === "watch") {
-        p.idleT = speed > PLAY.goodMin ? 0 : p.idleT + dt;
-        if (speed > PLAY.goodMax) p.interest -= PLAY.tooFast * dt;                       // 너무 마구 흔들면 시큰둥
-        else if (speed > PLAY.goodMin) p.interest += PLAY.rise * p.boost * dt;              // 살랑살랑 → 흥미 쑥
-        else if (p.idleT > 0.5) p.interest -= PLAY.idle * dt;                              // 한참 가만히 두면 식음 (흔들다 방향 바꾸는 순간은 괜찮음)
-        if (p.interest >= 1) { p.interest = 1; p.phase = "crouch"; p.phaseT = 0; p.still = 0; sendPlay("crouch"); sayRef.current("엉덩이 씰룩씰룩! 지금 깃털을 멈춰요!"); }
-        else if (p.interest <= 0 && p.t > 4) { void endPlay(false, "흥미를 잃고 가 버렸어요"); return; }
-      } else {
-        p.still = speed < PLAY.still ? p.still + dt : 0;
-        if (p.still >= PLAY.stillNeed) { // 멈춘 깃털을 덮침!
-          sendPlay("pounce"); audio.pop(); p.catches++;
-          sayRef.current(p.catches >= PLAY.catches ? "덥석! 잡았다!" : `덥석! (${p.catches}/${PLAY.catches})`);
-          if (p.catches >= PLAY.catches) { setTimeout(() => void endPlay(true, ""), 700); p.phase = "watch"; p.interest = 1; }
-          else { p.phase = "watch"; p.interest = 0.55; p.phaseT = 0; }
-        } else if (p.phaseT > PLAY.crouchMax) { p.phase = "watch"; p.interest = 0.45; p.phaseT = 0; sendPlay("watch"); sayRef.current("놓쳤어요… 다시 살랑살랑"); } // 계속 흔들면 타이밍을 놓침
-      }
-      p.interest = Math.max(0, p.interest);
-      if (p.t - p.sentAt > 0.12 && p.phase === "watch") { p.sentAt = p.t; sendPlay("watch"); } // 깃털 자리를 고양이에게 계속 알려 줌
+      p.side = THREE.MathUtils.clamp(p.side + d.dx, -1.3, 1.3); p.dist = THREE.MathUtils.clamp(p.dist + d.dy, 0.5, 2.4); d.dx = d.dy = 0;
       const hand = new THREE.Vector3(pos.x + Math.sin(yaw) * 0.3 - Math.cos(yaw) * 0.18, footY + 1.0, pos.z + Math.cos(yaw) * 0.3 + Math.sin(yaw) * 0.18);
-      toy.set(hand, featherAt(), dt);
+      toy.update(hand, toyTip(), footY, dt);
+      const e = toy.end;
+      // 깃털 빠르기 (바닥 기준): 줄 끝이 실제로 움직인 만큼, 0.2초쯤으로 고르게
+      const inst = p.last ? Math.hypot(e.x - p.last.x, e.z - p.last.z) / Math.max(dt, 1e-3) : 0; p.last = e.clone();
+      p.speed += (inst - p.speed) * (1 - Math.exp(-dt * 5));
+      const good = p.speed > PLAY.goodMin && p.speed < PLAY.goodMax;
+      p.idleT = p.speed > PLAY.goodMin ? 0 : p.idleT + dt;
+      if (p.phase !== "pounce") {
+        if (p.speed > PLAY.fast) p.interest -= PLAY.tooFast * dt;            // 너무 마구 흔들면 시큰둥
+        else if (good) p.interest += PLAY.rise * p.boost * dt;               // 살랑살랑 → 흥미 쑥
+        else if (p.idleT > 0.6) p.interest -= PLAY.idle * dt;                // 한참 가만히 두면 식음
+        p.interest = THREE.MathUtils.clamp(p.interest, 0, 1);
+      }
+      if (p.phase === "watch") {
+        if (p.interest <= 0 && p.t > 5) { void endPlay(false, "흥미를 잃고 가 버렸어요"); return; }
+        p.readyT = p.interest >= PLAY.ready ? p.readyT + dt : 0;           // 흥미가 넉넉하면 조금 지켜보다가 씰룩
+        if (p.interest >= 1 || p.readyT > 1 + (1 - p.interest) * 3) {
+          p.phase = "crouch"; p.phaseT = 0; p.crouchFor = 0.8 + Math.random() * 0.7; sendPlay("crouch");
+          sayRef.current(p.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 곧 덮쳐요! 확 당겨서 약 올려 볼까요?");
+        }
+      } else if (p.phase === "crouch") {
+        if (p.phaseT > p.crouchFor) { // 덮침! 그 순간 깃털 자리로
+          p.phase = "pounce"; p.phaseT = 0; p.target = e.clone(); p.dodged = false; p.sure = p.interest >= 1; sendPlay("pounce", p.target);
+        }
+      } else { // 덮치는 중: 확 당겨 깃털이 멀어지면 놓침 (흥미 100%면 못 피함)
+        if (!p.sure && p.target && Math.hypot(e.x - p.target.x, e.z - p.target.z) > PLAY.dodge) p.dodged = true;
+        if (p.phaseT > PLAY.leap) {
+          if (p.dodged) { p.interest = Math.min(0.97, p.interest + 0.15); sayRef.current("약 올렸다! 😼 흥미가 더 올랐어요"); }
+          else {
+            p.catches++; audio.pop(); p.interest = 0.5;
+            sayRef.current(p.catches >= PLAY.catches ? "덥석! 잡았다!" : `덥석! (${p.catches}/${PLAY.catches})`);
+            if (p.catches >= PLAY.catches) setTimeout(() => void endPlay(true, ""), 900);
+          }
+          p.phase = "watch"; p.phaseT = 0; p.readyT = 0; sendPlay("watch");
+        }
+      }
+      if (p.t - p.sentAt > 0.12 && p.phase !== "pounce") { p.sentAt = p.t; sendPlay(p.phase); } // 깃털 자리를 고양이에게 계속 알려 줌
       const cp = p.v.pos!; st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
-      if (Math.floor(p.t * 10) !== Math.floor((p.t - dt) * 10)) setPlayUi({ interest: p.interest, phase: p.phase, catches: p.catches });
+      if (Math.floor(p.t * 10) !== Math.floor((p.t - dt) * 10)) setPlayUi({ interest: p.interest, phase: p.phase, catches: p.catches, speed: p.speed });
     };
     const catTap = (v: CatView, tap: Tap) => {
       if (!tap.menu && !coarse) { void petCat(v); return; } // PC 좌클릭 = 바로 쓰다듬기
@@ -903,6 +952,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       coin.update(dt);
       updatePlay(dt, walking);
+      updateFeed(dt, walking);
 
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
       if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
@@ -1078,21 +1128,49 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {playUi && (
         <div className="absolute inset-0 z-20 touch-none select-none"
-          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} toyDrag.current.on = true; toyDrag.current.x = e.clientX; }}
-          onPointerMove={(e) => { const d = toyDrag.current; if (!d.on) return; d.dx += (e.clientX - d.x) / (innerWidth * 0.35); d.x = e.clientX; }}
+          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} Object.assign(toyDrag.current, { on: true, x: e.clientX, y: e.clientY }); }}
+          onPointerMove={(e) => { // 좌우로 끌면 옆으로, 위아래로 끌면 멀리·가까이
+            const d = toyDrag.current; if (!d.on) return;
+            d.dx += (e.clientX - d.x) / (innerWidth * 0.32); d.dy -= (e.clientY - d.y) / (innerHeight * 0.32); d.x = e.clientX; d.y = e.clientY;
+          }}
           onPointerUp={() => { toyDrag.current.on = false; }} onPointerCancel={() => { toyDrag.current.on = false; }}>
           <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit max-w-[22rem] flex-col items-center gap-1.5 rounded-2xl bg-cream/90 px-4 py-2 text-center text-sm">
-            <p>{playUi.phase === "crouch" ? "엉덩이 씰룩씰룩! 지금 깃털을 멈춰요!" : "좌우로 끌어서 깃털을 살랑살랑 · 너무 마구 흔들면 시큰둥해요"}</p>
-            <div className="flex w-56 items-center gap-2 text-xs">
-              <span className="shrink-0 opacity-70">흥미</span>
+            <p>{playUi.phase === "pounce" ? "덮친다! 지금 확 당겨요!" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 곧 덮쳐요! 확 당겨서 약 올려 볼까요?") : "끌어서 깃털을 살랑살랑 (좌우·앞뒤)"}</p>
+            <div className="flex w-60 items-center gap-2 text-xs">
+              <span className="w-8 shrink-0 opacity-70">흥미</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10">
-                <div className={`h-full rounded-full transition-[width] duration-100 ${playUi.phase === "crouch" ? "bg-[#ff5a5f]" : "bg-sakura"}`} style={{ width: `${Math.round(playUi.interest * 100)}%` }} />
+                <div className={`h-full rounded-full transition-[width] duration-100 ${playUi.interest >= 1 ? "bg-[#ff5a5f]" : "bg-sakura"}`} style={{ width: `${Math.round(playUi.interest * 100)}%` }} />
               </div>
               <span className="shrink-0 tabular-nums opacity-70">🐾 {playUi.catches}/3</span>
+            </div>
+            {/* 빠르기 안내: 가운데 초록 칸 안에 바늘이 있으면 딱 좋은 살랑살랑 */}
+            <div className="flex w-60 items-center gap-2 text-xs">
+              <span className="w-8 shrink-0 opacity-70">빠르기</span>
+              <div className="relative h-2.5 flex-1 rounded-full bg-black/10">
+                <div className="absolute inset-y-0 rounded-full bg-emerald-300/80" style={{ left: `${(0.5 / 4) * 100}%`, width: `${((2.4 - 0.5) / 4) * 100}%` }} />
+                <div className="absolute -top-0.5 h-3.5 w-1 -translate-x-1/2 rounded-full bg-ink/80" style={{ left: `${Math.min(1, playUi.speed / 4) * 100}%` }} />
+              </div>
+              <span className="w-12 shrink-0 text-left opacity-70">{playUi.speed < 0.5 ? "느려요" : playUi.speed < 2.4 ? "딱 좋아요" : "너무 빨라요"}</span>
             </div>
           </div>
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { toyDrag.current.stop = true; setTimeout(() => setPlayUi(null), 400); }}
             className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
+        </div>
+      )}
+      {squeezeUi && (
+        <div className="absolute inset-0 z-20 touch-none select-none"
+          onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} squeeze.current.held = true; squeeze.current.burst += 0.08; }}
+          onPointerUp={() => { squeeze.current.held = false; }} onPointerCancel={() => { squeeze.current.held = false; }}>
+          <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit flex-col items-center gap-2 rounded-2xl bg-cream/90 px-4 py-3 text-center text-sm">
+            <p>꾹꾹 눌러서 츄르를 짜 주세요</p>
+            {/* 츄르 봉지: 남은 만큼 빨갛게 차 있음 */}
+            <div className="relative h-8 w-44 overflow-hidden rounded-md bg-[#fbf4ec] ring-1 ring-black/10">
+              <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#d8343b] via-[#d8343b] to-[#f39a2b] transition-[width] duration-100" style={{ width: `${Math.round(squeezeUi.paste * 82)}%` }} />
+              <div className="absolute inset-y-1 right-1 w-[16%] rounded-sm bg-[#f3d9a4]/90" />
+            </div>
+          </div>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { squeeze.current.stop = true; setTimeout(() => setSqueezeUi(null), 400); }}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만 주기</button>
         </div>
       )}
       {coinAim && (

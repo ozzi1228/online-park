@@ -3,7 +3,7 @@
 import { and, eq, inArray, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { catBonds, inventory } from "@/db/schema";
-import { getSettings } from "@/lib/settings";
+import { getSettings, kstDate } from "@/lib/settings";
 import { CAT_LOOKS } from "@/game/cat-brain";
 import { clamp, effective, heartsOf } from "@/lib/cat-hearts";
 import { signForRealtime } from "@/lib/realtime-sign";
@@ -81,11 +81,14 @@ async function jealousy(userId: string, cat: number, saw: number[]) {
   return out;
 }
 
-/** 츄르 주기: 츄르 1개를 쓰고 호감도가 오름. 한 번 먹은 고양이는 잠깐 배불러함(누가 줬든). saw = 가까이서 본 다른 고양이들 */
+/** 츄르 주기: 츄르 1개를 쓰고 호감도가 오름. 같은 고양이에게는 하루 하나, 한 번 먹은 고양이는 잠깐 배불러함(누가 줬든). saw = 가까이서 본 다른 고양이들 */
 export async function feed(userId: string, cat: number, saw: number[]) {
   const { catBond: r } = await getSettings();
   const [{ last }] = await db.select({ last: max(catBonds.fedAt) }).from(catBonds).where(eq(catBonds.cat, cat));
   if (last && Date.now() - last.getTime() < r.fullMin * 60_000) return { ok: false, reason: "full" } as const;
+  // 한 사람은 같은 고양이에게 하루에 하나만 (한국 날짜 기준)
+  const [mine] = await db.select({ fedAt: catBonds.fedAt }).from(catBonds).where(and(eq(catBonds.userId, userId), eq(catBonds.cat, cat)));
+  if (mine?.fedAt && kstDate(mine.fedAt.getTime()) === kstDate()) return { ok: false, reason: "today" } as const;
   const used = await db.update(inventory).set({ qty: sql`${inventory.qty} - 1` })
     .where(and(eq(inventory.userId, userId), eq(inventory.item, "churu"), sql`${inventory.qty} > 0`)).returning({ qty: inventory.qty });
   if (!used.length) return { ok: false, reason: "no_churu" } as const;

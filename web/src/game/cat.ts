@@ -121,7 +121,7 @@ export class CatView {
   private pose = { stretch: 0, sit: 0, groom: 0, gait: 0 };
   /** 내가 지어 준 이름표 (내 화면에만) */
   private label: THREE.Sprite | null = null; private labelText = "";
-  private lick = 0; private rollK = 0; private crouchK = 0; private lean = 0;
+  private lick = 0; private rollK = 0; private crouchK = 0; private lean = 0; private leapK = 0;
   /** 머리 위로 몽글몽글 올라가는 하트 (츄르 먹을 때·부비부비할 때) */
   private heartPool: { s: THREE.Sprite; t: number }[] = []; private nextHeart = 0;
   private hearts(t: number, dt: number, on: boolean) {
@@ -185,14 +185,15 @@ export class CatView {
     // 부비부비: 사람 쪽으로 몸을 기울임 · 뒹굴: 옆으로 누워 데굴데굴
     this.rollK += ((s.act === "roll" ? 1 : 0) - this.rollK) * pk;
     this.lean += ((s.act === "rub" ? -0.18 : 0) - this.lean) * pk;
-    c.root.rotation.z = this.lean + this.rollK * (1.5 + Math.sin(t * 6) * 0.6);
-    c.root.position.y += this.rollK * 0.1;
+    c.root.rotation.z = this.lean + this.rollK * (1.45 + Math.sin(t * 6) * 0.45);
+    c.root.position.y += this.rollK * 0.2; // 옆으로 누우면 몸 반 두께만큼 올려서 땅에 묻히지 않게
     // 씰룩: 앞을 낮추고 엉덩이를 들어 좌우로 흔듦 (덮치기 직전)
     this.crouchK += ((s.act === "crouch" ? 1 : 0) - this.crouchK) * pk;
+    this.leapK += ((s.act === "pounce" ? 1 : 0) - this.leapK) * Math.min(1, pk * 3); // 덮칠 땐 빠르게 자세를 바꿈
     if (this.label) this.label.position.set(this.x, this.y + 0.75, this.z);
     const sw = walking ? Math.sin(P.gait) : 0;
     // 앉으면 엉덩이를 내리고 몸을 세움, 기지개는 앞발을 뻗고 가슴을 낮춤
-    c.body.rotation.x = -0.55 * P.sit + 0.32 * P.stretch + 0.3 * this.crouchK;
+    c.body.rotation.x = -0.55 * P.sit + 0.32 * P.stretch + 0.3 * this.crouchK - 0.7 * this.leapK; // 덮칠 땐 상체를 번쩍 들고
     c.body.rotation.y = this.crouchK * Math.sin(t * 16) * 0.12;
     c.body.position.y = 0.03 * P.sit + (walking ? Math.abs(sw) * 0.012 : 0) - 0.05 * this.crouchK; // 앉아도 엉덩이가 바닥(벤치 판)을 뚫지 않게
     c.body.position.z = -0.06 * P.sit;
@@ -201,7 +202,7 @@ export class CatView {
       let rx = sw * 0.55 * diag;
       if (front) { rx += 0.55 * P.sit - 1.15 * P.stretch; if (side > 0) rx -= 1.5 * P.groom; } // 그루밍: 오른 앞발을 얼굴로
       else rx += -1.0 * P.sit + 0.25 * P.stretch;
-      g.rotation.x = rx + this.rollK * Math.sin(t * 9 + i) * 0.7 + (front ? 0.5 : -0.4) * this.crouchK; // 뒹굴 땐 네 발을 버둥버둥
+      g.rotation.x = rx + this.rollK * Math.sin(t * 9 + i) * 0.7 + (front ? 0.5 : -0.4) * this.crouchK + (front ? -2.0 : 0.6) * this.leapK; // 앞발은 앞으로 쭉, 뒷발은 뒤로 박참 // 뒹굴 땐 네 발을 버둥버둥
     });
     this.lick += ((s.act === "eat" ? 1 : 0) - this.lick) * pk; // 츄르: 고개를 숙여 할짝할짝
     c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12), this.headYaw, 0.2 * P.groom);

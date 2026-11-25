@@ -193,9 +193,9 @@ class ParkRoom extends Room<{ state: ParkState }> {
       const p = this.state.players.get(client.sessionId), now = Date.now(), huff = m?.kind === "huff";
       if (!p || (!huff && (this.petAt.get(client.sessionId) ?? 0) > now - 800)) return; // 질투는 여러 마리가 한꺼번에
       const b = this.cats.brains.find((x) => x.s.look === m?.cat);
-      if (!b || b.busy || Math.hypot(b.s.x - p.x, b.s.z - p.z) > (huff ? 12 : 4)) return;
+      if (!b || (b.busy && m?.kind !== "eatEnd") || Math.hypot(b.s.x - p.x, b.s.z - p.z) > (huff ? 12 : 4)) return; // 다 먹었다는 알림은 먹는 중에도
       // 사람 위치는 살아 있는 값(p)을 넘김 → 따라다니기·부비부비가 사람이 움직여도 따라감
-      if (m?.kind === "flee" || m?.kind === "content" || m?.kind === "rub" || m?.kind === "eat" || huff) { b.react(m.kind as CatReaction, p); if (!huff) this.petAt.set(client.sessionId, now); }
+      if (m?.kind === "flee" || m?.kind === "content" || m?.kind === "rub" || m?.kind === "eat" || m?.kind === "eatEnd" || huff) { b.react(m.kind as CatReaction, p); if (!huff) this.petAt.set(client.sessionId, now); }
     },
     anim: (client: Client, a: unknown) => {
       const p = this.state.players.get(client.sessionId);
