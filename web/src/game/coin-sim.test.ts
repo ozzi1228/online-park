@@ -7,7 +7,7 @@ const T = fountainTargets(), from = { x: FOUNTAIN.x, y: 1.25, z: FOUNTAIN.z - 6 
 const shots = Array.from({ length: 401 }, (_, i) => simulate(T, from, launchVec(0, 0, i / 400)));
 
 test("세기를 바꿔 가며 던지면 정중앙·가운데·바깥 칸과 빗나감이 다 나옴", () => {
-  const got = new Set(shots.map((s) => s.ring ?? s.kind));
+  const got = new Set<string>(shots.map((s) => s.ring ?? s.kind));
   for (const k of ["bull", "mid", "outer", "lower"]) assert.ok(got.has(k), k);
 });
 test("정중앙은 접시 반지름 25% 안", () => {
