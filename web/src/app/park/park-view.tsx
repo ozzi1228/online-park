@@ -20,7 +20,8 @@ import { NoteEditor, NoteView } from "./note";
 import type { Strokes } from "@/lib/notes-shared";
 import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game/world";
 import { LoadingScreen } from "./loading-screen";
-import { makeMat, matAnim, matFits, paintMat, placeMat } from "@/game/mat";
+import { makeMat, matAnim, matCenter, matFits, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
+import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
 type MatSeat = { x: number; z: number; yaw: number; owner: string; ownerId: string };
 import { LADDER_TOP, TreeNotes, type TreeNote } from "@/game/tree-notes";
@@ -74,7 +75,7 @@ function cameraRoom(x: number, z: number, dx: number, dz: number, max: number) {
 
 type MenuItem = { label: string; run?: () => void };
 type Menu = { x: number; y: number; items: MenuItem[] };
-type Actions = { sit: () => void; stand: () => void };
+type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
@@ -202,7 +203,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     let yaw = SPAWN.yaw, camYaw = SPAWN.yaw, pitch = 0, footY = 0; // yaw = 캐릭터가 보는 쪽, camYaw = 카메라가 보는 쪽
     // 상태: 앉음 / 소원 비는 중 / 꽃잎 들고 있음
     const tree = { pending: null as { strokes: Strokes; covered: boolean } | null, ghost: null as THREE.Vector3 | null, busy: false };
-    const st = { sitting: false, onMat: false, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
+    const st = { sitting: false, onMat: false, matColor: "pink" as MatColor,
+      /** 돗자리에 앉아 있으면(내 것이든 같이 앉았든) 그 돗자리 가운데 → 카메라가 뒤에서 둘을 같이 보여 줌 */
+      matAt: null as { x: number; z: number } | null, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
       /** 정자에 드러누움 (누운 몸 방향) */
       lying: false, lieYaw: 0,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
@@ -213,6 +216,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), focus = new THREE.Vector3();
     let baseFov = 60, firstPerson = false, zoomK = 1, camBack = 0; // camBack: 지금 카메라가 내 뒤로 떨어진 거리(부드럽게 따라감) // zoomK: 휠·두 손가락으로 당겨 보기(작을수록 확대)
+    let matView = 0, lastMatAt = { x: 0, z: 0 }; // 돗자리에 앉으면 1인칭 대신 뒤에서 둘이 같이 앉은 모습이 보이게 (0~1 부드럽게)
     let showMe = 0; // 0 = 1인칭, 1 = 소원 빌 때 내 얼굴 쪽에서 보는 3인칭 (그 사이는 부드럽게)
     const placeCamera = () => {
       // 뒤에서 보는 시점: 내 머리 뒤 조금 위에서, 내가 보는 쪽을 봄 → 화면 가운데 아래에 내 캐릭터가 살짝 보임
@@ -233,6 +237,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const look = eye.clone().setY(eyeY).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       if (!st.lying) look.set(at.x + rx * sd, eyeY, at.z + rz * sd).add(new THREE.Vector3(fx * cp, -Math.sin(pitch), fz * cp).multiplyScalar(6));
       firstPerson = camBack < 0.35;
+      // 돗자리: 돗자리 가운데 뒤 3.4m·위에서 내려다봄 (끌면 돗자리 둘레를 돎). 나무에 막히면 당겨 옴
+      if (st.matAt) lastMatAt = st.matAt;
+      matView += ((st.sitting && st.matAt && !st.lying ? 1 : 0) - matView) * 0.07;
+      if (matView > 0.001) {
+        const c = lastMatAt, D = 3.4, d = THREE.MathUtils.clamp(cameraRoom(c.x, c.z, -fx, -fz, D + 0.4) - 0.3, 1.4, D), f = matView * matView * (3 - 2 * matView);
+        eye.lerp(new THREE.Vector3(c.x - fx * d, at.y + 1.75, c.z - fz * d), f);
+        look.lerp(new THREE.Vector3(c.x + fx * 1.4, at.y + 0.45, c.z + fz * 1.4), f);
+        if (matView > 0.3) firstPerson = false;
+      }
       if (showMe > 0.001) { // 소원 빌기: 캐릭터 정면에서 손 모은 모습 (앉아 있으면 앉은 자리에서)
         // 정면이 막혀 있으면(사다리·나무 앞 등) 비스듬한 쪽에서 — 너무 가까이 붙어 얼굴만 크게 나오지 않게
         const f = showMe * showMe * (3 - 2 * showMe), base = st.bench?.yaw ?? yaw, WANT = 2.8;
@@ -321,7 +334,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const stand = () => {
       if (!st.sitting) return;
       if (st.lying) { st.lying = false; pitch = 0; }
-      st.sitting = false; st.onMat = false; mat.visible = false; setSitting(false); setMatAsk(null);
+      st.sitting = false; st.onMat = false; st.matAt = null; mat.visible = false; setSitting(false); setMatAsk(null);
       if (st.bench) { st.bench = null; st.stoodAt = st.now; }
       logClient("sit.end", { x: Math.round(pos.x), z: Math.round(pos.z) });
     };
@@ -333,7 +346,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), bench: true });
     };
     actions.current = {
-      sit: () => {
+      // mat: 깔 돗자리 색 (null = 돗자리 없이, 안 주면 가진 돗자리 중 첫 번째)
+      sit: (pick?: MatColor | null) => {
         setMenu(null);
         if (!canSit(pos.x, pos.z)) { sayRef.current("여기선 앉을 수 없어요. 잔디밭이나 정자로 가 볼까요?"); return; }
         st.sitting = true; st.wishUntil = 0; setSitting(true);
@@ -345,10 +359,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         }
         // 돗자리가 있으면 잔디밭에선 깔고 앉음 (정자 마루에선 그냥 앉음)
         // 돗자리는 통째로 잔디 위일 때만 (길·광장에 걸치면 그냥 앉음)
-        const hasMat = !!meRef.current?.items.mat;
-        st.onMat = hasMat && matFits(pos.x, pos.z, yaw);
-        if (st.onMat) { paintMat(mat, meRef.current?.items.matColor ?? "pink"); placeMat(mat, pos.x, pos.z, yaw); mat.visible = true; sayRef.current("돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요"); }
-        else if (hasMat && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
+        const mats = meRef.current?.items.mats ?? [], color = pick === undefined ? mats[0] : pick;
+        st.onMat = !!color && mats.includes(color) && matFits(pos.x, pos.z, yaw);
+        if (st.onMat && color) {
+          st.matColor = color; st.matAt = matCenter(pos.x, pos.z, yaw);
+          paintMat(mat, color); placeMat(mat, pos.x, pos.z, yaw); mat.visible = true;
+          sayRef.current(`${MAT_COLOR_NAMES[color]} 돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요`);
+        } else if (color && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
@@ -477,6 +494,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       setMenu(null);
       pos.x = seat.x; pos.z = seat.z; yaw = camYaw = seat.yaw; // 바로 옆이라 서버 이동 판정 안에서 따라옴
       st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true);
+      st.matAt = { x: seat.x + Math.cos(seat.yaw) * SEAT_GAP / 2, z: seat.z - Math.sin(seat.yaw) * SEAT_GAP / 2 }; // 내 왼쪽(깐 사람 쪽)으로 반 칸
       sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
@@ -491,7 +509,14 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
-        : canSit(pos.x, pos.z) ? [{ label: groundY(pos.x, pos.z) > 0 ? "드러눕기" : "여기 앉기", run: () => actions.current!.sit() }]
+        : canSit(pos.x, pos.z) ? (() => {
+          // 돗자리가 있고 여기 펼 수 있으면: 어떤 돗자리를 깔지 고름 (+ 그냥 앉기)
+          const mats = meRef.current?.items.mats ?? [];
+          if (groundY(pos.x, pos.z) > 0) return [{ label: "드러눕기", run: () => actions.current!.sit() }];
+          if (!mats.length || !matFits(pos.x, pos.z, yaw)) return [{ label: "여기 앉기", run: () => actions.current!.sit() }];
+          return [...mats.map((c) => ({ label: `${MAT_COLOR_NAMES[c]} 돗자리 깔고 앉기`, run: () => actions.current!.sit(c) })),
+            { label: "돗자리 없이 앉기", run: () => actions.current!.sit(null) }];
+        })()
         : [{ label: "여기선 앉을 수 없어요" }]));
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
       setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== "여기선 앉을 수 없어요") : items });
@@ -664,7 +689,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
 
       const mode: Mode = st.lying ? "lie" : st.sitting ? (t < st.wishUntil ? "sitwish" : "sit") : t < st.wishUntil && t >= st.stompUntil ? "wish" : walking ? "walk" : "idle";
-      const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? matAnim(meRef.current?.items.matColor ?? "pink") : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
+      const anim = mode === "lie" ? "lie" : mode === "sit" || mode === "sitwish" ? (st.onMat ? matAnim(st.matColor) : st.bench ? "sitbench" : "sit") : mode === "wish" ? "wish" : "idle";
       if (anim !== st.anim) { st.anim = anim; mp.sendAnim(anim); }
       mp.update(t, dt, { x: pos.x, z: pos.z, yaw, walking });
 

@@ -7,7 +7,7 @@ import { MAT_COLORS, MAT_COLOR_NAMES, MAT_SWATCH, type MatColor } from "@/lib/ma
 export type MeInfo = {
   isGuest: boolean;
   green: number;
-  items: { noteSheets: number; mat: boolean; matColor: MatColor };
+  items: { noteSheets: number; mat: boolean; mats: MatColor[] };
   shop: { notebookPrice: number; notebookSheets: number; matPrice: number };
   charge: { product: string; amount: number }[];
   paymentsReady: boolean;
@@ -58,7 +58,7 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
       <p className="flex items-center gap-2 text-3xl tabular-nums"><GreenCoin className="size-7" /> {fmt(me.green)} <span className="text-base opacity-60">그린</span></p>
-      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mat ? `${MAT_COLOR_NAMES[me.items.matColor]} 1장` : "없음"}</p>
+      <p className="mt-1 text-sm opacity-70">가방: 벚꽃잎 노트 {me.items.noteSheets}장 · 돗자리 {me.items.mats.length ? me.items.mats.map((c) => MAT_COLOR_NAMES[c]).join("·") : "없음"}</p>
       {me.isGuest ? <GuestNote /> : (
         <>
           <h3 className="mb-2 mt-4 text-sm opacity-70">충전하기 (1그린 = 1원)</h3>
@@ -83,18 +83,20 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
 export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () => void; onBought: (msg: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [color, setColor] = useState<MatColor>("pink");
+  const [color, setColor] = useState<MatColor>(() => MAT_COLORS.find((c) => !me.items.mats.includes(c)) ?? "pink");
+  const owned = (c: MatColor) => me.items.mats.includes(c), allMats = MAT_COLORS.every(owned);
   const buy = async (item: "notebook" | "mat") => {
     setBusy(true); setError("");
     const r = await fetch("/api/shop", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item, color }) })
       .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
     setBusy(false);
-    if (r?.ok) onBought(item === "notebook" ? `벚꽃잎 노트를 샀어요 (+${me.shop.notebookSheets}장)` : `${MAT_COLOR_NAMES[color]} 돗자리를 샀어요! 잔디밭에서 앉으면 깔려요`);
-    else setError(r?.reason === "insufficient" ? "그린이 모자라요" : r?.reason === "owned" ? "돗자리는 이미 있어요" : "살 수 없었어요");
+    if (r?.ok && item === "mat") setColor(MAT_COLORS.find((c) => c !== color && !owned(c)) ?? color);
+    if (r?.ok) onBought(item === "notebook" ? `벚꽃잎 노트를 샀어요 (+${me.shop.notebookSheets}장)` : `${MAT_COLOR_NAMES[color]} 돗자리를 샀어요! 잔디밭에서 앉을 때 골라서 깔 수 있어요`);
+    else setError(r?.reason === "insufficient" ? "그린이 모자라요" : r?.reason === "owned" ? "그 색 돗자리는 이미 있어요" : "살 수 없었어요");
   };
   const items = [
     { id: "notebook" as const, name: "벚꽃잎 노트", desc: `${me.shop.notebookSheets}장 · 손글씨 쪽지용`, price: me.shop.notebookPrice, disabled: false },
-    { id: "mat" as const, name: "돗자리", desc: me.items.mat ? `${MAT_COLOR_NAMES[me.items.matColor]} 돗자리를 갖고 있어요` : `${MAT_COLOR_NAMES[color]} · 잔디밭에 깔고 앉기`, price: me.shop.matPrice, disabled: me.items.mat },
+    { id: "mat" as const, name: "돗자리", desc: allMats ? "다섯 색을 모두 갖고 있어요" : owned(color) ? `${MAT_COLOR_NAMES[color]}은 이미 있어요` : `${MAT_COLOR_NAMES[color]} · 색마다 한 장씩 모을 수 있어요`, price: me.shop.matPrice, disabled: owned(color) },
   ];
   return (
     <section role="dialog" aria-label="매점" className={card}>
@@ -107,11 +109,11 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
         {items.map((it) => (
           <li key={it.id} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3">
             <div className="min-w-0 flex-1"><p>{it.name}</p><p className="text-xs opacity-60">{it.desc}</p>
-              {it.id === "mat" && !me.items.mat && (
+              {it.id === "mat" && (
                 <div role="radiogroup" aria-label="돗자리 색" className="mt-1.5 flex gap-1.5">
                   {MAT_COLORS.map((c) => (
-                    <button key={c} role="radio" aria-checked={c === color} aria-label={MAT_COLOR_NAMES[c]} title={MAT_COLOR_NAMES[c]} onClick={() => setColor(c)}
-                      className={`size-6 rounded-full ring-1 ring-black/15 ${c === color ? "outline-2 outline-offset-2 outline-sakura-deep" : ""}`} style={{ background: MAT_SWATCH[c] }} />
+                    <button key={c} role="radio" aria-checked={c === color} aria-label={`${MAT_COLOR_NAMES[c]}${owned(c) ? " (갖고 있음)" : ""}`} title={MAT_COLOR_NAMES[c]} onClick={() => setColor(c)}
+                      className={`grid size-6 place-items-center rounded-full text-[11px] text-ink/70 ring-1 ring-black/15 ${c === color ? "outline-2 outline-offset-2 outline-sakura-deep" : ""}`} style={{ background: MAT_SWATCH[c] }}>{owned(c) ? "✓" : ""}</button>
                   ))}
                 </div>
               )}
