@@ -98,7 +98,7 @@ export class CatBrain {
     if (phase === "watch") this.queue.push({ k: "watch", dur: 30, at });
     else if (phase === "crouch") this.queue.push({ k: "crouch", dur: 30, at });
     else if (phase === "pounce") this.queue.push({ k: "pounce", tx: at.x - Math.sin(s.yaw) * 0.12, tz: at.z - Math.cos(s.yaw) * 0.12, dur: 0.55 }, { k: "watch", dur: 30, at });
-    else if (phase === "roll") this.queue.push({ k: "roll", dur: 3.4 }, { k: "sit", dur: 2 });
+    else if (phase === "roll") this.queue.push({ k: "roll", dur: 3.6 }, { k: "sit", dur: 2 }); // 화면의 뒹굴 순서(cat.ts)와 같은 길이
     else this.queue.push({ k: "leave" });
     this.cur = null;
   }

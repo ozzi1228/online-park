@@ -134,7 +134,7 @@ export class CatView {
   private pose = { stretch: 0, sit: 0, groom: 0, gait: 0 };
   /** 내가 지어 준 이름표 (내 화면에만) */
   private label: THREE.Sprite | null = null; private labelText = "";
-  private lick = 0; private rollK = 0; private crouchK = 0; private lean = 0; private leapK = 0;
+  private lick = 0; private rollT = -1; private crouchK = 0; private lean = 0; private leapK = 0;
   /** 머리 위로 몽글몽글 올라가는 하트 (츄르 먹을 때·부비부비할 때) */
   private heartPool: { s: THREE.Sprite; t: number }[] = []; private nextHeart = 0;
   private hearts(t: number, dt: number, on: boolean) {
@@ -209,11 +209,21 @@ export class CatView {
     this.eyeX += (THREE.MathUtils.clamp(relAll - this.headYaw, -0.7, 0.7) - this.eyeX) * ek;
     this.eyeY += (THREE.MathUtils.clamp(up - this.headPitch, -0.6, 0.6) - this.eyeY) * ek;
     c.root.position.set(this.x, this.y, this.z); c.root.rotation.y = this.yaw;
-    // 부비부비: 사람 쪽으로 몸을 기울임 · 뒹굴: 옆으로 누워 데굴데굴
-    this.rollK += ((s.act === "roll" ? 1 : 0) - this.rollK) * pk;
+    // 부비부비: 사람 쪽으로 몸을 기울임
     this.lean += ((s.act === "rub" ? -0.18 : 0) - this.lean) * pk;
-    c.root.rotation.z = this.lean + this.rollK * (1.45 + Math.sin(t * 6) * 0.45);
-    c.root.position.y += this.rollK * 0.2; // 옆으로 누우면 몸 반 두께만큼 올려서 땅에 묻히지 않게
+    c.root.rotation.z = this.lean;
+    // 뒹굴 (3.6초): 털썩 옆으로 눕고(0.4) → 등을 대고 옆↔반대 옆으로 데굴데굴(2.5) → 배 보이고 앞발 꼼지락(0.4) → 마저 굴러 벌떡(0.3)
+    // 등뼈를 축으로 돌림 (몸통 가운데 높이를 유지해서 땅에 묻히거나 뜨지 않게)
+    this.rollT = s.act === "roll" ? Math.max(0, this.rollT) + dt : -1;
+    const R = this.rollT, ease = (k: number) => k * k * (3 - 2 * k);
+    let rollA = 0, knead = 0;
+    if (R >= 0) {
+      if (R < 0.4) rollA = ease(R / 0.4) * Math.PI / 2;
+      else if (R < 2.9) rollA = Math.PI - Math.cos(2 * Math.PI * 0.9 * (R - 0.4)) * 0.95 * Math.PI / 2; // 옆(π/2) → 등(π) → 반대 옆, 끝나면 등
+      else if (R < 3.3) { rollA = Math.PI; knead = 1; }
+      else rollA = Math.PI + ease(Math.min(1, (R - 3.3) / 0.3)) * Math.PI; // 마저 굴러 바로 섬 (2π = 똑바로)
+    }
+    const onBack = Math.max(0, -Math.cos(rollA)), lying = Math.min(1, Math.abs(Math.sin(rollA)) + onBack);
     // 씰룩: 앞을 낮추고 엉덩이를 들어 좌우로 흔듦 (덮치기 직전)
     this.crouchK += ((s.act === "crouch" ? 1 : 0) - this.crouchK) * pk;
     this.leapK += ((s.act === "pounce" ? 1 : 0) - this.leapK) * Math.min(1, pk * 3); // 덮칠 땐 빠르게 자세를 바꿈
@@ -224,15 +234,22 @@ export class CatView {
     c.body.rotation.y = this.crouchK * Math.sin(t * 16) * 0.12;
     c.body.position.y = 0.03 * P.sit + (walking ? Math.abs(sw) * 0.012 : 0) - 0.05 * this.crouchK; // 앉아도 엉덩이가 바닥(벤치 판)을 뚫지 않게
     c.body.position.z = -0.06 * P.sit;
+    if (R >= 0) { // 몸통 가운데(높이 0.25)를 축으로 돌리고, 누우면 가운데를 몸 두께(0.16)만큼만 띄움
+      const hc = 0.16 + 0.09 * Math.max(0, Math.cos(rollA));
+      c.body.rotation.z = rollA; c.body.position.x = 0.25 * Math.sin(rollA); c.body.position.y = hc - 0.25 * Math.cos(rollA);
+    } else { c.body.rotation.z = 0; c.body.position.x = 0; }
     c.legs.forEach((g, i) => {
       const front = i < 2, side = i % 2 ? 1 : -1, diag = (i === 0 || i === 3) ? 1 : -1;
       let rx = sw * 0.55 * diag;
       if (front) { rx += 0.55 * P.sit - 1.15 * P.stretch; if (side > 0) rx -= 1.5 * P.groom; } // 그루밍: 오른 앞발을 얼굴로
       else rx += -1.0 * P.sit + 0.25 * P.stretch;
-      g.rotation.x = rx + this.rollK * Math.sin(t * 9 + i) * 0.7 + (front ? 0.5 : -0.4) * this.crouchK + (front ? -2.0 : 0.6) * this.leapK; // 앞발은 앞으로 쭉, 뒷발은 뒤로 박참 // 뒹굴 땐 네 발을 버둥버둥
+      // 뒹굴: 배를 보이면 앞발은 가슴께로 꼬부리고(꼼지락), 뒷발은 개구리처럼 벌림. 구르는 동안엔 살짝 버둥
+      const roll = front ? -1.25 * onBack + knead * Math.sin(t * 9 + i) * 0.35 : 0.5 * onBack;
+      g.rotation.x = rx + roll + lying * (1 - onBack) * Math.sin(t * 7 + i) * 0.25 + (front ? 0.5 : -0.4) * this.crouchK + (front ? -2.0 : 0.6) * this.leapK; // 덮칠 땐 앞발은 앞으로 쭉, 뒷발은 뒤로 박참
+      g.rotation.z = front ? 0 : side * 0.55 * onBack;
     });
     this.lick += ((s.act === "eat" ? 1 : 0) - this.lick) * pk; // 츄르: 고개를 숙여 할짝할짝
-    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12) - this.headPitch, this.headYaw, 0.2 * P.groom);
+    c.head.rotation.set(0.25 * P.sit + 0.35 * P.groom * (0.6 + 0.4 * Math.sin(t * 9)) - 0.25 * P.stretch + this.lick * (0.4 + Math.sin(t * 11) * 0.12) - this.headPitch - 0.5 * onBack, this.headYaw * (1 - lying), 0.2 * P.groom); // 등을 대면 고개를 뒤로 젖혀 거꾸로 쳐다봄
     // 눈동자 층을 옮겨 보는 쪽으로 굴림 (홍채 밖으로 안 나갈 만큼만). 사냥할 땐 동공이 동그랗게 커짐
     c.pupilMat.map = s.act === "crouch" || s.act === "pounce" || (F && s.act === "watch") ? c.pupilWide : c.pupilNarrow;
     c.pupilMat.map.offset.set(-this.eyeX * 0.045, -this.eyeY * 0.05);
@@ -240,11 +257,11 @@ export class CatView {
     c.tail.forEach((sg, i) => { // 걸을 땐 꼬리를 세우고 살랑, 앉으면 옆으로 감음
       const up = i === 0 ? (walking ? -0.35 : -1.2 + 0.6 * P.sit) : 0;
       sg.rotation.x = up + (i ? (walking ? -0.12 : 0.18 * P.sit) : 0);
-      sg.rotation.z = Math.sin(t * (walking ? 3 : 1.4) - i * 0.6) * (walking ? 0.16 : 0.1) + (i ? P.sit * 0.28 : 0);
+      sg.rotation.z = Math.sin(t * (walking ? 3 : 1.4) - i * 0.6) * (walking ? 0.16 : 0.1) + (i ? P.sit * 0.28 : 0) + lying * Math.sin(t * 4 - i * 0.5) * 0.35; // 뒹굴 땐 바닥을 쓸 듯 살랑
     });
     // 눈 깜빡임 (그루밍 중엔 지그시)
     if (t > this.blinkAt + 0.14) this.blinkAt = t + 2 + Math.random() * 4;
-    const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면 지그시
+    const shut = P.groom > 0.5 || s.act === "content" || s.act === "rub" || knead > 0 || (t > this.blinkAt && t < this.blinkAt + 0.14); // 쓰다듬어지면·배 보이고 꼼지락댈 땐 지그시
     const want = shut ? c.shut : c.open; if (c.faceMat.map !== want) c.faceMat.map = want;
     c.pupils.visible = !shut;
   }
