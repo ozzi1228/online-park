@@ -686,7 +686,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       p.speed += (inst - p.speed) * (1 - Math.exp(-dt * 5));
       const good = p.speed > PLAY.goodMin && p.speed < PLAY.goodMax;
       p.idleT = p.speed > PLAY.goodMin ? 0 : p.idleT + dt;
-      if (p.phase !== "pounce") {
+      if (p.phase === "watch") { // 씰룩·덮치는 동안엔 확 당겨도 흥미가 깎이지 않음 (약 올리기)
         if (p.speed > PLAY.fast) p.interest -= PLAY.tooFast * dt;            // 너무 마구 흔들면 시큰둥
         else if (good) p.interest += PLAY.rise * p.boost * dt;               // 살랑살랑 → 흥미 쑥
         else if (p.idleT > 0.6) p.interest -= PLAY.idle * dt;                // 한참 가만히 두면 식음
@@ -694,17 +694,19 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }
       if (p.phase === "watch") {
         if (p.interest <= 0 && p.t > 5) { void endPlay(false, "흥미를 잃고 가 버렸어요"); return; }
-        p.readyT = p.interest >= PLAY.ready ? p.readyT + dt : 0;           // 흥미가 넉넉하면 조금 지켜보다가 씰룩
-        if (p.interest >= 1 || p.readyT > 1 + (1 - p.interest) * 3) {
-          p.phase = "crouch"; p.phaseT = 0; p.crouchFor = 0.8 + Math.random() * 0.7; sendPlay("crouch");
-          sayRef.current(p.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 곧 덮쳐요! 확 당겨서 약 올려 볼까요?");
+        p.readyT = p.interest >= PLAY.ready ? p.readyT + dt : 0;           // 흥미 60%부터 잠깐 지켜보다 씰룩 (높을수록 빨리) → 100% 되기 전에도 덤벼듦
+        if (p.interest >= 1 || p.readyT > 0.4 + (1 - p.interest) * 1.5) {
+          p.phase = "crouch"; p.phaseT = 0; p.dodged = false; p.crouchFor = 0.8 + Math.random() * 0.7; sendPlay("crouch");
+          sayRef.current(p.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 덤벼들 때 확 당겨 봐요!");
         }
       } else if (p.phase === "crouch") {
+        if (p.phaseT > p.crouchFor - 0.25 && p.speed > PLAY.goodMax) p.dodged = true; // 덤비기 직전에 확 당겨도 놓침
         if (p.phaseT > p.crouchFor) { // 덮침! 그 순간 깃털 자리로
-          p.phase = "pounce"; p.phaseT = 0; p.target = e.clone(); p.dodged = false; p.sure = p.interest >= 1; sendPlay("pounce", p.target);
+          p.sure = p.interest >= 1; p.dodged = p.dodged && !p.sure;
+          p.phase = "pounce"; p.phaseT = 0; p.target = e.clone(); sendPlay("pounce", p.target);
         }
-      } else { // 덮치는 중: 확 당겨 깃털이 멀어지면 놓침 (흥미 100%면 못 피함)
-        if (!p.sure && p.target && Math.hypot(e.x - p.target.x, e.z - p.target.z) > PLAY.dodge) p.dodged = true;
+      } else { // 덮치는 중: 확 당기면(빠르기가 '너무 빨라요'로 치솟거나 깃털이 멀어지면) 놓침. 흥미 100%면 못 피함
+        if (!p.sure && (p.speed > PLAY.goodMax || (p.target && Math.hypot(e.x - p.target.x, e.z - p.target.z) > PLAY.dodge))) p.dodged = true;
         if (p.phaseT > PLAY.leap) {
           if (p.dodged) { p.interest = Math.min(0.97, p.interest + 0.15); sayRef.current("약 올렸다! 😼 흥미가 더 올랐어요"); }
           else {
@@ -712,7 +714,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             sayRef.current(p.catches >= PLAY.catches ? "덥석! 잡았다!" : `덥석! (${p.catches}/${PLAY.catches})`);
             if (p.catches >= PLAY.catches) setTimeout(() => void endPlay(true, ""), 900);
           }
-          p.phase = "watch"; p.phaseT = 0; p.readyT = 0; sendPlay("watch");
+          p.phase = "watch"; p.phaseT = 0; p.readyT = 0; p.dodged = false; sendPlay("watch");
         }
       }
       if (p.t - p.sentAt > 0.12 && p.phase !== "pounce") { p.sentAt = p.t; sendPlay(p.phase); } // 깃털 자리를 고양이에게 계속 알려 줌
@@ -1140,7 +1142,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           }}
           onPointerUp={() => { toyDrag.current.on = false; }} onPointerCancel={() => { toyDrag.current.on = false; }}>
           <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit max-w-[22rem] flex-col items-center gap-1.5 rounded-2xl bg-cream/90 px-4 py-2 text-center text-sm">
-            <p>{playUi.phase === "pounce" ? "덮친다! 지금 확 당겨요!" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 곧 덮쳐요! 확 당겨서 약 올려 볼까요?") : "끌어서 깃털을 살랑살랑 (좌우·앞뒤)"}</p>
+            <p>{playUi.phase === "pounce" ? "덮친다! 지금 확 당겨요!" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 덤벼들 때 확 당겨 봐요! (빠르기를 확 올리기)") : "끌어서 깃털을 살랑살랑 (좌우·앞뒤)"}</p>
             <div className="flex w-60 items-center gap-2 text-xs">
               <span className="w-10 shrink-0 opacity-70">흥미</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10">
