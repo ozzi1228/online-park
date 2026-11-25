@@ -548,7 +548,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
       setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== "여기선 앉을 수 없어요") : items });
     };
-    // ---------- 고양이: 좌클릭 = 쓰다듬기, 우클릭 = 고양이 메뉴 (휴대폰은 톡 = 메뉴) ----------
+    // ---------- 고양이: 누르면(좌클릭·우클릭·톡) 고양이 메뉴 → 쓰다듬기·츄르·낚싯대·이름 ----------
     refreshBonds.current();
     const pickCat = (tap: Tap, rect: DOMRect) => {
       let best: { v: CatView; px: number } | null = null;
@@ -597,7 +597,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const react = (c: number, k: CatReaction) => mp.online ? mp.catPet(c, k) : soloCats.brains.find((b) => b.s.look === c)?.react(k, pos);
       react(cat, "eat");
       if (st.sitting) stand();
-      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 0.95; pitch = 0.1; // 옆에서 나와 고양이를 같이
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 1.4; pitch = 0.1; // 옆에서 나와 고양이를 같이
+      st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
       feeding = { v, cat, paste: 1, pulse: 0, done: false }; churu.visible = true; squeeze.current = { held: false, burst: 0, stop: false };
       setSqueezeUi({ paste: 1 });
       sayRef.current("화면을 꾹꾹 눌러서 츄르를 짜 주세요");
@@ -647,7 +648,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         .then((x) => x.json() as Promise<{ ok: boolean; usesLeft?: number; hearts?: number }>).catch(() => null);
       if (!r?.ok) { sayRef.current("낚싯대가 없어요"); return; }
       if (st.sitting) stand();
-      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 0.95; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
+      const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 1.4; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
+      st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
       // 친한 고양이일수록 흥미가 빨리 참 (하트 하나에 15%씩)
       play = { v, cat: v.catLook, interest: 0.15, phase: "watch", phaseT: 0, catches: 0, t: 0, side: 0, dist: 1.2, speed: 0, idleT: 0, readyT: 0, crouchFor: 1,
         target: null, dodged: false, sure: false, last: null, sentAt: 0, done: false, boost: 1 + (r.hearts ?? 0) * 0.15 };
@@ -718,10 +720,9 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       if (Math.floor(p.t * 10) !== Math.floor((p.t - dt) * 10)) setPlayUi({ interest: p.interest, phase: p.phase, catches: p.catches, speed: p.speed });
     };
     const catTap = (v: CatView, tap: Tap) => {
-      if (!tap.menu && !coarse) { void petCat(v); return; } // PC 좌클릭 = 바로 쓰다듬기
       const b = bondsRef.current, me = b?.cats[v.catLook], hearts = me?.hearts ?? 0, canName = !!b && hearts >= b.rules.nameHearts;
       const items: MenuItem[] = [{ label: `${me?.name ?? "고양이"}  ${heartText(hearts)}`, head: true }];
-      if (coarse) items.push({ label: "쓰다듬기", run: () => void petCat(v) });
+      items.push({ label: "쓰다듬기", run: () => void petCat(v) }); // 좌클릭·우클릭·톡 모두 메뉴 (모르고 눌러 쓰다듬지 않게)
       const churu = meRef.current?.items.churu ?? 0;
       items.push({ label: churu ? `츄르 주기 (${churu}개)` : "츄르가 없어요 (매점에서 살 수 있어요)", tile: churuIcon(), badge: String(churu), dim: !churu,
         run: churu ? () => void feedCat(v) : () => sayRef.current("츄르는 매점에서 살 수 있어요") });
@@ -840,7 +841,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const ro = new ResizeObserver(fit); ro.observe(el); fit();
 
     // 개발 중 확인용 (운영 빌드엔 없음)
-    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, catViews, soloCats, me, playGesture, coin, launchVelocity, THREE, makeMat, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; } } });
+    if (process.env.NODE_ENV === "development") Object.assign(window, { __park: { renderer, scene, camera, pos, petal, mp, audio, st, catViews, soloCats, me, playGesture, coin, launchVelocity, THREE, makeMat, sit: () => actions.current?.sit(), face: (y: number) => { yaw = camYaw = y; }, cam: () => ({ yaw, camYaw, playAt: st.playAt }) } });
 
     const clock = new THREE.Clock();
     let moved = false, turnVel = 0, gameT = 0;
@@ -1141,7 +1142,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit max-w-[22rem] flex-col items-center gap-1.5 rounded-2xl bg-cream/90 px-4 py-2 text-center text-sm">
             <p>{playUi.phase === "pounce" ? "덮친다! 지금 확 당겨요!" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 곧 덮쳐요! 확 당겨서 약 올려 볼까요?") : "끌어서 깃털을 살랑살랑 (좌우·앞뒤)"}</p>
             <div className="flex w-60 items-center gap-2 text-xs">
-              <span className="w-8 shrink-0 opacity-70">흥미</span>
+              <span className="w-10 shrink-0 opacity-70">흥미</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10">
                 <div className={`h-full rounded-full transition-[width] duration-100 ${playUi.interest >= 1 ? "bg-[#ff5a5f]" : "bg-sakura"}`} style={{ width: `${Math.round(playUi.interest * 100)}%` }} />
               </div>
@@ -1149,12 +1150,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             </div>
             {/* 빠르기 안내: 가운데 초록 칸 안에 바늘이 있으면 딱 좋은 살랑살랑 */}
             <div className="flex w-60 items-center gap-2 text-xs">
-              <span className="w-8 shrink-0 opacity-70">빠르기</span>
+              <span className="w-10 shrink-0 opacity-70">빠르기</span>
               <div className="relative h-2.5 flex-1 rounded-full bg-black/10">
                 <div className="absolute inset-y-0 rounded-full bg-emerald-300/80" style={{ left: `${(0.5 / 4) * 100}%`, width: `${((2.4 - 0.5) / 4) * 100}%` }} />
                 <div className="absolute -top-0.5 h-3.5 w-1 -translate-x-1/2 rounded-full bg-ink/80" style={{ left: `${Math.min(1, playUi.speed / 4) * 100}%` }} />
               </div>
-              <span className="w-12 shrink-0 text-left opacity-70">{playUi.speed < 0.5 ? "느려요" : playUi.speed < 2.4 ? "딱 좋아요" : "너무 빨라요"}</span>
+              <span className="w-16 shrink-0 text-left opacity-70">{playUi.speed < 0.5 ? "느려요" : playUi.speed < 2.4 ? "딱 좋아요" : "너무 빨라요"}</span>
             </div>
           </div>
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { toyDrag.current.stop = true; setTimeout(() => setPlayUi(null), 400); }}
