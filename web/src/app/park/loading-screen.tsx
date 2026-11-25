@@ -16,7 +16,7 @@ export function LoadingScreen({ hidden = false }: { hidden?: boolean }) {
       <Image src="/logo-mark.png" alt="" width={128} height={128} priority className="park-sway size-28 drop-shadow-[0_6px_12px_rgba(217,134,158,0.35)]" />
       <p className="text-xl tracking-wide text-[#7a4a5c]">랜선 벚꽃공원</p>
       <p className="flex items-center gap-1 text-sm text-[#7a4a5c]/70">
-        벚꽃길 걸어 들어가는 중
+        입장 중
         <span className="park-dot">·</span><span className="park-dot [animation-delay:0.2s]">·</span><span className="park-dot [animation-delay:0.4s]">·</span>
       </p>
     </div>
