@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { greenBalance } from "@/lib/green";
 import { chargeOptions, paymentsReady } from "@/lib/payments";
 import { getSettings } from "@/lib/settings";
+import { getMessageOverrides } from "@/lib/content";
 import { myItems } from "@/lib/shop";
 import { unreadCount } from "@/lib/notes";
 
@@ -24,5 +25,6 @@ export async function GET(req: Request) {
     controls,
     cat,
     unreadNotes: await unreadCount(s.user.id),
+    messages: await getMessageOverrides(), // 관리자가 고친 안내 멘트 (나머지는 화면의 기본값)
   }, { headers: { "cache-control": "no-store" } });
 }

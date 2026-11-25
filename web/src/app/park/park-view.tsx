@@ -22,6 +22,7 @@ import { QUALITY_HIGH, QUALITY_LOW, buildWorld, makePetalGeometry } from "@/game
 import { LoadingScreen } from "./loading-screen";
 import { churuIcon, rodIcon } from "@/game/item-icons";
 import { CatToy, ChuruStick } from "@/game/cat-toy";
+import { setMsgOverrides, t as msg, type MsgKey } from "@/content/messages";
 import { makeMat, matAnim, matCenter, matFits, matPreview, paintMat, placeMat, SEAT_GAP } from "@/game/mat";
 import { MAT_COLOR_NAMES, type MatColor } from "@/lib/mat-colors";
 
@@ -98,7 +99,8 @@ const CLERK_LOOK: Preset = { id: "npc-clerk", name: "매점 직원", tags: [], s
   top: "#fbe7a1", topType: "hanbok", inner: "#8a3b55", collar: "#ffffff", tie: "#d2486e", bottom: "#e66a8c", bottomType: "chima", shoes: "#ffffff", smile: false };
 const CLERK = { x: KIOSK.x + Math.sin(KIOSK.yaw) * 0.95 * PROP_S, z: KIOSK.z + Math.cos(KIOSK.yaw) * 0.95 * PROP_S, y: 0.45 };
 
-export function ParkView({ presetId, nickname }: { presetId: string; nickname: string }) {
+export function ParkView({ presetId, nickname, messages }: { presetId: string; nickname: string; messages?: Partial<Record<MsgKey, string>> }) {
+  setMsgOverrides(messages); // 첫 화면(로딩 글자 등)부터 관리자가 고친 멘트로
   const box = useRef<HTMLDivElement>(null);
   const mini = useRef<HTMLCanvasElement>(null);
   const joyBase = useRef<HTMLDivElement>(null), knob = useRef<HTMLDivElement>(null);
@@ -151,7 +153,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
 
   const refreshMe = useRef(async () => {
     const r = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
-    if (r?.ok) { const m = await r.json() as MeInfo; meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
+    if (r?.ok) { const m = await r.json() as MeInfo; setMsgOverrides(m.messages); meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
     else if (r?.status === 401) location.replace("/"); // 관리자가 강제 로그아웃·삭제함 → 공원에서 나감
   });
   useEffect(() => {
@@ -159,7 +161,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const alive = setInterval(() => { if (document.visibilityState === "visible") refreshMe.current(); }, 30_000);
     // 결제하고 돌아온 경우 (?charged=1000)
     const charged = Number(new URLSearchParams(location.search).get("charged"));
-    if (charged > 0) { sayRef.current(`${charged.toLocaleString("ko-KR")}그린이 충전됐어요`); history.replaceState(null, "", location.pathname); }
+    if (charged > 0) { sayRef.current(msg("charge.done", { amount: charged.toLocaleString("ko-KR") })); history.replaceState(null, "", location.pathname); }
     return () => clearInterval(alive);
   }, []);
 
@@ -321,16 +323,16 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const mp = new Multiplayer(scene);
     mp.onStatus = setNet;
     mpRef.current = mp;
-    mp.onNote = (from) => { sayRef.current(`✉️ ${from}님이 쪽지를 건넸어요`); refreshMe.current(); };
+    mp.onNote = (from) => { sayRef.current(msg("note.received", { from })); refreshMe.current(); };
     mp.onTreeChanged = refreshTree;
     // 돗자리 같이 앉기: 깐 사람은 허락/거절 창, 물어본 사람은 대답을 기다림
     mp.onMatAsk = (from, nickname) => { if (st.onMat) setMatAsk({ from, nickname }); else mp.answerMat(from, false); };
     mp.onMatAnswer = (ok, owner, ownerId) => {
       const a = st.asking; st.asking = null;
       if (!a || a.seat.ownerId !== ownerId) return;
-      if (!ok) { sayRef.current("이 곳에는 앉을 수 없습니다"); return; }
+      if (!ok) { sayRef.current(msg("mat.refused")); return; }
       const seat = mp.freeSeats().find((s) => s.ownerId === ownerId); // 그 사이 자리가 찼거나 일어났으면 못 앉음
-      if (!seat || st.sitting || Math.hypot(seat.x - pos.x, seat.z - pos.z) > 3) { sayRef.current(`${owner}님 옆자리에 앉지 못했어요`); return; }
+      if (!seat || st.sitting || Math.hypot(seat.x - pos.x, seat.z - pos.z) > 3) { sayRef.current(msg("mat.joinFail", { owner })); return; }
       joinMat(seat);
     };
     matApi.current = {
@@ -374,7 +376,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       // mat: 깔 돗자리 색 (null = 돗자리 없이, 안 주면 가진 돗자리 중 첫 번째)
       sit: (pick?: MatColor | null) => {
         setMenu(null);
-        if (!canSit(pos.x, pos.z)) { sayRef.current("여기선 앉을 수 없어요. 잔디밭이나 정자로 가 볼까요?"); return; }
+        if (!canSit(pos.x, pos.z)) { sayRef.current(msg("sit.cannot")); return; }
         st.sitting = true; st.wishUntil = 0; setSitting(true);
         camYaw = yaw;
         if (groundY(pos.x, pos.z) > 0) { // 정자 마루에선 대자로 드러누워 천장(서까래)을 올려다봄
@@ -389,8 +391,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (st.onMat && color) {
           st.matColor = color; st.matAt = matCenter(pos.x, pos.z, yaw); pitch = 0; // 돗자리 시점은 기본 각도에서 시작
           paintMat(mat, color); placeMat(mat, pos.x, pos.z, yaw); mat.visible = true;
-          sayRef.current(`${MAT_COLOR_NAMES[color]} 돗자리를 깔았어요 · 옆자리에 한 명 더 앉을 수 있어요`);
-        } else if (color && groundY(pos.x, pos.z) === 0) sayRef.current("돗자리는 길에서 떨어진 잔디밭에만 펼 수 있어요"); // 정자 마루에선 안내 없이 그냥 앉음
+          sayRef.current(msg("mat.laid", { color: MAT_COLOR_NAMES[color] }));
+        } else if (color && groundY(pos.x, pos.z) === 0) sayRef.current(msg("mat.grassOnly")); // 정자 마루에선 안내 없이 그냥 앉음
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); stand(); },
@@ -410,7 +412,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const r = await fetch("/api/petal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ height }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; fortune?: string }>).catch(() => null);
       if (r?.ok && r.fortune) { setFortune(r.fortune); audio.chime(); } // 꽃잎을 펼치면 오늘의 운세
-      else sayRef.current(r?.reason === "soldout" ? "아쉽게도 오늘의 운세꽃잎이 모두 떨어졌어요" : r?.reason === "limit" ? "오늘의 운세는 이미 확인했어요. 내일 또 만나요" : "잠시 후 다시 해볼까요?");
+      else sayRef.current(msg(r?.reason === "soldout" ? "petal.soldout" : r?.reason === "limit" ? "petal.limit" : "petal.retry"));
       refreshWish(); // 오늘 몫을 잡았거나 다 떨어졌으면 더는 안 보이게
     };
 
@@ -422,7 +424,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       setMenu(null);
       const me = meRef.current;
       if (!me) return;
-      if ((me.items.noteSheets ?? 0) < 1) { sayRef.current("노트가 있어야 소원 쪽지를 달 수 있어요 (매점에서 살 수 있어요)"); return; }
+      if ((me.items.noteSheets ?? 0) < 1) { sayRef.current(msg("tree.needNote")); return; }
       setPanel(null); setWriteTree(true); logClient("tree.open_editor", {});
     };
     // 분수 동전 게임: 분수를 바라보고 조준 → 당겼다 놓으면 그린 차감 후 동전이 날아감
@@ -451,7 +453,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const r = await fetch("/api/fountain", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ from: { x: from.x, y: from.y, z: from.z }, vel: { x: vel.x, y: vel.y, z: vel.z } }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; shot: Shot; reward: number; capped: boolean }>).catch(() => null);
-      if (!r?.ok) { sayRef.current(r?.reason === "insufficient" ? "그린이 모자라요" : "동전을 던지지 못했어요"); return; }
+      if (!r?.ok) { sayRef.current(msg(r?.reason === "insufficient" ? "coin.noGreen" : "coin.fail")); return; }
       coinReward = { reward: r.reward, capped: r.capped };
       coin.launch(from, vel, r.shot); audio.jingle();
     };
@@ -461,19 +463,19 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       logClient("fountain.result", { hit: kind === "dish", ring: shot.ring });
       refreshMe.current(); // 보상 받은 그린 반영
       st.coinViewUntil = st.now + (kind === "dish" ? 0 : 1.8); // 빗나가면 떨어진 자리를 잠깐 보여 주고 돌아옴
-      if (kind === "ground") { sayRef.current("앗, 분수 밖으로 날아갔어요"); return; }
+      if (kind === "ground") { sayRef.current(msg("coin.out")); return; }
       audio.plop();
-      if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current("아깝다! 맨 위 접시를 비껴갔어요"); return; }
+      if (kind !== "dish") { if (kind === "basin") world.addCoin(at.x, at.z); sayRef.current(msg("coin.miss")); return; }
       // 성공 (과녁·궤적 점은 바로 치움). 정중앙은 만세+펄쩍 & 큰 불꽃, 나머지는 발 동동 & 작은 불꽃 → 그다음 소원
       const bull = shot.ring === "bull", sec = bull ? 2.6 : 1.8;
       coin.hideGuides(); coin.burst(at, bull);
       const gesture = bull ? "cheer" : "stomp";
       playGesture(me, gesture, st.now); mp.sendGesture(gesture); st.faceCam = true; st.wishUntil = st.now + sec + WISH_SEC;
-      const got = reward > 0 ? ` +${reward}그린` : capped ? " (오늘 보상은 다 받았어요)" : "";
-      sayRef.current(bull ? `정중앙! 🎯${got}` : shot.ring === "mid" ? `쏙! 가운데 칸 🎉${got}` : `쏙! 들어갔어요 🎉${got}`);
+      const got = reward > 0 ? msg("coin.reward", { n: reward }) : capped ? msg("coin.capped") : "";
+      sayRef.current(msg(bull ? "coin.bull" : shot.ring === "mid" ? "coin.mid" : "coin.outer", { reward: got }));
       if (bull) { audio.chime(); setTimeout(() => audio.chime(), 350); }
       setTimeout(() => { audio.chime(); st.stompUntil = 0; }, sec * 1000);
-      setTimeout(() => sayRef.current("소원을 빌었어요 🌸"), (sec + WISH_SEC) * 1000);
+      setTimeout(() => sayRef.current(msg("wish.done")), (sec + WISH_SEC) * 1000);
       st.stompUntil = st.now + sec;
     };
     // 소원나무: 쪽지 쓰기 → 사다리 위에서 자리 고르기 → 달기
@@ -492,8 +494,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         if (r?.ok) {
           tree.pending = null; treeNotes.showGhost(null); setTreeMode(null); audio.paper();
           await refreshTree(); mp.notifyTree(); refreshMe.current(); // 쪽지만 달고 소원 비는 동작은 없음
-          sayRef.current("소원 쪽지를 나무에 달았어요 🌸");
-        } else sayRef.current(r?.reason === "daily_limit" ? "오늘은 쪽지를 충분히 달았어요" : r?.reason === "no_sheet" ? "노트가 모자라요" : r?.reason === "bad_spot" ? "나뭇가지 사이를 골라 주세요" : "달지 못했어요");
+          sayRef.current(msg("tree.hung"));
+        } else sayRef.current(msg(r?.reason === "daily_limit" ? "tree.dailyLimit" : r?.reason === "no_sheet" ? "tree.noSheet" : r?.reason === "bad_spot" ? "tree.badSpot" : "tree.fail"));
       },
       cancel: () => { tree.pending = null; tree.ghost = null; treeNotes.showGhost(null); setTreeMode(null); },
       refresh: refreshTree,
@@ -509,10 +511,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     // 같이 앉기 = 먼저 깐 사람에게 물어봄 (대답은 mp.onMatAnswer)
     const askJoin = (seat: MatSeat) => {
       setMenu(null);
-      if (st.asking && st.now < st.asking.until) { sayRef.current(`${st.asking.seat.owner}님의 대답을 기다리는 중이에요`); return; }
+      if (st.asking && st.now < st.asking.until) { sayRef.current(msg("mat.waiting", { owner: st.asking.seat.owner })); return; }
       st.asking = { seat, until: st.now + 20 };
       mp.askMat(seat.ownerId);
-      sayRef.current(`${seat.owner}님에게 같이 앉아도 되는지 물어봤어요`);
+      sayRef.current(msg("mat.asked", { owner: seat.owner }));
       logClient("mat.ask", {});
     };
     const joinMat = (seat: MatSeat) => {
@@ -521,32 +523,32 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       st.sitting = true; st.onMat = false; st.wishUntil = 0; setSitting(true);
       st.matAt = { x: seat.x + Math.cos(seat.yaw) * SEAT_GAP / 2, z: seat.z - Math.sin(seat.yaw) * SEAT_GAP / 2 }; // 내 왼쪽(깐 사람 쪽)으로 반 칸
       pitch = 0;
-      sayRef.current(`${seat.owner}님 돗자리에 같이 앉았어요`);
+      sayRef.current(msg("mat.joined", { owner: seat.owner }));
       logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), joinedMatOf: seat.owner });
     };
     const openMenu = (tap: Tap, onlyActionable = false, onMe = false) => {
       const sheets = meRef.current?.items.noteSheets ?? 0;
-      const shopItem: MenuItem[] = nearKiosk() ? [{ label: "매점 둘러보기", run: () => setPanel("shop") }]
-        : nearNpc() ? [{ label: "안내원과 이야기하기", run: openInfo }]
-        : nearTree() ? [sheets < 1 ? { label: "노트가 있어야 소원 쪽지를 달 수 있어요" }
-          : { label: `소원 쪽지 달기 (노트 ${sheets}장)`, run: openTreeEditor }]
-        : nearFountain() ? [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] : [];
+      const shopItem: MenuItem[] = nearKiosk() ? [{ label: msg("menu.shop"), run: () => setPanel("shop") }]
+        : nearNpc() ? [{ label: msg("menu.npc"), run: openInfo }]
+        : nearTree() ? [sheets < 1 ? { label: msg("menu.treeNeedNote") }
+          : { label: msg("menu.tree", { n: sheets }), run: openTreeEditor }]
+        : nearFountain() ? [{ label: msg("menu.coin", { price: meRef.current?.fountainPrice ?? 10 }), run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
       if (onMe) items.unshift(...callItems()); // 내 캐릭터를 누르면: 이름 지어 준 고양이 부르기
-      if (seat) items.push({ label: `${seat.owner}님 돗자리에 같이 앉기`, run: () => askJoin(seat) });
+      if (seat) items.push({ label: msg("menu.joinMat", { owner: seat.owner }), run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? (() => {
           // 돗자리가 있고 여기 펼 수 있으면: 어떤 돗자리를 깔지 고름 (+ 그냥 앉기)
           const mats = meRef.current?.items.mats ?? [];
-          if (groundY(pos.x, pos.z) > 0) return [{ label: "드러눕기", run: () => actions.current!.sit() }];
-          if (!mats.length || !matFits(pos.x, pos.z, yaw)) return [{ label: "여기 앉기", run: () => actions.current!.sit() }];
-          return [...mats.map((c) => ({ label: `${MAT_COLOR_NAMES[c]} 돗자리 깔고 앉기`, tile: matPreview(c), run: () => actions.current!.sit(c) })),
-            { label: "돗자리 없이 앉기", tile: "none", run: () => actions.current!.sit(null) }];
+          if (groundY(pos.x, pos.z) > 0) return [{ label: msg("menu.lie"), run: () => actions.current!.sit() }];
+          if (!mats.length || !matFits(pos.x, pos.z, yaw)) return [{ label: msg("menu.sit"), run: () => actions.current!.sit() }];
+          return [...mats.map((c) => ({ label: msg("menu.matSit", { color: MAT_COLOR_NAMES[c] }), tile: matPreview(c), run: () => actions.current!.sit(c) })),
+            { label: msg("menu.noMat"), tile: "none", run: () => actions.current!.sit(null) }];
         })()
-        : [{ label: "여기선 앉을 수 없어요" }]));
+        : [{ label: msg("menu.cannotSit") }]));
       if (onlyActionable && !items.some((i) => i.run)) { setMenu(null); return; }
-      setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== "여기선 앉을 수 없어요") : items });
+      setMenu({ x: tap.x, y: tap.y, items: onlyActionable ? items.filter((i) => i.label !== msg("menu.cannotSit")) : items });
     };
     // ---------- 고양이: 누르면(좌클릭·우클릭·톡) 고양이 메뉴 → 쓰다듬기·츄르·낚싯대·이름 ----------
     refreshBonds.current();
@@ -566,13 +568,13 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const petCat = async (v: CatView) => {
       setMenu(null);
       const cat = v.catLook;
-      if (catDist(v) > 3) { sayRef.current("조금 더 가까이 가 볼까요?"); return; }
+      if (catDist(v) > 3) { sayRef.current(msg("cat.closer")); return; }
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "pet" }) })
         .then((x) => x.json() as Promise<{ outcome: CatReaction }>).catch(() => null);
       if (!r?.outcome) return;
       if (mp.online) mp.catPet(cat, r.outcome); else soloCats.brains.find((b) => b.s.look === cat)?.react(r.outcome, { x: pos.x, z: pos.z });
       if (r.outcome === "rub") { audio.purr(); setTimeout(() => audio.purr(), 2600); }
-      sayRef.current(r.outcome === "flee" ? "깜짝 놀라서 도망갔어요" : r.outcome === "rub" ? "다리에 부비부비해요 🐱" : "가만히 쓰다듬어지고 있어요 ♥");
+      sayRef.current(msg(r.outcome === "flee" ? "cat.flee" : r.outcome === "rub" ? "cat.rub" : "cat.content"));
       refreshBonds.current();
     };
     // ---------- 츄르: 내가 직접 꾹꾹 짜 줌 (누를 때마다 쭉, 누르고 있으면 계속 → 고양이가 할짝할짝, 다 짜면 부비부비) ----------
@@ -588,12 +590,12 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const feedCat = async (v: CatView) => {
       setMenu(null);
       const cat = v.catLook;
-      if (catDist(v) > 3) { sayRef.current("조금 더 가까이 가 볼까요?"); return; }
+      if (catDist(v) > 3) { sayRef.current(msg("cat.closer")); return; }
       // 가까이(질투 거리 안)에서 지켜본 다른 고양이들 → 서버가 정든 고양이만 골라 질투시킴
       const saw = catViews.filter((o) => o !== v && o.pos && catDist(o) < 8).map((o) => o.catLook);
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "feed", saw }) })
-        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; jealous?: number[] }>).catch(() => null);
-      if (!r?.ok) { sayRef.current(r?.reason === "full" ? "배불러서 고개를 홱 돌려요" : r?.reason === "today" ? "오늘은 이미 츄르를 줬어요 (내일 또 줄 수 있어요)" : r?.reason === "no_churu" ? "츄르가 없어요" : "츄르를 주지 못했어요"); return; }
+        .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; waitMin?: number; jealous?: number[] }>).catch(() => null);
+      if (!r?.ok) { sayRef.current(r?.reason === "full" ? msg("churu.full") : r?.reason === "cooldown" ? msg("churu.cooldown", { min: r.waitMin ?? 1 }) : msg(r?.reason === "no_churu" ? "churu.none" : "churu.fail")); return; }
       const react = (c: number, k: CatReaction) => mp.online ? mp.catPet(c, k) : soloCats.brains.find((b) => b.s.look === c)?.react(k, pos);
       react(cat, "eat");
       if (st.sitting) stand();
@@ -601,18 +603,18 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
       feeding = { v, cat, paste: 1, pulse: 0, done: false }; churu.visible = true; squeeze.current = { held: false, burst: 0, stop: false };
       setSqueezeUi({ paste: 1 });
-      sayRef.current("화면을 꾹꾹 눌러서 츄르를 짜 주세요");
+      sayRef.current(msg("churu.hint"));
       for (const j of r.jealous ?? []) react(j, "huff");
       if (r.jealous?.length) {
         const jn = bondsRef.current?.cats[r.jealous[0]]?.name;
-        setTimeout(() => sayRef.current(`${jn ? nameGa(jn) : "다른 고양이가"} 보고 있다가 삐졌어요 😾`), 3000);
+        setTimeout(() => sayRef.current(msg("cat.jealous", { name: jn ? nameGa(jn) : msg("cat.jealousSomeone") })), 3000);
       }
       refreshMe.current(); refreshBonds.current();
     };
     const updateFeed = (dt: number, walking: boolean) => {
       if (!feeding || feeding.done) return;
       const f = feeding, s = squeeze.current;
-      if (walking || s.stop || !f.v.pos || catDist(f.v) > 6) { endFeed(s.stop ? "츄르를 거뒀어요" : "고양이가 아쉬워해요"); return; }
+      if (walking || s.stop || !f.v.pos || catDist(f.v) > 6) { endFeed(msg(s.stop ? "churu.stopped" : "churu.away")); return; }
       const push = s.burst + (s.held ? 0.16 * dt : 0); s.burst = 0; // 한 번 꾹 = 한 덩이, 누르고 있으면 조금씩 계속
       f.paste = Math.max(0, f.paste - push); f.pulse = Math.min(1, f.pulse + push * 8) * Math.exp(-dt * 3);
       const cp = f.v.pos!, toMe = Math.atan2(pos.x - cp.x, pos.z - cp.z);
@@ -621,7 +623,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       churu.update(hand, tip, f.paste, f.pulse); churuTip.copy(tip);
       st.playAt = { x: (pos.x + cp.x) / 2, z: (pos.z + cp.z) / 2 };
       if (Math.floor(st.now * 10) !== Math.floor((st.now - dt) * 10)) setSqueezeUi({ paste: f.paste });
-      if (f.paste <= 0) { audio.purr(); endFeed(`${(() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : "고양이가"; })()} 싹싹 다 먹었어요 🐱`); }
+      if (f.paste <= 0) { audio.purr(); endFeed(msg("churu.done", { name: (() => { const n = bondsRef.current?.cats[f.cat]?.name; return n ? nameGa(n) : msg("cat.someone"); })() })); }
     };
 
     // ---------- 낚싯대 놀이 ----------
@@ -643,10 +645,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
     const startPlay = async (v: CatView) => {
       setMenu(null);
-      if (catDist(v) > 4) { sayRef.current("조금 더 가까이 가 볼까요?"); return; }
+      if (catDist(v) > 4) { sayRef.current(msg("cat.closer")); return; }
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: v.catLook, act: "play" }) })
         .then((x) => x.json() as Promise<{ ok: boolean; usesLeft?: number; hearts?: number }>).catch(() => null);
-      if (!r?.ok) { sayRef.current("낚싯대가 없어요"); return; }
+      if (!r?.ok) { sayRef.current(msg("rod.none")); return; }
       if (st.sitting) stand();
       const p = v.pos!; yaw = Math.atan2(p.x - pos.x, p.z - pos.z); camYaw = yaw + 1.4; pitch = 0; // 몸은 고양이 쪽, 카메라는 비스듬히 옆에서 (나·깃털·고양이가 다 보이게)
       st.playAt = { x: (pos.x + p.x) / 2, z: (pos.z + p.z) / 2 }; // 바로 세워야 다음 장면에 몸이 카메라 쪽으로 돌지 않음
@@ -655,7 +657,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         target: null, dodged: false, sure: false, last: null, sentAt: 0, done: false, boost: 1 + (r.hearts ?? 0) * 0.15 };
       toy.visible = true; toyDrag.current = { on: false, x: 0, y: 0, dx: 0, dy: 0, stop: false };
       setPlayUi({ interest: 0.15, phase: "watch", catches: 0, speed: 0 });
-      sayRef.current(r.usesLeft === 0 ? "낚싯대가 많이 낡았어요… 이번이 마지막일지도" : "끌어서 깃털을 살랑살랑 (앞뒤·좌우)");
+      sayRef.current(msg(r.usesLeft === 0 ? "rod.worn" : "rod.start"));
       refreshMe.current();
     };
     const endPlay = async (success: boolean, why: string) => {
@@ -667,15 +669,15 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: p.cat, act: "played", success, saw }) })
         .then((x) => x.json() as Promise<{ ok: boolean; jealous?: number[] }>).catch(() => null);
       const name = bondsRef.current?.cats[p.cat]?.name;
-      sayRef.current(success ? `${name ? nameGa(name) : "고양이가"} 신나서 데굴데굴 뒹굴어요 ♥` : why);
+      sayRef.current(success ? msg("rod.rolled", { name: name ? nameGa(name) : msg("cat.someone") }) : why);
       if (success) { audio.chime(); for (const j of r?.jealous ?? []) { if (mp.online) mp.catPet(j, "huff"); else soloCats.brains.find((b) => b.s.look === j)?.react("huff", pos); } }
-      if ((meRef.current?.items.rod ?? 1) <= 0) setTimeout(() => sayRef.current("뚝! 낚싯대가 부러졌어요 (매점에서 새로 살 수 있어요)"), 2600);
+      if ((meRef.current?.items.rod ?? 1) <= 0) setTimeout(() => sayRef.current(msg("rod.broke")), 2600);
       refreshMe.current(); refreshBonds.current();
     };
     const updatePlay = (dt: number, walking: boolean) => {
       if (!play || play.done || play.catches >= PLAY.catches) return; // 세 번 잡으면 뒹굴기만
       const p = play, d = toyDrag.current;
-      if (walking || d.stop || !p.v.pos || catDist(p.v) > 9) { void endPlay(false, d.stop ? "낚싯대를 내려놓았어요" : "고양이와 놀기를 그만뒀어요"); return; }
+      if (walking || d.stop || !p.v.pos || catDist(p.v) > 9) { void endPlay(false, msg(d.stop ? "rod.putDown" : "rod.quit")); return; }
       p.t += dt; p.phaseT += dt;
       p.side = THREE.MathUtils.clamp(p.side + d.dx, -1.3, 1.3); p.dist = THREE.MathUtils.clamp(p.dist + d.dy, 0.5, 2.4); d.dx = d.dy = 0;
       const hand = new THREE.Vector3(pos.x + Math.sin(yaw) * 0.3 - Math.cos(yaw) * 0.18, footY + 1.0, pos.z + Math.cos(yaw) * 0.3 + Math.sin(yaw) * 0.18);
@@ -693,11 +695,11 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         p.interest = THREE.MathUtils.clamp(p.interest, 0, 1);
       }
       if (p.phase === "watch") {
-        if (p.interest <= 0 && p.t > 5) { void endPlay(false, "흥미를 잃고 가 버렸어요"); return; }
+        if (p.interest <= 0 && p.t > 5) { void endPlay(false, msg("rod.bored")); return; }
         p.readyT = p.interest >= PLAY.ready ? p.readyT + dt : 0;           // 흥미 60%부터 잠깐 지켜보다 씰룩 (높을수록 빨리) → 100% 되기 전에도 덤벼듦
         if (p.interest >= 1 || p.readyT > 0.4 + (1 - p.interest) * 1.5) {
           p.phase = "crouch"; p.phaseT = 0; p.dodged = false; p.crouchFor = 0.8 + Math.random() * 0.7; sendPlay("crouch");
-          sayRef.current(p.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 덤벼들 때 확 당겨 봐요!");
+          sayRef.current(msg(p.interest >= 1 ? "rod.sure" : "rod.crouch"));
         }
       } else if (p.phase === "crouch") {
         if (p.phaseT > p.crouchFor - 0.25 && p.speed > PLAY.goodMax) p.dodged = true; // 덤비기 직전에 확 당겨도 놓침
@@ -708,10 +710,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       } else { // 덮치는 중: 확 당기면(빠르기가 '너무 빨라요'로 치솟거나 깃털이 멀어지면) 놓침. 흥미 100%면 못 피함
         if (!p.sure && (p.speed > PLAY.goodMax || (p.target && Math.hypot(e.x - p.target.x, e.z - p.target.z) > PLAY.dodge))) p.dodged = true;
         if (p.phaseT > PLAY.leap) {
-          if (p.dodged) { p.interest = Math.min(0.97, p.interest + 0.15); sayRef.current("약 올렸다! 😼 흥미가 더 올랐어요"); }
+          if (p.dodged) { p.interest = Math.min(0.97, p.interest + 0.15); sayRef.current(msg("rod.dodged")); }
           else {
             p.catches++; audio.pop(); p.interest = 0.5;
-            sayRef.current(p.catches >= PLAY.catches ? "덥석! 잡았다!" : `덥석! (${p.catches}/${PLAY.catches})`);
+            sayRef.current(p.catches >= PLAY.catches ? msg("rod.caughtAll") : msg("rod.caught", { n: p.catches, max: PLAY.catches }));
             if (p.catches >= PLAY.catches) setTimeout(() => void endPlay(true, ""), 900);
           }
           p.phase = "watch"; p.phaseT = 0; p.readyT = 0; p.dodged = false; sendPlay("watch");
@@ -723,17 +725,17 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     };
     const catTap = (v: CatView, tap: Tap) => {
       const b = bondsRef.current, me = b?.cats[v.catLook], hearts = me?.hearts ?? 0, canName = !!b && hearts >= b.rules.nameHearts;
-      const items: MenuItem[] = [{ label: `${me?.name ?? "고양이"}  ${heartText(hearts)}`, head: true }];
-      items.push({ label: "쓰다듬기", run: () => void petCat(v) }); // 좌클릭·우클릭·톡 모두 메뉴 (모르고 눌러 쓰다듬지 않게)
+      const items: MenuItem[] = [{ label: `${me?.name ?? msg("cat.unnamed")}  ${heartText(hearts)}`, head: true }];
+      items.push({ label: msg("menu.pet"), run: () => void petCat(v) }); // 좌클릭·우클릭·톡 모두 메뉴 (모르고 눌러 쓰다듬지 않게)
       const churu = meRef.current?.items.churu ?? 0;
-      items.push({ label: churu ? `츄르 주기 (${churu}개)` : "츄르가 없어요 (매점에서 살 수 있어요)", tile: churuIcon(), badge: String(churu), dim: !churu,
-        run: churu ? () => void feedCat(v) : () => sayRef.current("츄르는 매점에서 살 수 있어요") });
+      items.push({ label: churu ? msg("menu.churu", { n: churu }) : msg("menu.churuNone"), tile: churuIcon(), badge: String(churu), dim: !churu,
+        run: churu ? () => void feedCat(v) : () => sayRef.current(msg("cat.buyChuru")) });
       const rod = meRef.current?.items.rod ?? 0;
-      items.push({ label: rod ? `낚싯대로 놀아 주기 (${rod}번 남음)` : "낚싯대가 없어요 (매점에서 살 수 있어요)", tile: rodIcon(), badge: String(rod), dim: !rod,
-        run: rod ? () => void startPlay(v) : () => sayRef.current("낚싯대는 매점에서 살 수 있어요") });
+      items.push({ label: rod ? msg("menu.rod", { n: rod }) : msg("menu.rodNone"), tile: rodIcon(), badge: String(rod), dim: !rod,
+        run: rod ? () => void startPlay(v) : () => sayRef.current(msg("cat.buyRod")) });
       items.push(canName
-        ? { label: me?.name ? "이름 바꿔 주기" : "이름 지어 주기", run: () => { setMenu(null); setNameFor({ cat: v.catLook, name: me?.name ?? "" }); } }
-        : { label: `하트 ${b?.rules.nameHearts ?? 3}개가 되면 이름을 지어 줄 수 있어요` });
+        ? { label: msg(me?.name ? "menu.rename" : "menu.name"), run: () => { setMenu(null); setNameFor({ cat: v.catLook, name: me?.name ?? "" }); } }
+        : { label: msg("menu.nameLocked", { n: b?.rules.nameHearts ?? 3 }) });
       setMenu({ x: tap.x, y: tap.y, items });
     };
     // ---------- 고양이 부르기: 내 캐릭터 우클릭 → 이름 지어 준(오늘 공원에 있는) 고양이 ----------
@@ -745,20 +747,20 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
     const catsHere = () => new Set((mp.online ? mp.cats() : soloCats.states).filter((c) => c.active).map((c) => c.look));
     const callItems = (): MenuItem[] => {
       const b = bondsRef.current, named = b?.cats.filter((c) => c.name) ?? [], here = catsHere();
-      if (!b || !named.length) return [{ label: "이름을 지어 준 고양이를 부를 수 있어요" }];
+      if (!b || !named.length) return [{ label: msg("call.noneNamed") }];
       const today = named.filter((c) => here.has(c.cat));
-      if (!today.length) return [{ label: "이름 지어 준 고양이가 오늘은 공원에 없어요" }];
+      if (!today.length) return [{ label: msg("call.noneToday") }];
       return today.map((c) => c.hearts >= b.rules.nameHearts
-        ? { label: `${nameI(c.name!)} 부르기`, run: () => void callCat(c.cat, c.name!) }
-        : { label: `${c.name} · 요즘 서먹해요` });
+        ? { label: msg("menu.call", { name: nameI(c.name!) }), run: () => void callCat(c.cat, c.name!) }
+        : { label: msg("menu.callCold", { name: c.name! }) });
     };
     const callCat = async (cat: number, name: string) => {
       setMenu(null);
       const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat, act: "call" }) })
         .then((x) => x.json() as Promise<{ ok: boolean; reason?: string; waitSec?: number; comes?: boolean; ticket?: string }>).catch(() => null);
-      if (!r?.ok) { sayRef.current(r?.reason === "cooldown" ? `조금 뒤에 다시 불러 볼까요? (${r.waitSec}초)` : "지금은 부를 수 없어요"); return; }
+      if (!r?.ok) { sayRef.current(r?.reason === "cooldown" ? msg("call.cooldown", { sec: r.waitSec ?? 0 }) : msg("call.cannot")); return; }
       playGesture(me, "wave", st.now); mp.sendGesture("wave");
-      sayRef.current(`${name}${batchim(name) ? "아" : "야"}~ 🐾`);
+      sayRef.current(msg("call.shout", { name: name + (batchim(name) ? "아" : "야") }));
       if (mp.online && r.ticket) mp.catCall(r.ticket);
       else setTimeout(() => { // 혼자일 땐 바로 판정
         if (r.comes) soloCats.brains.find((x) => x.s.look === cat)?.react("come", { x: pos.x, z: pos.z });
@@ -766,9 +768,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       }, 1500);
     };
     mp.onCatCall = (cat, result, to) => {
-      const name = bondsRef.current?.cats[cat]?.name ?? "고양이";
-      sayRef.current(result === "came" ? `${nameGa(name)} 쪼르르 달려와요 ♥` : result === "other" ? `${nameGa(name)} ${to}님에게 갔어요`
-        : result === "ignored" ? `${nameGa(name)} 못 들은 척해요` : result === "busy" ? `${nameGa(name)} 지금 다른 데 정신이 팔려 있어요` : `${nameGa(name)} 어디 갔나 봐요`);
+      const n = bondsRef.current?.cats[cat]?.name, name = n ? nameGa(n) : msg("cat.someone");
+      sayRef.current(msg(result === "came" ? "call.came" : result === "other" ? "call.other" : result === "ignored" ? "call.ignored" : result === "busy" ? "call.busy" : "call.gone", { name, to }));
     };
     const handleTap = (tap: Tap, rect: DOMRect) => {
       if (tree.pending) { // 사다리 위: 누른 가지 사이에 쪽지 미리보기
@@ -791,7 +792,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       })();
       screen.set(FOUNTAIN.x, 1.2 * PROP_S, FOUNTAIN.z).project(camera);
       if (nearFountain() && (onWater || (screen.z < 1 && Math.hypot(rect.left + (screen.x + 1) / 2 * rect.width - tap.x, rect.top + (1 - screen.y) / 2 * rect.height - tap.y) < 120))) {
-        setMenu({ x: tap.x, y: tap.y, items: [{ label: `동전 던지기 (${meRef.current?.fountainPrice ?? 10}그린)`, run: tossCoin }] }); return;
+        setMenu({ x: tap.x, y: tap.y, items: [{ label: msg("menu.coin", { price: meRef.current?.fountainPrice ?? 10 }), run: tossCoin }] }); return;
       }
       if (petal.hit(camera, rect, tap.x, tap.y)) {
         const y = petal.group.position.y;
@@ -799,7 +800,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           petal.end(st.now); setMenu(null);
           claim(y); // 서버가 확인한 뒤에 "잡았어요" (로그도 서버에서)
         } else {
-          sayRef.current(y > CATCH_HIGH ? "조금만 더 기다렸다가!" : "아쉽게 놓쳤어요");
+          sayRef.current(msg(y > CATCH_HIGH ? "petal.early" : "petal.missed"));
           logClient("petal.missed", { height: Math.round(y * 100) / 100 });
         }
         return;
@@ -821,10 +822,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         const sheets = meRef.current?.items.noteSheets ?? 0;
         const theirSeat = !st.sitting ? mp.freeSeats().find((s) => s.ownerId === other.sessionId && Math.hypot(s.x - pos.x, s.z - pos.z) < 3) : undefined;
         setMenu({ x: tap.x, y: tap.y, items: [
-          ...(theirSeat ? [{ label: "돗자리에 같이 앉기", run: () => askJoin(theirSeat) }] : []),
+          ...(theirSeat ? [{ label: msg("menu.joinMatShort"), run: () => askJoin(theirSeat) }] : []),
           near && sheets > 0
-            ? { label: `${other.nickname}님에게 쪽지 건네기 (노트 ${sheets}장)`, run: () => { setPanel(null); setWriteTo(other); logClient("note.open_editor", {}); } }
-            : { label: sheets <= 0 ? "노트가 없어요 (매점에서 살 수 있어요)" : "조금 더 가까이 가야 건넬 수 있어요" },
+            ? { label: msg("menu.giveNote", { nick: other.nickname, n: sheets }), run: () => { setPanel(null); setWriteTo(other); logClient("note.open_editor", {}); } }
+            : { label: msg(sheets <= 0 ? "menu.noNote" : "menu.tooFarNote") },
         ] });
         return;
       }
@@ -859,7 +860,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
         else if (a.on) coin.preview(hand(), aimShot().vel);
         else coin.preview(null);
       }
-      if (st.asking && t > st.asking.until) { sayRef.current(`${st.asking.seat.owner}님이 대답하지 않았어요`); st.asking = null; }
+      if (st.asking && t > st.asking.until) { sayRef.current(msg("mat.noAnswer", { owner: st.asking.seat.owner })); st.asking = null; }
       const rect = renderer.domElement.getBoundingClientRect();
       for (const tap of inp.takeTaps()) handleTap(tap, rect);
 
@@ -959,7 +960,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       updateFeed(dt, walking);
 
       // 창구 직원: 다가오면 바라보고 웃으며 목인사. 안내원 말풍선은 처음 한 번만
-      if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(`${NPC_NAME}: 어서 오세요! 저를 누르면 공원 안내를 해 드려요`); }
+      if (npc.update(t, dt, pos.x, pos.z) && !greeted) { greeted = true; sayRef.current(msg("npc.greet", { npc: NPC_NAME })); }
       clerk.update(t, dt, pos.x, pos.z);
       // 직원에게 말 걸기: 누르지 않아도 바로 앞에 서서 바라보면 1초쯤 뒤에 저절로 (지나가기만 하면 안 걸리게)
       for (const w of talkers) {
@@ -1027,7 +1028,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
   return (
     <div className="fixed inset-0 select-none overflow-hidden bg-sky">
       <div ref={box} className="absolute inset-0" />
-      <LoadingScreen hidden={loaded} />
+      <LoadingScreen hidden={loaded} text={msg("loading")} />
       <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 text-sm">
         <p className="rounded-full bg-cream/85 px-3 py-1">{nickname}</p>
         <button onClick={() => { const a = audioRef.current; if (!a) return; a.start(); a.setMuted(!a.muted); setMuted(a.muted); }}
@@ -1064,7 +1065,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
       )}
       {hint && !sitting && (
         <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/85 px-4 py-1.5 text-center text-sm">
-          {touch ? "화면 아래쪽을 누른 채 밀면 걷고 돌아요 · 위쪽을 끌어서 둘러보기 · 빈 곳을 톡 누르면 메뉴" : "↑↓(W·S)로 걷고 ←→(A·D)로 돌아요 · 마우스로 끌어서 둘러보기 · 우클릭하면 메뉴"}
+          {msg(touch ? "hint.mobile" : "hint.pc")}
         </p>
       )}
       {toast && <p role="status" className="pointer-events-none absolute inset-x-4 top-28 mx-auto w-fit rounded-full bg-ink/80 px-4 py-1.5 text-sm text-white">{toast}</p>}
@@ -1111,7 +1112,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           <button onClick={() => {
             setFortune(null);
             fetch("/api/petal", { method: "PATCH" }).then((r) => r.json() as Promise<{ ok: boolean }>)
-              .then((r) => sayRef.current(r.ok ? "쪽지함에 오늘의 운세를 간직했어요 ✉️" : "간직하지 못했어요")).catch(() => sayRef.current("간직하지 못했어요"));
+              .then((r) => sayRef.current(msg(r.ok ? "fortune.kept" : "fortune.keepFail"))).catch(() => sayRef.current(msg("fortune.keepFail")));
           }} className="rounded-full bg-sakura px-6 py-2 text-white shadow-[0_3px_0_var(--color-sakura-deep)]">간직할게요</button>
         </section>
       )}
@@ -1142,7 +1143,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           }}
           onPointerUp={() => { toyDrag.current.on = false; }} onPointerCancel={() => { toyDrag.current.on = false; }}>
           <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit max-w-[22rem] flex-col items-center gap-1.5 rounded-2xl bg-cream/90 px-4 py-2 text-center text-sm">
-            <p>{playUi.phase === "pounce" ? "덮친다! 지금 확 당겨요!" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "흥미 100%! 이번엔 못 피해요" : "씰룩씰룩… 덤벼들 때 확 당겨 봐요! (빠르기를 확 올리기)") : "끌어서 깃털을 살랑살랑 (좌우·앞뒤)"}</p>
+            <p>{msg(playUi.phase === "pounce" ? "rod.pounce" : playUi.phase === "crouch" ? (playUi.interest >= 1 ? "rod.sure" : "rod.crouchPanel") : "rod.start")}</p>
             <div className="flex w-60 items-center gap-2 text-xs">
               <span className="w-10 shrink-0 opacity-70">흥미</span>
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-black/10">
@@ -1161,7 +1162,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             </div>
           </div>
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { toyDrag.current.stop = true; setTimeout(() => setPlayUi(null), 400); }}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만하기</button>
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">{msg("rod.stopBtn")}</button>
         </div>
       )}
       {squeezeUi && (
@@ -1169,7 +1170,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} squeeze.current.held = true; squeeze.current.burst += 0.08; }}
           onPointerUp={() => { squeeze.current.held = false; }} onPointerCancel={() => { squeeze.current.held = false; }}>
           <div className="pointer-events-none absolute inset-x-4 bottom-20 mx-auto flex w-fit flex-col items-center gap-2 rounded-2xl bg-cream/90 px-4 py-3 text-center text-sm">
-            <p>꾹꾹 눌러서 츄르를 짜 주세요</p>
+            <p>{msg("churu.panel")}</p>
             {/* 츄르 봉지: 남은 만큼 빨갛게 차 있음 */}
             <div className="relative h-8 w-44 overflow-hidden rounded-md bg-[#fbf4ec] ring-1 ring-black/10">
               <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#d8343b] via-[#d8343b] to-[#f39a2b] transition-[width] duration-100" style={{ width: `${Math.round(squeezeUi.paste * 82)}%` }} />
@@ -1177,7 +1178,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             </div>
           </div>
           <button onPointerDown={(e) => e.stopPropagation()} onClick={() => { squeeze.current.stop = true; setTimeout(() => setSqueezeUi(null), 400); }}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">그만 주기</button>
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-cream/90 px-5 py-2 text-sm shadow-sm">{msg("churu.stopBtn")}</button>
         </div>
       )}
       {coinAim && (
@@ -1187,7 +1188,7 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
           onPointerUp={() => { if (aim.current.on) { aim.current.on = false; aim.current.shoot = true; } }}
           onPointerCancel={() => { aim.current.on = false; }}>
           <p className="pointer-events-none absolute inset-x-4 top-16 mx-auto w-fit rounded-full bg-cream/90 px-4 py-1.5 text-center text-sm">
-            아래로 당겨 세기를, 좌우로 방향을 정하고 놓으면 튕겨요 · 맨 위 작은 접시에 넣어 보세요
+            {msg("coin.aimHelp")}
           </p>
           {me?.fountain && (
             <p className="pointer-events-none absolute inset-x-4 top-28 mx-auto flex w-fit items-center gap-3 rounded-full bg-cream/90 px-4 py-1 text-xs tabular-nums">
@@ -1207,10 +1208,10 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             e.preventDefault();
             const r = await fetch("/api/cats", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cat: nameFor.cat, act: "name", name: nameFor.name }) })
               .then((x) => x.json() as Promise<{ ok: boolean; name?: string }>).catch(() => null);
-            if (r?.ok) { await refreshBonds.current(); sayRef.current(`이제부터 ${r.name}(이)에요 🐾`); setNameFor(null); }
-            else sayRef.current("이름을 지어 주지 못했어요");
+            if (r?.ok) { await refreshBonds.current(); sayRef.current(msg("cat.named", { name: r.name ?? "" })); setNameFor(null); }
+            else sayRef.current(msg("cat.nameFail"));
           }}>
-          <p className="text-center">이 고양이를 뭐라고 부를까요?<br /><span className="text-xs opacity-60">내 화면에서만 이 이름으로 보여요</span></p>
+          <p className="text-center">{msg("name.ask")}<br /><span className="text-xs opacity-60">{msg("name.private")}</span></p>
           <input autoFocus maxLength={8} value={nameFor.name} onChange={(e) => setNameFor({ ...nameFor, name: e.target.value })} placeholder="1~8자"
             className="rounded-xl bg-white px-3 py-2 text-center ring-1 ring-sakura/40" />
           <div className="flex gap-2">
@@ -1238,8 +1239,8 @@ export function ParkView({ presetId, nickname }: { presetId: string; nickname: s
             const r = await fetch("/api/notes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: writeTo.uid, strokes }) })
               .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
             setSending(false);
-            if (r?.ok) { audioRef.current?.paper(); mpRef.current?.notifyNote(writeTo.sessionId); sayRef.current(`${writeTo.nickname}님에게 쪽지를 건넸어요 🌸`); setWriteTo(null); refreshMe.current(); }
-            else sayRef.current(r?.reason === "no_sheet" ? "노트가 없어요" : "쪽지를 건네지 못했어요");
+            if (r?.ok) { audioRef.current?.paper(); mpRef.current?.notifyNote(writeTo.sessionId); sayRef.current(msg("note.given", { nick: writeTo.nickname })); setWriteTo(null); refreshMe.current(); }
+            else sayRef.current(msg(r?.reason === "no_sheet" ? "note.noSheet" : "note.fail"));
           }} />
       )}
       {panel === "info" && <InfoPanel nickname={nickname} touch={touch} onClose={() => setPanel(null)} />}
@@ -1292,8 +1293,8 @@ function Inbox({ onClose }: { onClose: () => void }) {
   return (
     <section role="dialog" aria-label="쪽지함" className="absolute inset-x-4 bottom-24 top-16 z-20 mx-auto flex w-auto max-w-[26rem] flex-col overflow-hidden rounded-3xl bg-cream/97 shadow-xl ring-1 ring-sakura/20">
       <header className="flex items-center px-5 pt-4">
-        <h2 className="text-lg">{open ? `${open.from ?? "누군가"}님의 쪽지` : "받은 쪽지"}</h2>
-        {open && <button onClick={() => setOpen(null)} className="ml-3 text-sm underline opacity-70">목록</button>}
+        <h2 className="text-lg">{open ? msg("inbox.from", { from: open.from ?? msg("someone") }) : msg("inbox.title")}</h2>
+        {open && <button onClick={() => setOpen(null)} className="ml-3 text-sm underline opacity-70">{msg("inbox.list")}</button>}
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1306,17 +1307,17 @@ function Inbox({ onClose }: { onClose: () => void }) {
           {fortune && ( // 간직한 오늘의 운세 (받은 쪽지 위에)
             <div className="mb-4 flex items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-sakura/30">
               <Image src="/logo-mark.png" alt="" width={40} height={40} className="size-10 shrink-0" />
-              <div className="min-w-0"><p className="text-xs tracking-widest opacity-50">오늘의 운세</p><p className="leading-snug">{fortune}</p></div>
+              <div className="min-w-0"><p className="text-xs tracking-widest opacity-50">{msg("inbox.fortune")}</p><p className="leading-snug">{fortune}</p></div>
             </div>
           )}
-          {!rows ? <p className="text-sm opacity-60">불러오는 중…</p> : rows.length === 0 ? <p className="text-sm opacity-60">아직 받은 쪽지가 없어요</p> : (
+          {!rows ? <p className="text-sm opacity-60">{msg("inbox.loading")}</p> : rows.length === 0 ? <p className="text-sm opacity-60">{msg("inbox.empty")}</p> : (
           <ul className="grid grid-cols-3 gap-3">
             {rows.map((n) => (
               <li key={n.id}>
                 <button onClick={() => view(n)} className="relative flex w-full flex-col items-center gap-1 rounded-2xl bg-white p-2">
                   {!n.readAt && <span className="absolute right-2 top-2 size-2 rounded-full bg-sakura" aria-label="안 읽음" />}
                   <NoteView strokes={n.strokes} className="w-full" />
-                  <span className="line-clamp-1 text-xs">{n.from ?? "누군가"}</span>
+                  <span className="line-clamp-1 text-xs">{n.from ?? msg("someone")}</span>
                 </button>
               </li>
             ))}
@@ -1332,31 +1333,31 @@ function Inbox({ onClose }: { onClose: () => void }) {
 function TreeNotePanel({ note, sheets, onClose, onChanged }: { note: TreeNote; sheets: number; onClose: () => void; onChanged: (msg: string) => void }) {
   const [busy, setBusy] = useState(false);
   const act = async (action: "peel" | "cover" | "remove") => {
-    if (action === "peel" && !confirm("겹친 장을 떼면 덮개 한 장이 찢어지고, 쪽지는 모두가 볼 수 있게 돼요. 뗄까요?")) return;
-    if (action === "remove" && !confirm("이 쪽지를 나무에서 떼어 낼까요? 떼어 낸 쪽지와 쓴 노트는 돌아오지 않아요.")) return;
+    if (action === "peel" && !confirm(msg("tree.peelConfirm"))) return;
+    if (action === "remove" && !confirm(msg("tree.removeConfirm"))) return;
     setBusy(true);
     const r = await fetch("/api/tree", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: note.id, action }) })
       .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
     setBusy(false);
-    if (r?.ok) onChanged(action === "peel" ? "겹친 장을 뗐어요" : action === "remove" ? "쪽지를 나무에서 떼어 냈어요" : "노트 한 장을 덮어 가렸어요");
-    else alert(r?.reason === "no_sheet" ? "노트가 없어요" : "처리하지 못했어요");
+    if (r?.ok) onChanged(msg(action === "peel" ? "tree.peeled" : action === "remove" ? "tree.removed" : "tree.covered"));
+    else alert(msg(r?.reason === "no_sheet" ? "note.noSheet" : "tree.actFail"));
   };
   return (
     <section role="dialog" aria-label="소원 쪽지" className="absolute inset-x-4 top-1/2 z-30 mx-auto flex w-auto max-w-[22rem] -translate-y-1/2 flex-col items-center gap-3 rounded-3xl bg-cream/97 p-5 shadow-xl ring-1 ring-sakura/20">
       <div className="flex w-full items-center">
-        <h2 className="text-lg">{note.mine ? "내 소원 쪽지" : `${note.from ?? "누군가"}님의 소원`}</h2>
+        <h2 className="text-lg">{note.mine ? msg("tree.mineTitle") : msg("tree.othersTitle", { from: note.from ?? msg("someone") })}</h2>
         <button onClick={onClose} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
       </div>
       {note.strokes && !note.covered ? <NoteView strokes={note.strokes as Strokes} className="w-full max-w-[min(22rem,55dvh)]" /> : (
-        <div className="flex aspect-square w-full max-w-[16rem] items-center justify-center rounded-full bg-[#f29bb5]/40 text-center text-sm">두 장을 겹쳐 붙여<br />가려진 쪽지예요</div>
+        <div className="flex aspect-square w-full max-w-[16rem] items-center justify-center rounded-full bg-[#f29bb5]/40 text-center text-sm">{msg("tree.coveredFace")}</div>
       )}
-      {note.mine && note.covered && <p className="text-center text-xs opacity-60">겹친 장을 떼야 내용을 볼 수 있어요. 떼면 모두가 볼 수 있게 돼요</p>}
+      {note.mine && note.covered && <p className="text-center text-xs opacity-60">{msg("tree.coveredHelp")}</p>}
       {note.mine && (
         note.covered
-          ? <button disabled={busy} onClick={() => act("peel")} className="rounded-full bg-white px-5 py-2 text-sm ring-1 ring-sakura/40">겹친 장 떼서 보기</button>
-          : <button disabled={busy || sheets < 1} onClick={() => act("cover")} className="rounded-full bg-sakura px-5 py-2 text-sm text-white disabled:opacity-50">한 장 덮어 가리기 (노트 1장)</button>
+          ? <button disabled={busy} onClick={() => act("peel")} className="rounded-full bg-white px-5 py-2 text-sm ring-1 ring-sakura/40">{msg("tree.peelBtn")}</button>
+          : <button disabled={busy || sheets < 1} onClick={() => act("cover")} className="rounded-full bg-sakura px-5 py-2 text-sm text-white disabled:opacity-50">{msg("tree.coverBtn")}</button>
       )}
-      {note.mine && <button disabled={busy} onClick={() => act("remove")} className="text-sm underline opacity-60">나무에서 떼어 내기</button>}
+      {note.mine && <button disabled={busy} onClick={() => act("remove")} className="text-sm underline opacity-60">{msg("tree.removeBtn")}</button>}
     </section>
   );
 }

@@ -86,3 +86,17 @@ export async function setCatScore(form: FormData) {
   await logEvent("admin.cat.score_set", { userId: id, cat, score: v }, requestCtx(await headers()));
   redirect(`${back}?cat=${cat}#cats`);
 }
+
+/** 고양이 초기화 (한 사람): what = "churu"(츄르 대기 풀기) | "bond"(호감도·이름 등 그 고양이 기록 지우기). cat 이 없으면 6마리 모두 */
+export async function resetCat(form: FormData) {
+  await requireAdmin();
+  const id = String(form.get("id") ?? ""), what = String(form.get("what") ?? ""), catRaw = form.get("cat");
+  const cat = catRaw === null || catRaw === "" ? null : Number(catRaw);
+  const back = `/admin/users/${encodeURIComponent(id)}`;
+  if (!id || (what !== "churu" && what !== "bond") || (cat !== null && !Number.isInteger(cat))) redirect(back);
+  const where = cat === null ? eq(catBonds.userId, id) : and(eq(catBonds.userId, id), eq(catBonds.cat, cat));
+  if (what === "churu") await db.update(catBonds).set({ fedAt: null }).where(where);
+  else await db.delete(catBonds).where(where);
+  await logEvent("admin.cat.reset", { userId: id, cat, what }, requestCtx(await headers()));
+  redirect(`${back}?catReset=${what}#cats`);
+}

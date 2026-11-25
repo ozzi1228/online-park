@@ -57,6 +57,7 @@ export const DEFAULTS = {
     callMaxPct: 80,       // 부르면 올 확률 = 호감도 × 이 값 / 100 (호감도 100이면 이 %)
     callCooldownSec: 30,  // 한 사람이 다시 부를 수 있는 간격
     feedGain: 8,          // 츄르를 먹으면 오르는 호감도
+    feedCooldownMin: 10,  // 한 사람이 같은 고양이에게 다시 츄르를 줄 수 있는 간격 (분)
     fullMin: 3,           // 한 번 먹은 고양이는 몇 분 동안 배불러함 (모든 사람 공통)
     jealousLoss: 3,       // 질투: 내가 다른 고양이에게 츄르·놀이를 해 주는 걸 본 고양이에게서 깎이는 호감도
     jealousMin: 50,       // 이 호감도 이상인(정든) 고양이만 질투함
@@ -158,6 +159,7 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
       callMaxPct: { label: "부르면 올 확률 (호감도 100일 때)", unit: "%", min: 0, max: 100 },
       callCooldownSec: { label: "다시 부를 수 있는 간격", unit: "초", min: 0, max: 3600 },
       feedGain: { label: "츄르를 먹으면 오르는 호감도", unit: "점", min: 0, max: 50 },
+      feedCooldownMin: { label: "같은 고양이에게 다시 츄르 줄 수 있는 간격 (한 사람 기준)", unit: "분", min: 0, max: 10080 },
       fullMin: { label: "츄르 먹고 배불러하는 시간", unit: "분", min: 0, max: 1440 },
       jealousLoss: { label: "질투로 깎이는 호감도", unit: "점", min: 0, max: 50 },
       jealousMin: { label: "질투하는 고양이 (이 호감도 이상)", unit: "점", min: 0, max: 100 },

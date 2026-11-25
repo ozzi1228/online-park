@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import { MAT_COLORS, MAT_COLOR_NAMES, MAT_SWATCH, type MatColor } from "@/lib/mat-colors";
+import { t as msg, type MsgKey } from "@/content/messages";
 
 export type MeInfo = {
   isGuest: boolean;
@@ -17,6 +18,8 @@ export type MeInfo = {
   sound: { wind: number; water: number; crowd: number; nature: number; sfx: number };
   controls: { walkSpeedCm: number; turnSpeed: number; cameraBackCm: number; cameraSideCm: number };
   cat: { enabled: number; count: number };
+  /** 관리자가 고친 안내 멘트 (content/messages.ts) */
+  messages?: Partial<Record<MsgKey, string>>;
 };
 
 const card = "absolute inset-x-4 bottom-24 z-20 mx-auto max-h-[calc(100dvh-7rem)] w-auto max-w-[24rem] overflow-y-auto rounded-3xl bg-cream/95 p-5 shadow-xl ring-1 ring-sakura/20";
@@ -25,8 +28,8 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 function GuestNote() {
   return (
     <p className="mt-4 rounded-2xl bg-sakura/15 px-4 py-3 text-sm">
-      충전은 회원만 할 수 있어요. {/* 새로 불러오기: 공원(3D)을 숨겨 둔 채 넘어가면 휴대폰에서 첫 화면 버튼이 먹통이 됨 */}
-      <button onClick={() => location.replace("/")} className="underline">처음 화면</button>에서 로그인하면 쓴 그린·산 물건은 그대로 가져가요.
+      {msg("wallet.guest")} {/* 새로 불러오기: 공원(3D)을 숨겨 둔 채 넘어가면 휴대폰에서 첫 화면 버튼이 먹통이 됨 */}
+      <button onClick={() => location.replace("/")} className="underline">{msg("wallet.guestLink")}</button>{msg("wallet.guestAfter")}
     </p>
   );
 }
@@ -70,8 +73,8 @@ export function WalletPanel({ me, onClose }: { me: MeInfo; onClose: () => void }
               </button>
             ))}
           </div>
-          {!me.paymentsReady && <p className="mt-2 text-xs opacity-60">결제 설정 전이에요 (토스페이먼츠 키 필요)</p>}
-          {busy && <p className="mt-2 text-xs opacity-60">결제창을 여는 중…</p>}
+          {!me.paymentsReady && <p className="mt-2 text-xs opacity-60">{msg("wallet.notReady")}</p>}
+          {busy && <p className="mt-2 text-xs opacity-60">{msg("wallet.opening")}</p>}
           {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
         </>
       )}
@@ -91,8 +94,9 @@ export function ShopPanel({ me, onClose, onBought }: { me: MeInfo; onClose: () =
       .then((x) => x.json() as Promise<{ ok: boolean; reason?: string }>).catch(() => null);
     setBusy(false);
     if (r?.ok && item === "mat") setColor(MAT_COLORS.find((c) => c !== color && !owned(c)) ?? color);
-    if (r?.ok) onBought(item === "notebook" ? `벚꽃잎 노트를 샀어요 (+${me.shop.notebookSheets}장)` : item === "churu" ? `츄르를 샀어요 (+${me.shop.churuPack}개) · 고양이를 우클릭해서 줄 수 있어요` : item === "rod" ? "낚싯대를 샀어요! 고양이를 우클릭해서 놀아 줄 수 있어요" : `${MAT_COLOR_NAMES[color]} 돗자리를 샀어요! 잔디밭에서 앉을 때 골라서 깔 수 있어요`);
-    else setError(r?.reason === "insufficient" ? "그린이 모자라요" : r?.reason === "owned" ? (item === "rod" ? "낚싯대가 아직 있어요 (부러지면 새로 살 수 있어요)" : "그 색 돗자리는 이미 있어요") : "살 수 없었어요");
+    if (r?.ok) onBought(item === "notebook" ? msg("shop.boughtNote", { n: me.shop.notebookSheets }) : item === "churu" ? msg("shop.boughtChuru", { n: me.shop.churuPack })
+      : item === "rod" ? msg("shop.boughtRod") : msg("shop.boughtMat", { color: MAT_COLOR_NAMES[color] }));
+    else setError(msg(r?.reason === "insufficient" ? "shop.noGreen" : r?.reason === "owned" ? (item === "rod" ? "shop.ownedRod" : "shop.ownedMat") : "shop.fail"));
   };
   const items = [
     { id: "notebook" as const, name: "벚꽃잎 노트", desc: `${me.shop.notebookSheets}장 · 손글씨 쪽지용`, price: me.shop.notebookPrice, disabled: false },

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { siteContent } from "@/db/schema";
 import { HOW_TO, INTRO, TIPS } from "@/content/guide";
 import { FORTUNES } from "@/content/fortunes";
+import { MESSAGES, type MsgKey } from "@/content/messages";
 
 export type Guide = { intro: string[]; tips: string[]; howTo: { title: string; pc: string; mobile: string }[] };
 export const DEFAULT_GUIDE: Guide = { intro: INTRO, tips: TIPS, howTo: HOW_TO };
@@ -64,4 +65,16 @@ export function textToFortunes(t: string): string[] | string {
   if (!list.length) return "운세 문구를 한 줄 이상 적어 주세요";
   if (list.some((x) => x.length > 200)) return "운세 문구는 한 줄에 200자까지 적을 수 있어요";
   return list;
+}
+
+// ---------- 안내 멘트: 기본값은 src/content/messages.ts, 관리자가 고친 것만 DB(site_content "messages")에 {키: 문구} ----------
+export async function getMessageOverrides(): Promise<Partial<Record<MsgKey, string>>> {
+  try {
+    const [row] = await db.select().from(siteContent).where(eq(siteContent.key, "messages"));
+    const v = row?.value as Record<string, unknown> | undefined, out: Partial<Record<MsgKey, string>> = {};
+    for (const [k, text] of Object.entries(v ?? {})) if (k in MESSAGES && typeof text === "string" && text.trim()) out[k as MsgKey] = text;
+    return out;
+  } catch {
+    return {};
+  }
 }
