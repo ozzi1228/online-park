@@ -81,10 +81,10 @@ export function faceTexture(p: Preset, closed: boolean, grin = false, stern = fa
 
 export type Character = ReturnType<typeof makeChar>;
 export type Mode = "idle" | "walk" | "wish" | "sit" | "sitwish" | "lie";
-/** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동, cheer = 만세하며 펄쩍펄쩍 (분수 정중앙) */
-export type Gesture = "wave" | "shake" | "stomp" | "cheer";
-const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8, cheer: 2.6 };
-export const isGesture = (k: unknown): k is Gesture => k === "wave" || k === "shake" || k === "stomp" || k === "cheer";
+/** wave = 웃으며 손 흔들기, shake = 단호하게 고개 절레절레, stomp = 신나서 발 동동, cheer = 만세하며 펄쩍펄쩍 (분수 정중앙), v = 사진 찍을 때 얼굴 옆에 브이 */
+export type Gesture = "wave" | "shake" | "stomp" | "cheer" | "v";
+const GESTURE_SEC: Record<Gesture, number> = { wave: 2.4, shake: 1.6, stomp: 1.8, cheer: 2.6, v: 3 };
+export const isGesture = (k: unknown): k is Gesture => k === "wave" || k === "shake" || k === "stomp" || k === "cheer" || k === "v";
 /** 몸짓 시작 (t = animateChar에 넘기는 시각과 같은 시계) */
 export function playGesture(c: Character, kind: Gesture, t: number) { c.gesture = { kind, t0: t }; }
 
@@ -161,6 +161,9 @@ export function makeChar(p: Preset) {
     add(sph(0.07), p.skin, 0, -0.33, 0, g);
     body.add(g); return g;
   });
+  // 브이 손가락 (사진 찍을 때만 보임): 손끝에서 두 손가락을 벌려 뻗음
+  const vSign = new THREE.Group(); vSign.position.set(0, -0.36, 0); vSign.visible = false; arms[0].add(vSign);
+  for (const a of [-0.3, 0.3]) { const f = add(cap(0.021, 0.09), p.skin, Math.sin(a) * 0.05, -0.06, 0, vSign); f.rotation.z = a; }
   // 머리
   const head = new THREE.Group(); head.position.y = H; body.add(head);
   const hy = (y: number) => y - H;
@@ -231,7 +234,7 @@ export function makeChar(p: Preset) {
   if (p.kid) { root.scale.setScalar(0.76); head.scale.setScalar(1.12); }
 
   return {
-    root, body, head, arms, legs, faceMat, texOpen, texClosed, preset: p,
+    root, body, head, arms, legs, faceMat, texOpen, texClosed, preset: p, vSign,
     /** 잠깐 하는 몸짓 (손 흔들기·고개 젓기·발 동동) */
     gesture: null as { kind: Gesture; t0: number } | null,
     faces: {} as Partial<Record<"grin" | "stern", THREE.CanvasTexture>>,
@@ -267,7 +270,8 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   for (const [i, s] of [[0, -1], [1, 1]] as const) ease(c.legs[i].rotation, "z", lie ? s * 0.32 : 0, k);
   if (lie) { legX = 0; armX = 0; armZ = 1.35; bodyY = 0.2; headX = 0; }
   let arm0X = mode === "walk" ? -armX : armX, arm0Z = -armZ, arm1Z = armZ, leg1X = seated ? legX : -legX, headY = 0;
-  let face: "grin" | "stern" | null = null;
+  let face: "grin" | "stern" | null = null, headZ = 0;
+  c.vSign.visible = false;
   const g = c.gesture, gt = g ? t - g.t0 : 0;
   if (g && (gt < 0 || gt > GESTURE_SEC[g.kind])) c.gesture = null;
   else if (g && mode !== "walk") {
@@ -281,6 +285,9 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
       bodyY = hop * 0.38 * fade; legX = -0.55 * hop * fade; leg1X = legX; // 뛰어오르면 무릎을 접음
       arm0X = -0.15 * fade; armX = arm0X; arm0Z = -(2.85 + wig) * fade - armZ * (1 - fade); arm1Z = (2.85 - wig) * fade + armZ * (1 - fade);
       headX = -0.18 * fade; face = "grin";
+    } else if (g.kind === "v") { // 브이: 한 손을 얼굴 옆으로 들어 손가락 브이, 고개 살짝 갸웃 + 활짝 웃기 (앉아서도)
+      arm0X = -0.55 * fade; arm0Z = -2.45 * fade - armZ * (1 - fade); arm1Z = armZ + 0.25 * fade;
+      headZ = 0.14 * fade; headX = -0.05; face = "grin"; c.vSign.visible = fade > 0.5;
     } else if (g.kind === "stomp" && !seated) { // 발 동동: 제자리에서 빠르게 콩콩 + 두 팔 들고 웃기
       const st = Math.sin(gt * 18);
       legX = 0.5 * st * fade; leg1X = -legX; bodyY = Math.abs(st) * 0.07 * fade;
@@ -296,6 +303,7 @@ export function animateChar(c: Character, t: number, dt: number, mode: Mode) {
   ease(c.body.position, "y", bodyY, k);
   ease(c.head.rotation, "x", headX, k);
   ease(c.head.rotation, "y", headY, Math.min(1, k * 2));
+  ease(c.head.rotation, "z", headZ, k);
   if (!face && t > c.blinkAt) { if (t > c.blinkAt + 0.13) c.blinkAt = t + 2 + Math.random() * 3; else closed = true; }
   if (face && !c.faces[face]) c.faces[face] = faceTexture(c.preset, false, face === "grin", face === "stern");
   const tex = face ? c.faces[face]! : closed ? c.texClosed : c.texOpen;

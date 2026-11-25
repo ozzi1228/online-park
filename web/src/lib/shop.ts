@@ -17,6 +17,24 @@ export async function myItems(userId: string) {
   return { noteSheets: q("note_sheet"), mat: mats.length > 0, mats, churu: q("churu"), rod: q("rod") }; // rod = 낚싯대 남은 횟수
 }
 
+/** 시작 선물 (츄르·낚싯대·노란 돗자리·노트): 사람마다 딱 한 번. 이미 있던 사람도 다음 접속 때 받음.
+ *  받았다는 표시는 그린 장부의 0그린 줄(reason starter_kit, refId 유저) — (reason, refId) 유니크라 두 번 못 받음 */
+export async function grantStarter(userId: string) {
+  const { green: g } = await getSettings();
+  return db.transaction(async (tx) => {
+    const got = await tx.insert(greenLedger).values({ userId, amount: 0, reason: "starter_kit", refId: userId }).onConflictDoNothing().returning({ id: greenLedger.id });
+    if (!got.length) return false;
+    const add = [["churu", g.starterChuru], ["rod", g.starterRodUses], ["note_sheet", g.starterNoteSheets], ["mat:yellow", g.starterMat ? 1 : 0]] as const;
+    for (const [item, qty] of add) {
+      if (qty <= 0) continue;
+      // 돗자리는 이미 있으면 그대로(한 색 한 장), 나머지는 더해 줌
+      await tx.insert(inventory).values({ userId, item, qty })
+        .onConflictDoUpdate({ target: [inventory.userId, inventory.item], set: { qty: item.startsWith("mat:") ? sql`greatest(${inventory.qty}, 1)` : sql`${inventory.qty} + ${qty}` } });
+    }
+    return true;
+  });
+}
+
 export type BuyResult =
   | { ok: true; balance: number; items: Awaited<ReturnType<typeof myItems>>; price: number }
   | { ok: false; reason: "insufficient" | "owned"; balance: number };

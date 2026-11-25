@@ -10,7 +10,7 @@ import { Staff } from "@/game/staff";
 import { CatView } from "@/game/cat";
 import { CatColony, type CatReaction, type CatState, type PlayPhase } from "@/game/cat-brain";
 import { Input, JOY_R, type Tap } from "@/game/controls";
-import { createMinimap } from "@/game/minimap";
+import { createMinimap, drawFullMap, type MapLabelKey } from "@/game/minimap";
 import { Multiplayer, nameSprite, type NetStatus } from "@/game/multiplayer";
 import { BENCH_SEATS, BOUNDS_N, COLLIDERS, PLAZA, LADDER_FOOT, PROPS, PROP_S, SPAWN, WISH_TREE, canSit, groundY, move, type BenchSeat } from "@/game/park-map";
 import { PRESETS, type Preset } from "@/game/presets";
@@ -85,7 +85,7 @@ const batchim = (name: string) => { const c = name.charCodeAt(name.length - 1); 
 const nameI = (name: string) => name + (batchim(name) ? "이" : "");      // 크림빵이 부르기 / 설기 부르기
 const nameGa = (name: string) => name + (batchim(name) ? "이" : "가");   // 크림빵이 / 설기가
 type Menu = { x: number; y: number; items: MenuItem[] };
-type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void };
+type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void; photo: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
@@ -103,6 +103,10 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   setMsgOverrides(messages); // 첫 화면(로딩 글자 등)부터 관리자가 고친 멘트로
   const box = useRef<HTMLDivElement>(null);
   const mini = useRef<HTMLCanvasElement>(null);
+  const bigMap = useRef<HTMLCanvasElement>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [mapPeople, setMapPeople] = useState(1);
   const joyBase = useRef<HTMLDivElement>(null), knob = useRef<HTMLDivElement>(null);
   const input = useRef<Input | null>(null);
   const actions = useRef<Actions | null>(null);
@@ -162,7 +166,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
 
   const refreshMe = useRef(async () => {
     const r = await fetch("/api/me", { cache: "no-store" }).catch(() => null);
-    if (r?.ok) { const m = await r.json() as MeInfo; setMsgOverrides(m.messages); meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
+    if (r?.ok) { const m = await r.json() as MeInfo; setMsgOverrides(m.messages); if (m.starter) setTimeout(() => sayRef.current(msg("starter.got")), 2500); meRef.current = m; setMe(m); if (audioRef.current && m.sound) audioRef.current.levels = m.sound; }
     else if (r?.status === 401) location.replace("/"); // 관리자가 강제 로그아웃·삭제함 → 공원에서 나감
   });
   useEffect(() => {
@@ -240,7 +244,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       /** 쓰다듬는 고양이 자리 (카메라가 가까이 내려가 고양이 얼굴을 보여 줌) */
       petAt: null as { x: number; y: number; z: number } | null,
       /** 낚싯대 놀이 중: 나와 고양이 사이 (카메라가 뒤에서 둘을 같이 보여 줌) */
-      playAt: null as { x: number; z: number } | null, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
+      playAt: null as { x: number; z: number } | null, photoAt: 0, photoUntil: 0, wishUntil: 0, holding: false, anim: "idle" as "idle" | "sit" | `sitmat:${string}` | "sitbench" | "wish" | "lie", now: 0, faceCam: false,
       /** 정자에 드러누움 (누운 몸 방향) */
       lying: false, lieYaw: 0,
       bench: null as BenchSeat | null, stoodAt: -9, waitRelease: false, camTurn: null as number | null, ladderArmed: true,
@@ -433,6 +437,15 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); if (!askPack()) stand(); },
+      // 사진: 카메라가 내 앞으로 돌아오고, 나는 카메라를 보며 브이 → 1.2초 뒤 찰칵 (서 있으면 몸을 돌려서 보던 풍경이 배경에 나오게)
+      photo: () => {
+        setMenu(null);
+        if (st.photoAt || petting || feeding || st.playAt || st.aiming || tree.pending) return;
+        if (!st.sitting) yaw += Math.PI;
+        playGesture(me, "v", st.now); mp.sendGesture("v");
+        st.faceCam = true; st.photoAt = st.now + 1.2; st.photoUntil = st.now + 2.4;
+        logClient("photo.take", {});
+      },
     };
     // 운세꽃잎 자격·간격은 서버가 정함 (하루 선착순·1인당 하루 한 번, 횟수는 잡았을 때만 셈). 1분마다 다시 확인
     const refreshWish = async () => {
@@ -573,7 +586,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         : nearFountain() ? [{ label: msg("menu.coin", { price: meRef.current?.fountainPrice ?? 10 }), run: tossCoin }] : [];
       const seat = !st.sitting ? nearSeat() : undefined;
       const items: MenuItem[] = shopItem.length && !st.sitting ? shopItem : [];
-      if (onMe) items.unshift({ label: msg("menu.bag"), run: () => { refreshMe.current(); setPanel("bag"); } }, ...callItems()); // 내 캐릭터를 누르면: 가방, 이름 지어 준 고양이 부르기
+      if (onMe) items.unshift({ label: msg("menu.bag"), run: () => { refreshMe.current(); setPanel("bag"); } }, { label: msg("photo.button"), run: () => actions.current?.photo() }, ...callItems()); // 내 캐릭터를 누르면: 가방, 이름 지어 준 고양이 부르기
       if (seat) items.push({ label: msg("menu.joinMat", { owner: seat.owner }), run: () => askJoin(seat) });
       items.push(...(st.sitting ? [] // 일어나기는 걷기만 하면 됨 (방향키·조이스틱)
         : canSit(pos.x, pos.z) ? (() => {
@@ -993,7 +1006,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         turnVel += (-right * turnSpeed - turnVel) * (1 - Math.exp(-dt * 10));
         camYaw += turnVel * dt;
       }
-      if (st.faceCam && (drag.x !== 0 || t > st.wishUntil + 1.2)) st.faceCam = false; // 소원 장면 끝 (직접 돌리거나 걸어도)
+      if (st.faceCam && (drag.x !== 0 || t > Math.max(st.wishUntil + 1.2, st.photoUntil))) { st.faceCam = false; st.photoAt = 0; } // 소원 장면 끝 (직접 돌리거나 걸어도)
       showMe += ((st.faceCam ? 1 : 0) - showMe) * (1 - Math.exp(-dt * 5)); // 느린 PC에서도 장면이 끝나기 전에 다 돌아오게
       // 위아래 끌기: 옆으로 돌리며 끌 때 섞이는 작은 세로 움직임은 무시 (모르는 새 하늘을 보게 되지 않게)
       const dragY = Math.abs(drag.y) > Math.abs(drag.x) * 0.6 ? drag.y : 0;
@@ -1012,7 +1025,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         const amount = Math.min(1, Math.abs(forward));
         walking = amount > 0.05;
         if (walking) {
-          st.wishUntil = 0; st.faceCam = false; // 걸으면 소원 동작은 멈춤
+          st.wishUntil = 0; st.faceCam = false; st.photoAt = 0; // 걸으면 소원 동작·사진은 멈춤
           if (st.aiming) stopAim();
           const cf = { x: Math.sin(camYaw), z: Math.cos(camYaw) };
           const dx = cf.x * forward, dz = cf.z * forward, len = Math.hypot(dx, dz); // 앞뒤로만 걷고, 방향은 도는 걸로
@@ -1103,8 +1116,17 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         camera.position.copy(camPos); camera.lookAt(camLook);
       } else placeCamera();
       me.root.visible = !!tree.pending || showMe > 0.02 || !firstPerson; // 완전 1인칭일 때만 내 몸을 숨김
-      drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw);
+      const people = mp.people();
+      drawMini(pos.x, pos.z, yaw, tree.pending ? yaw : camYaw, people);
+      if (bigMap.current) { // 펼친 큰 지도
+        drawFullMap(bigMap.current, { x: pos.x, z: pos.z, yaw }, people, { ...Object.fromEntries(MAP_KEYS.map((k) => [k, msg(`map.${k}`)])) as Record<MapLabelKey, string>, me: msg("map.me") });
+        if (Math.floor(t * 2) !== Math.floor((t - dt) * 2)) setMapPeople(people.length + 1);
+      }
       renderer.render(scene, camera);
+      if (st.photoAt && t >= st.photoAt) { // 찰칵: 방금 그린 화면을 바로 사진으로 (다음 장면을 그리기 전이라 그대로 남아 있음)
+        st.photoAt = 0; audio.pop();
+        setPhoto(renderer.domElement.toDataURL("image/jpeg", 0.92));
+      }
       if (t > 5 && document.visibilityState === "visible") { // 처음 몇 초(셰이더 준비)는 빼고
         perf.t += dt; perf.n++;
         if (perf.t >= 3) {
@@ -1129,7 +1151,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   // 열린 창 닫기: Esc 키, 또는 창 바깥(어두운 곳)을 누르면
   const closePanels = useCallback(() => {
     setPanel((p) => { if (p === "inbox") refreshMe.current(); return null; });
-    setTreeDetail(null);
+    setTreeDetail(null); setMapOpen(false);
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1159,6 +1181,8 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       </div>
       {me && (
         <div className="absolute right-4 top-4 flex items-center gap-2">
+          <button onClick={() => actions.current?.photo()} aria-label={msg("photo.button")} title={msg("photo.button")}
+            className="rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm">📷</button>
           <button onClick={() => setPanel(panel === "inbox" ? null : "inbox")} aria-label={`쪽지함${me.unreadNotes ? ` (안 읽은 쪽지 ${me.unreadNotes}개)` : ""}`}
             className="rounded-full bg-cream/90 px-3 py-1 text-sm shadow-sm">
             ✉️{me.unreadNotes > 0 && <span className="ml-1 rounded-full bg-sakura px-1.5 text-xs text-white">{me.unreadNotes}</span>}
@@ -1400,10 +1424,27 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         </div>
       )}
 
+      {photo && <PhotoPanel src={photo} onClose={() => setPhoto(null)} />}
+      {mapOpen && (
+        <section role="dialog" aria-label={msg("map.title")} className="absolute inset-3 z-30 mx-auto flex max-w-3xl flex-col rounded-3xl bg-cream/97 p-3 shadow-xl ring-1 ring-sakura/20 sm:inset-8">
+          <div className="mb-2 flex items-center px-2">
+            <h2 className="text-lg">{msg("map.title")}</h2>
+            <span className="ml-3 text-sm opacity-70">{msg("map.people", { n: mapPeople })}</span>
+            <button onClick={() => setMapOpen(false)} aria-label="닫기" className="ml-auto px-2 text-xl opacity-60">×</button>
+          </div>
+          <canvas ref={bigMap} className="min-h-0 w-full flex-1 rounded-2xl" />
+        </section>
+      )}
       {/* 미니맵: 접었다 펼 수 있음 (모바일은 접힌 채 시작) */}
       <div className="absolute bottom-4 right-4 size-40 max-sm:size-32">
         <canvas ref={mini} aria-label="미니맵 (끌어서 둘러보기, 휠로 확대)" aria-hidden={!miniOpen}
           className={`size-full origin-bottom-right cursor-grab touch-none rounded-2xl shadow-md ring-2 ring-cream transition-[opacity,scale] duration-200 ease-out active:cursor-grabbing ${miniOpen ? "" : "pointer-events-none scale-50 opacity-0"}`} />
+        <button onClick={() => setMapOpen(true)} aria-label={msg("map.open")} title={msg("map.open")}
+          className={`absolute grid size-7 place-items-center rounded-full bg-cream/95 text-ink/70 shadow-md ring-1 ring-black/5 hover:text-ink ${miniOpen ? "-top-2.5 -left-2.5" : "bottom-0 right-9"}`}>
+          <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" />
+          </svg>
+        </button>
         <button onClick={() => setMiniOpen(!miniOpen)} aria-label={miniOpen ? "미니맵 접기" : "미니맵 펼치기"} aria-expanded={miniOpen}
           className={`absolute grid size-7 place-items-center rounded-full bg-cream/95 text-ink/70 shadow-md ring-1 ring-black/5 transition-[top,right,bottom] duration-200 hover:text-ink ${miniOpen ? "-top-2.5 -right-2.5" : "bottom-0 right-0"}`}>
           <svg viewBox="0 0 16 16" className={`size-3.5 transition-transform duration-200 ${miniOpen ? "" : "rotate-180"}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1414,6 +1455,30 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     </div>
   );
 }
+
+/** 찍은 사진: 미리보기 + 저장(내려받기) + 공유(휴대폰 공유 창) */
+function PhotoPanel({ src, onClose }: { src: string; onClose: () => void }) {
+  const name = `벚꽃공원-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.jpg`;
+  const share = async () => {
+    const blob = await (await fetch(src)).blob(), file = new File([blob], name, { type: "image/jpeg" });
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], text: msg("photo.shareText") }); } catch { /* 취소 */ } }
+    else { const a = document.createElement("a"); a.href = src; a.download = name; a.click(); }
+  };
+  return (
+    <section role="dialog" aria-label={msg("photo.title")} className="absolute inset-x-4 top-16 z-30 mx-auto flex max-w-lg flex-col gap-3 rounded-3xl bg-cream/97 p-4 shadow-xl ring-1 ring-sakura/20">
+      <p className="text-center">{msg("photo.title")}</p>
+      {/* eslint-disable-next-line @next/next/no-img-element -- 방금 찍은 data URL */}
+      <img src={src} alt="" className="max-h-[60dvh] w-full rounded-2xl object-contain shadow-inner" />
+      <div className="flex gap-2">
+        <button onClick={onClose} className="flex-1 rounded-full bg-white py-2.5 ring-1 ring-sakura/40">{msg("photo.close")}</button>
+        <a href={src} download={name} className="flex-1 rounded-full bg-white py-2.5 text-center ring-1 ring-sakura/40">{msg("photo.save")}</a>
+        {typeof navigator !== "undefined" && "share" in navigator && <button onClick={share} className="flex-1 rounded-full bg-sakura py-2.5 text-white">{msg("photo.share")}</button>}
+      </div>
+    </section>
+  );
+}
+
+const MAP_KEYS: MapLabelKey[] = ["gate", "booth", "kiosk", "pavilion", "fountain", "wishTree", "bridge", "river"];
 
 type InboxNote = { id: number; from: string | null; strokes: Strokes; readAt: string | null; createdAt: string };
 

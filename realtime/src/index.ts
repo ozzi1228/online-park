@@ -168,7 +168,7 @@ class ParkRoom extends Room<{ state: ParkState }> {
     },
     // 잠깐 하는 몸짓(손 흔들기·고개 젓기·발 동동)을 다른 사람 화면에도
     gesture: (client: Client, kind: unknown) => {
-      if (kind === "wave" || kind === "shake" || kind === "stomp" || kind === "cheer") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
+      if (kind === "wave" || kind === "shake" || kind === "stomp" || kind === "cheer" || kind === "v") this.broadcast("gesture", { id: client.sessionId, kind }, { except: client });
     },
     // 고양이 부르기: 웹앱이 굴린 결과(서명됨)를 1.5초 동안 모아서 판정
     catCall: (client: Client, m: { ticket?: unknown }) => {

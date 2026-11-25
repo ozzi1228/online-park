@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { anonymous } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { logEvent } from "@/lib/log";
@@ -78,7 +78,7 @@ export const auth = betterAuth({
         // 비회원 때 쓴 그린·산 물건·쪽지를 회원 계정으로 옮김. 비회원 기본 그린만 안 옮김(회원 가입 그린을 따로 받으니)
         await db.transaction(async (tx) => {
           await tx.update(schema.greenLedger).set({ userId: member.id })
-            .where(and(eq(schema.greenLedger.userId, guest.id), ne(schema.greenLedger.reason, "signup_bonus")));
+            .where(and(eq(schema.greenLedger.userId, guest.id), notInArray(schema.greenLedger.reason, ["signup_bonus", "starter_kit"]))); // 시작 선물 표시도 안 옮김 (회원이 따로 받음)
           await tx.execute(sql`insert into inventory (user_id, item, qty, variant) select ${member.id}, item, qty, variant from inventory where user_id = ${guest.id}
             on conflict (user_id, item) do update set qty = inventory.qty + excluded.qty, variant = coalesce(inventory.variant, excluded.variant)`);
           await tx.delete(schema.inventory).where(eq(schema.inventory.userId, guest.id));

@@ -43,12 +43,23 @@ function drawWorld(b: CanvasRenderingContext2D) {
   }
 }
 
+const x0 = MAP.minX - PAD, z0 = MAP.minZ - PAD;
+const ww = MAP.maxX - MAP.minX + PAD * 2, wh = MAP.maxZ - MAP.minZ + PAD * 2;
+let world: HTMLCanvasElement | null = null;
+/** 맵 전체 그림 (한 번만 그려 미니맵·큰 지도가 같이 씀) */
+function worldCanvas() {
+  if (!world) {
+    world = document.createElement("canvas"); world.width = ww * RES; world.height = wh * RES;
+    const b = world.getContext("2d")!; b.scale(RES, RES); b.translate(-x0, -z0); drawWorld(b);
+  }
+  return world;
+}
+export type MapPerson = { x: number; z: number; nickname: string };
+const OTHER = "#3d8f86";
+
 export function createMinimap(canvas: HTMLCanvasElement) {
   const dpr = Math.min(devicePixelRatio, 2);
-  const x0 = MAP.minX - PAD, z0 = MAP.minZ - PAD;
-  const ww = MAP.maxX - MAP.minX + PAD * 2, wh = MAP.maxZ - MAP.minZ + PAD * 2;
-  const bg = document.createElement("canvas"); bg.width = ww * RES; bg.height = wh * RES;
-  const b = bg.getContext("2d")!; b.scale(RES, RES); b.translate(-x0, -z0); drawWorld(b);
+  const bg = worldCanvas();
 
   const ctx = canvas.getContext("2d")!;
   let size = 0;
@@ -89,7 +100,7 @@ export function createMinimap(canvas: HTMLCanvasElement) {
   canvas.addEventListener("wheel", wheel, { passive: false });
 
   /** yaw = 캐릭터가 보는 쪽(화살표), view = 카메라가 보는 쪽(지도 위쪽) */
-  const draw = (x: number, z: number, yaw: number, view: number) => {
+  const draw = (x: number, z: number, yaw: number, view: number, others: MapPerson[] = []) => {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
     // 보는 방향이 위로 오게 천천히 돌림 (월드 +x→오른쪽, +z→아래 기준 각도)
     const want = -Math.PI / 2 - Math.atan2(Math.cos(view), Math.sin(view));
@@ -108,6 +119,9 @@ export function createMinimap(canvas: HTMLCanvasElement) {
     ctx.fillStyle = C.water; ctx.fillRect(x0 - 300, z0 - 300, ww + 600, 300 + PAD); // 강은 화면 끝까지
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bg, x0, z0, ww, wh);
+    // 다른 사람: 청록 점
+    ctx.fillStyle = OTHER; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.4 / s;
+    for (const o of others) { ctx.beginPath(); ctx.arc(o.x, o.z, 4 / s, 0, 7); ctx.fill(); ctx.stroke(); }
 
     // 나: 화면 밖으로 끌려가 있으면 가장자리에 반투명하게
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -136,4 +150,45 @@ export function createMinimap(canvas: HTMLCanvasElement) {
     canvas.removeEventListener("wheel", wheel);
   };
   return draw;
+}
+
+/** 큰 지도에 이름을 붙일 시설 (글자는 관리자 안내 멘트에서) */
+export type MapLabelKey = "gate" | "booth" | "kiosk" | "pavilion" | "fountain" | "wishTree" | "bridge" | "river";
+const SPOTS: { key: MapLabelKey; x: number; z: number }[] = [
+  ...PROPS.filter((p) => p.kind === "gate" || p.kind === "booth" || p.kind === "kiosk" || p.kind === "pavilion" || p.kind === "fountain" || p.kind === "wishTree")
+    .map((p) => ({ key: p.kind as MapLabelKey, x: p.x, z: p.z })),
+  { key: "bridge", x: BRIDGE.x, z: (BRIDGE.z0 + BRIDGE.z1) / 2 },
+  { key: "river", x: (BOUNDS.minX + BOUNDS.maxX) / 2 + 25, z: (BOUNDS.minZ + BOUNDS_N.maxZ) / 2 },
+];
+
+/** 펼친 큰 지도: 공원 전체(북쪽=강이 위), 시설 이름, 나(화살표)와 다른 사람(점+이름) */
+export function drawFullMap(canvas: HTMLCanvasElement, me: { x: number; z: number; yaw: number }, others: MapPerson[], labels: Record<MapLabelKey, string> & { me: string }) {
+  const dpr = Math.min(devicePixelRatio, 2), cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (!cw || !ch) return;
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
+  const ctx = canvas.getContext("2d")!, k = Math.min(cw / ww, ch / wh), ox = (cw - ww * k) / 2, oz = (ch - wh * k) / 2;
+  const sx = (x: number) => ox + (x - x0) * k, sz = (z: number) => oz + (z - z0) * k;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = C.grass; ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(worldCanvas(), ox, oz, ww * k, wh * k);
+  const pill = (text: string, x: number, y: number, bg: string, fg: string, size = 12) => {
+    ctx.font = `600 ${size}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = ctx.measureText(text).width + 10;
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x - w / 2, y - size * 0.8, w, size * 1.6, size * 0.8); ctx.fill();
+    ctx.fillStyle = fg; ctx.fillText(text, x, y + 0.5);
+  };
+  for (const p of SPOTS) pill(labels[p.key], sx(p.x), sz(p.z), "rgba(255,250,243,0.92)", "#6b4450");
+  for (const o of others) {
+    const x = sx(o.x), y = sz(o.z);
+    ctx.fillStyle = OTHER; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, 7); ctx.fill(); ctx.stroke();
+    pill(o.nickname, x, y - 15, "rgba(61,143,134,0.9)", "#fff", 11);
+  }
+  const x = sx(me.x), y = sz(me.z);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)));
+  ctx.fillStyle = "rgba(232,98,138,0.22)"; ctx.beginPath(); ctx.arc(0, 0, 13, 0, 7); ctx.fill();
+  ctx.fillStyle = C.me; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, -6.5); ctx.lineTo(-3, 0); ctx.lineTo(-6, 6.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  pill(labels.me, x, y - 18, C.me, "#fff", 11);
 }

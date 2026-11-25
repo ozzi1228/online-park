@@ -12,6 +12,10 @@ export const DEFAULTS = {
   },
   green: {
     signupBonus: 100,     // 회원가입 시 지급
+    starterChuru: 1,      // 처음 들어오면 주는 시작 선물: 츄르 개수
+    starterRodUses: 10,   // 시작 선물 낚싯대 (놀 수 있는 횟수, 0이면 안 줌)
+    starterNoteSheets: 10, // 시작 선물 벚꽃잎 노트 장수
+    starterMat: 1,        // 시작 선물 노란 돗자리 (1 = 줌, 0 = 안 줌)
     chargeSmall: 500,     // 충전 상품 (1그린 = 1원)
     chargeMedium: 1000,
     chargeLarge: 3000,
@@ -97,6 +101,10 @@ export const META: { [G in keyof typeof DEFAULTS]: { title: string; fields: { [K
     title: "그린",
     fields: {
       signupBonus: { label: "회원가입 보너스", unit: "그린", min: 0, max: 100000 },
+      starterChuru: { label: "시작 선물: 츄르", unit: "개", min: 0, max: 100 },
+      starterRodUses: { label: "시작 선물: 낚싯대 (놀 수 있는 횟수, 0이면 안 줌)", unit: "번", min: 0, max: 10000 },
+      starterNoteSheets: { label: "시작 선물: 벚꽃잎 노트", unit: "장", min: 0, max: 1000 },
+      starterMat: { label: "시작 선물: 노란 돗자리 (1 줌 / 0 안 줌)", unit: "", min: 0, max: 1 },
       chargeSmall: { label: "충전 상품 1 (1그린=1원)", unit: "그린", min: 100, max: 1000000 },
       chargeMedium: { label: "충전 상품 2", unit: "그린", min: 100, max: 1000000 },
       chargeLarge: { label: "충전 상품 3", unit: "그린", min: 100, max: 1000000 },

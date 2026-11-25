@@ -98,6 +98,8 @@ export class Multiplayer {
     this.onStatus?.(this.status);
   }
 
+  /** 지도에 찍을 다른 사람들 (화면에 보이는 자리) */
+  people() { return [...this.others.values()].map((o) => ({ x: o.x, z: o.z, nickname: o.nickname })); }
   /** 서버가 판정한 내 위치 (너무 어긋나면 화면 쪽을 맞춤) */
   mine() { return this.room ? this.room.state.players?.get(this.room.sessionId) : undefined; }
   /** 서버가 움직이는 공원 고양이 (접속 중일 때만) */

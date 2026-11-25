@@ -3,7 +3,7 @@ import { greenBalance } from "@/lib/green";
 import { chargeOptions, paymentsReady } from "@/lib/payments";
 import { getSettings } from "@/lib/settings";
 import { getMessageOverrides } from "@/lib/content";
-import { myItems } from "@/lib/shop";
+import { grantStarter, myItems } from "@/lib/shop";
 import { unreadCount } from "@/lib/notes";
 
 /** 공원 화면 상단: 내 그린·가방·상품 가격 */
@@ -12,8 +12,10 @@ export async function GET(req: Request) {
   if (!s) return new Response(null, { status: 401 });
   const { shop, fountain, sound, controls, cat } = await getSettings();
   const isGuest = !!s.user.isAnonymous;
+  const starter = s.user.characterLockedAt ? await grantStarter(s.user.id) : false; // 처음 들어온 사람에게 시작 선물 (한 번만)
   return Response.json({
     isGuest,
+    starter,
     green: await greenBalance(s.user.id),
     items: await myItems(s.user.id),
     shop: { notebookPrice: shop.notebookPrice, notebookSheets: shop.notebookSheets, matPrice: shop.matPrice, churuPrice: shop.churuPrice, churuPack: shop.churuPack, rodPrice: shop.rodPrice, rodUses: shop.rodUses },

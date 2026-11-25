@@ -9,6 +9,8 @@ import { matPreview } from "@/game/mat";
 
 export type MeInfo = {
   isGuest: boolean;
+  /** 이번에 시작 선물을 받았음 */
+  starter?: boolean;
   green: number;
   items: { noteSheets: number; mat: boolean; mats: MatColor[]; churu: number; rod: number };
   shop: { notebookPrice: number; notebookSheets: number; matPrice: number; churuPrice: number; churuPack: number; rodPrice: number; rodUses: number };
