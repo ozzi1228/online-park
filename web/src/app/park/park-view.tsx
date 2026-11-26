@@ -85,7 +85,7 @@ const batchim = (name: string) => { const c = name.charCodeAt(name.length - 1); 
 const nameI = (name: string) => name + (batchim(name) ? "이" : "");      // 크림빵이 부르기 / 설기 부르기
 const nameGa = (name: string) => name + (batchim(name) ? "이" : "가");   // 크림빵이 / 설기가
 type Menu = { x: number; y: number; items: MenuItem[] };
-type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void; photo: () => void };
+type Actions = { sit: (mat?: MatColor | null) => void; stand: () => void; photo: () => void; bench: () => void };
 const KIOSK = PROPS.find((p) => p.kind === "kiosk") as { x: number; z: number; yaw: number };
 const NPC = PROPS.find((p) => p.kind === "npc") as { x: number; z: number; yaw: number };
 const FOUNTAIN = PROPS.find((p) => p.kind === "fountain") as { x: number; z: number };
@@ -119,6 +119,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
   /** 잡은 운세꽃잎의 운세 문구 */
   const [fortune, setFortune] = useState<string | null>(null);
   const [sitting, setSitting] = useState(false);
+  const [benchBtn, setBenchBtn] = useState(false); // 벤치 빈자리 가까이 있음 → '벤치에 앉기' 버튼
   const [toast, setToast] = useState<string | null>(null);
   const [me, setMe] = useState<MeInfo | null>(null);
   const [loaded, setLoaded] = useState(false); // 첫 장면을 그리면 로딩 화면을 걷음
@@ -412,6 +413,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
     };
     mp.onMatClosed = (owner) => { if (st.sitting && !st.onMat) { stand(); sayRef.current(msg("mat.packedByOwner", { owner })); } };
     // 벤치에 걸어 들어가면 자동으로 앉음: 돌아서 벤치가 보는 쪽(강)을 바라봄
+    let benchNear: BenchSeat | null = null;
     const sitBench = (seat: BenchSeat) => {
       st.sitting = true; st.bench = seat; st.onMat = false; st.wishUntil = 0; st.waitRelease = true;
       setSitting(true); setMenu(null);
@@ -442,6 +444,7 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         logClient("sit.start", { x: Math.round(pos.x), z: Math.round(pos.z), onPavilion: groundY(pos.x, pos.z) > 0, mat: st.onMat });
       },
       stand: () => { setMenu(null); if (!askPack()) stand(); },
+      bench: () => { if (benchNear && !st.sitting) sitBench(benchNear); },
       // 사진: 카메라가 내 앞으로 돌아오고, 나는 카메라를 보며 브이 → 1.2초 뒤 찰칵 (서 있으면 몸을 돌려서 보던 풍경이 배경에 나오게)
       photo: () => {
         setMenu(null);
@@ -1064,16 +1067,6 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
           // 다른 사람 자리도 장애물 (서버도 같은 규칙으로 다시 판정)
           const np = move(pos.x, pos.z, pos.x + vel.x * dt, pos.z + vel.z * dt, undefined, [...COLLIDERS, ...mp.colliders()]);
           pos.x = np.x; pos.z = np.z;
-          // 벤치 쪽으로 걸어 들어가거나, 벤치를 등지고 뒷걸음질로 붙으면 앉음 (일어난 직후·남이 앉은 자리는 빼고)
-          if (st.now - st.stoodAt > 1) {
-            const others = mp.colliders();
-            const seat = BENCH_SEATS.filter((s) => Math.hypot(s.fx - pos.x, s.fz - pos.z) < 0.55
-              && Math.sin(mvYaw) * Math.sin(s.yaw) + Math.cos(mvYaw) * Math.cos(s.yaw) < -0.4 // 벤치 쪽으로 걸어 들어갈 때
-              && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45)
-              && !catOn(s)) // 고양이가 앉은 자리는 비워 둠 (옆자리에 앉으면 고양이와 나란히)
-              .sort((a, b) => Math.hypot(a.fx - pos.x, a.fz - pos.z) - Math.hypot(b.fx - pos.x, b.fz - pos.z))[0];
-            if (seat) sitBench(seat);
-          }
           // 사다리 앞에서 나무 쪽으로 걸어 들어가면 쪽지 쓰기 (한 번 뜨면 1.5m 떨어졌다 와야 다시)
           const ld = Math.hypot(pos.x - LADDER_FOOT.x, pos.z - LADDER_FOOT.z);
           if (ld > 1.5) st.ladderArmed = true;
@@ -1082,6 +1075,18 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
         }
       }
       // 서버 판정과 많이 어긋나면 서버 쪽으로 맞춤. 처음 입장은 바로, 걷는 중엔 망 지연만큼 여유를 두고 부드럽게 당김 (화면이 튀지 않게)
+      // 벤치 빈자리 가까이(1.3m) 가면 '벤치에 앉기' 버튼 (저절로 앉지 않음. 남·고양이가 앉은 자리는 빼고 가장 가까운 자리)
+      {
+        let bn: BenchSeat | null = null;
+        if (!st.sitting && !tree.pending && !st.playAt && !st.petAt && !st.aiming) {
+          const others = mp.colliders(); let best = 1.3;
+          for (const s of BENCH_SEATS) {
+            const d = Math.hypot(s.fx - pos.x, s.fz - pos.z);
+            if (d < best && !others.some((o) => Math.hypot(o.x - s.fx, o.z - s.fz) < 0.45) && !catOn(s)) { best = d; bn = s; }
+          }
+        }
+        if (bn !== benchNear) { benchNear = bn; setBenchBtn(!!bn); }
+      }
       const srv = mp.mine();
       if (srv) {
         const off = Math.hypot(srv.x - pos.x, srv.z - pos.z), walkV = (meRef.current?.controls?.walkSpeedCm ?? 300) / 100;
@@ -1447,6 +1452,12 @@ export function ParkView({ presetId, nickname, messages }: { presetId: string; n
       {panel === "bag" && me && <BagPanel me={me} onClose={() => setPanel(null)} />}
       {panel === "shop" && me && <ShopPanel me={me} onClose={() => setPanel(null)} onBought={(msg) => { audioRef.current?.pop(); sayRef.current(msg); refreshMe.current(); }} />}
 
+      {benchBtn && !sitting && (
+        <button onClick={() => actions.current?.bench()}
+          className="absolute bottom-28 left-1/2 z-10 -translate-x-1/2 rounded-full bg-cream/95 px-5 py-2.5 shadow-md ring-1 ring-sakura/30 active:scale-95">
+          🪑 {msg("bench.sit")}
+        </button>
+      )}
       {/* 모바일 조이스틱: 위아래로 밀면 앞뒤로 걷고, 좌우로 밀면 돎 */}
       {touch && (
         <div ref={joyBase} aria-hidden style={{ width: JOY_R * 2, height: JOY_R * 2, opacity: 0 }} className="pointer-events-none absolute grid transition-opacity duration-150 place-items-center rounded-full bg-white/25 ring-2 ring-white/60 shadow-[inset_0_0_18px_rgba(255,255,255,0.35)] backdrop-blur-[2px]">

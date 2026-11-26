@@ -39,6 +39,7 @@ export const MESSAGES = {
   "loading": { group: "공통", label: "공원 들어갈 때 로딩 화면 글자", text: "입장 중" },
 
   // ---------- 앉기·돗자리 ----------
+  "bench.sit": { group: "앉기·돗자리", label: "벤치 가까이 가면 뜨는 버튼", text: "벤치에 앉기" },
   "menu.sit": { group: "앉기·돗자리", label: "메뉴: 앉기", text: "여기 앉기" },
   "menu.lie": { group: "앉기·돗자리", label: "메뉴: 정자에서 눕기", text: "드러눕기" },
   "menu.cannotSit": { group: "앉기·돗자리", label: "메뉴: 앉을 수 없는 곳", text: "여기선 앉을 수 없어요" },
